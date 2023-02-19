@@ -26,9 +26,7 @@
 #pragma comment(lib, "legacy_stdio_definitions")
 #endif
 
-#if 0
-#include "../SpectrumEmu.h"
-#endif
+#include "../CPCEmu.h"
 
 #define SOKOL_IMPL
 #include <sokol_audio.h>
@@ -161,7 +159,7 @@ int main(int argc, char** argv)
     bool show_another_window = false;
     ImVec4 clear_color = ImVec4(0.45f, 0.55f, 0.60f, 1.00f);
 
-#if 0
+#if SPECCY
 	// Speccy 
 	FSpectrumConfig config;
     //config.Model = ESpectrumModel::Spectrum128K;
@@ -171,11 +169,10 @@ int main(int argc, char** argv)
 		config.SpecificGame = argv[1];
 	FSpectrumEmu* pSpectrumEmulator = new FSpectrumEmu;
 	pSpectrumEmulator->Init(config);
-
-	// The skool file to import can be passed as the second argument, following the name of the game to start.
-	if (argc > 2)
-		pSpectrumEmulator->ImportSkoolFile(argv[2]);
 #endif
+
+    FCPCEmu* pCPCEmulator = new FCPCEmu;
+	pCPCEmulator->Init(/*config*/);
 
     // Main loop
     while (!glfwWindowShouldClose(appState.MainWindow))
@@ -192,9 +189,9 @@ int main(int argc, char** argv)
         ImGui_ImplGlfw_NewFrame();
         ImGui::NewFrame();
 
-#if 0
+		pCPCEmulator->Tick();
+#if SPECCY
 		// speccy update & render
-		pSpectrumEmulator->Tick();
 		// 1. Show the big demo window (Most of the sample code is in ImGui::ShowDemoWindow()! You can browse its code to learn more about Dear ImGui!).
 		if (pSpectrumEmulator->bShowImGuiDemo)
 			ImGui::ShowDemoWindow(&pSpectrumEmulator->bShowImGuiDemo);
@@ -226,10 +223,9 @@ int main(int argc, char** argv)
         glfwSwapBuffers(appState.MainWindow);
     }
 
-#if 0
-	// shutdown the speccy stuff
-	pSpectrumEmulator->Shutdown();
-#endif
+	// shutdown the cpc stuff
+	pCPCEmulator->Shutdown();
+
 	saudio_shutdown();
 
     // Cleanup
