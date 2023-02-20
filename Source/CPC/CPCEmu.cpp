@@ -535,12 +535,11 @@ static uint64_t Z80TickThunk(int num, uint64_t pins, void* user_data)
 bool FCPCEmu::Init(/*const FSpectrumConfig& config*/)
 {
 	// setup pixel buffer
-	// todo: make this smaller?
-	const size_t pixelBufferSize = 1024 * 312 * 4;
+	const size_t pixelBufferSize = AM40010_DBG_DISPLAY_WIDTH * AM40010_DBG_DISPLAY_HEIGHT * 4;
 	FrameBuffer = new unsigned char[pixelBufferSize * 2];
 
 	// setup texture
-	Texture = ImGui_CreateTextureRGBA(static_cast<unsigned char*>(FrameBuffer), 1024, 312);
+	Texture = ImGui_CreateTextureRGBA(static_cast<unsigned char*>(FrameBuffer), AM40010_DISPLAY_WIDTH, AM40010_DISPLAY_HEIGHT);
 
 	cpc_type_t type = CPC_TYPE_464;
 	cpc_joystick_type_t joy_type = CPC_JOYSTICK_NONE;
@@ -577,11 +576,12 @@ bool FCPCEmu::Init(/*const FSpectrumConfig& config*/)
 	// Trap callback needs to be set before we create the UI
 	z80_trap_cb(&CPCEmuState.cpu, CPCTrapCallback, this);
 
+	// todo: put this back in?
 	// Setup out tick callback
-	OldTickCB = CPCEmuState.cpu.tick_cb;
-	OldTickUserData = CPCEmuState.cpu.user_data;
-	CPCEmuState.cpu.tick_cb = Z80TickThunk;
-	CPCEmuState.cpu.user_data = this;
+	//OldTickCB = CPCEmuState.cpu.tick_cb;
+	//OldTickUserData = CPCEmuState.cpu.user_data;
+	//CPCEmuState.cpu.tick_cb = Z80TickThunk;
+	//CPCEmuState.cpu.user_data = this;
 
 	//ui_init(zxui_draw);
 	{

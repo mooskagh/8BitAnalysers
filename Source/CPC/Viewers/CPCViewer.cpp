@@ -19,7 +19,7 @@ void FCPCViewer::Init(FCPCEmu* pEmu)
 
 void FCPCViewer::Draw()
 {
-	ImGui::Image(pCPCEmu->Texture, ImVec2(1024, 312));		
+	ImGui::Image(pCPCEmu->Texture, ImVec2(AM40010_DISPLAY_WIDTH/2, AM40010_DISPLAY_HEIGHT));		
 
 	ImGui::SliderFloat("Speed Scale", &pCPCEmu->ExecSpeedScale, 0.0f, 2.0f);
 	//ImGui::SameLine();
