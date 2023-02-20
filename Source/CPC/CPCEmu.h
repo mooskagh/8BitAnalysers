@@ -42,6 +42,7 @@
 #include <string>
 
 #include "CodeAnalyser/CodeAnalyser.h"
+#include "Viewers/CPCViewer.h"
 
 class FCPCEmu : public ICPUInterface
 {
@@ -100,6 +101,7 @@ public:
 
 	ui_cpc_t		UICPC;
 
+	FCPCViewer						CPCViewer;
 	FCodeAnalysisState		CodeAnalysis;
 
 private:

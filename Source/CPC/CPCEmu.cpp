@@ -603,6 +603,9 @@ bool FCPCEmu::Init(/*const FSpectrumConfig& config*/)
 		desc.dbg_keys.toggle_breakpoint_name = "F9";
 		ui_cpc_init(&UICPC, &desc);
 	}
+
+	CPCViewer.Init(this);
+
 #if SPECCY
 	SetWindowTitle(kAppTitle.c_str());
 	SetWindowIcon("SALOGO.png");
@@ -920,7 +923,7 @@ void FCPCEmu::DrawUI()
 
 	if (ImGui::Begin("CPC View"))
 	{
-		//SpectrumViewer.Draw();
+		CPCViewer.Draw();
 	}
 	ImGui::End();
 
