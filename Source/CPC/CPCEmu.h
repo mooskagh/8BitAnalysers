@@ -1,5 +1,7 @@
 #pragma once
 
+#include "System/System.h"
+
 #define UI_DBG_USE_Z80
 #define UI_DASM_USE_Z80
 #include "chips/z80.h"
@@ -44,7 +46,7 @@
 #include "CodeAnalyser/CodeAnalyser.h"
 #include "Viewers/CPCViewer.h"
 
-class FCPCEmu : public ICPUInterface
+class FCPCEmu : public FSystem
 {
 public:
 	FCPCEmu()
@@ -55,6 +57,10 @@ public:
 	bool	Init(/*const FSpectrumConfig& config*/);
 	void	Shutdown();
 	void	DrawMainMenu(double timeMS);
+
+	std::string GetAppTitle() override { return "CPC Analyser"; }
+	std::string GetWindowIconName() override { return "CPCALogo.png"; }
+	std::string GetROMFilename() override { return "";  }
 
 	int TrapFunction(uint16_t pc, int ticks, uint64_t pins);
 	uint64_t Z80Tick(int num, uint64_t pins);
@@ -70,23 +76,23 @@ public:
 	//ICPUInterface Begin
 	uint8_t		ReadByte(uint16_t address) const override;
 	uint16_t	ReadWord(uint16_t address) const override;
-	const uint8_t*	GetMemPtr(uint16_t address) const override;
+	const uint8_t* GetMemPtr(uint16_t address) const override;
 	void		WriteByte(uint16_t address, uint8_t value) override;
 	uint16_t	GetPC(void) override;
 	uint16_t	GetSP(void) override;
-	bool		IsAddressBreakpointed(uint16_t addr) override;
+	bool		IsAddressBreakpointed(uint16_t addr);
 	bool		ToggleExecBreakpointAtAddress(uint16_t addr) override;
-	bool		ToggleDataBreakpointAtAddress(uint16_t addr, uint16_t dataSize) override;
-	void		Break(void) override;
-	void		Continue(void) override;
-	void		StepOver(void) override;
-	void		StepInto(void) override;
-	void		StepFrame(void) override;
-	void		StepScreenWrite(void) override;
-	void		GraphicsViewerSetView(uint16_t address, int charWidth) override;
+	bool		ToggleDataBreakpointAtAddress(uint16_t addr, uint16_t dataSize);
+	void		Break(void);
+	void		Continue(void);
+	void		StepOver(void);
+	void		StepInto(void);
+	void		StepFrame(void);
+	void		StepScreenWrite(void);
+	void		GraphicsViewerSetView(uint16_t address, int charWidth);
 	bool		ShouldExecThisFrame(void) const override;
 	bool		IsStopped(void) const override;
-	void*		GetCPUEmulator(void) override;
+	void* GetCPUEmulator(void) override;
 	//ICPUInterface End
 
 	// Emulator 
