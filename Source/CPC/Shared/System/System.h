@@ -6,11 +6,19 @@
 
 #include "CodeAnalyser/CodeAnalyser.h"
 #include "Util/Misc.h"
+#include "../GamesList/GamesList.h"
 
 struct FGame;
+class IGameLoader;
 
-struct FConfig
+struct FSystemParams
 {
+	std::string AppTitle;
+	std::string WindowIconName;
+	size_t ScreenBufferSize = 0;
+	int ScreenTextureWidth = 0;
+	int ScreenTextureHeight = 0;
+	IGameLoader* pGameLoader = 0;
 };
 
 class FSystem : public ICPUInterface
@@ -19,24 +27,12 @@ public:
 	FSystem() { }
 	virtual ~FSystem() {}
 
-	virtual bool Init(const FConfig* pConfig);
-	virtual void Shutdown();
+	bool Init(const FSystemParams& params);
+	void Shutdown();
 
-	virtual std::string GetAppTitle() = 0;
-	virtual std::string GetWindowIconName() = 0;
-	virtual std::string GetROMFilename() = 0;
-
+	virtual void Tick();
 	virtual void DrawMainMenu(double timeMS);
 	virtual void DrawUI();
-	virtual bool DrawDockingView();
-
-#if SPECCY
-	// put this in the base?
-	
-	// disable copy & assign because this class is big!
-	FSystem(const FSpectrumEmu&) = delete;
-	FSpectrumEmu& operator= (const FSpectrumEmu&) = delete;
-#endif
 
 	//ICPUInterface Begin
 	virtual uint8_t		ReadByte(uint16_t address) const = 0;
@@ -60,6 +56,8 @@ public:
 	virtual void*		GetCPUEmulator(void) = 0;
 	//ICPUInterface End
 
+	FGamesList		GamesList;
+
 	int				CurrentLayer = 0;	// layer ??
 
 	unsigned char*	FrameBuffer;	// pixel buffer to store emu output
@@ -71,6 +69,7 @@ public:
 	bool bShowImPlotDemo = false;
 
 protected:
+	bool DrawDockingView();
 
 	bool	bStepToNextFrame = false;
 	bool	bStepToNextScreenWrite = false;

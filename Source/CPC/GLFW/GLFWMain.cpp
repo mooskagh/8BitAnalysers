@@ -159,20 +159,12 @@ int main(int argc, char** argv)
     bool show_another_window = false;
     ImVec4 clear_color = ImVec4(0.45f, 0.55f, 0.60f, 1.00f);
 
-#if SPECCY
-	// Speccy 
-	FSpectrumConfig config;
-    //config.Model = ESpectrumModel::Spectrum128K;
-    config.Model = ESpectrumModel::Spectrum48K;
-	config.NoStateBuffers = 10;
-	if (argc > 1)
+	FCpcConfig config;
+    config.Model = ECpcModel::CPC_464;
+    if (argc > 1)
 		config.SpecificGame = argv[1];
-	FSpectrumEmu* pSpectrumEmulator = new FSpectrumEmu;
-	pSpectrumEmulator->Init(config);
-#endif
-
-    FCPCEmu* pCPCEmulator = new FCPCEmu;
-	pCPCEmulator->Init(/*config*/);
+    FCpcEmu* pCpcEmulator = new FCpcEmu;
+	pCpcEmulator->Init(config);
 
     // Main loop
     while (!glfwWindowShouldClose(appState.MainWindow))
@@ -189,7 +181,7 @@ int main(int argc, char** argv)
         ImGui_ImplGlfw_NewFrame();
         ImGui::NewFrame();
 
-		pCPCEmulator->Tick();
+		pCpcEmulator->Tick();
 #if SPECCY
 		// speccy update & render
 		// 1. Show the big demo window (Most of the sample code is in ImGui::ShowDemoWindow()! You can browse its code to learn more about Dear ImGui!).
@@ -224,7 +216,7 @@ int main(int argc, char** argv)
     }
 
 	// shutdown the cpc stuff
-	pCPCEmulator->Shutdown();
+	pCpcEmulator->Shutdown();
 
 	saudio_shutdown();
 

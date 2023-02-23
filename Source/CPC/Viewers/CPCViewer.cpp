@@ -12,12 +12,12 @@
 #include <Util/Misc.h>
 
 
-void FCPCViewer::Init(FCPCEmu* pEmu)
+void FCpcViewer::Init(FCpcEmu* pEmu)
 {
 	pCPCEmu = pEmu;
 }
 
-void FCPCViewer::Draw()
+void FCpcViewer::Draw()
 {
 	ImGui::Image(pCPCEmu->Texture, ImVec2(AM40010_DISPLAY_WIDTH/2, AM40010_DISPLAY_HEIGHT));		
 
@@ -28,7 +28,7 @@ void FCPCViewer::Draw()
 	ImGui::Text("Application average %.3f ms/frame (%.1f FPS)", 1000.0f / ImGui::GetIO().Framerate, ImGui::GetIO().Framerate);
 }
 
-void FCPCViewer::Tick(void)
+void FCpcViewer::Tick(void)
 {
 }
 

@@ -1,6 +1,6 @@
 #pragma once
 
-#include "System/System.h"
+#include "Shared/System/System.h"
 
 #define UI_DBG_USE_Z80
 #define UI_DASM_USE_Z80
@@ -46,32 +46,70 @@
 #include "CodeAnalyser/CodeAnalyser.h"
 #include "Viewers/CPCViewer.h"
 
-class FCPCEmu : public FSystem
+enum class ECpcModel
+{
+	CPC_464,
+	CPC_6128,
+	CPC_KCKompact,
+};
+
+struct FCpcConfig
+{
+	ECpcModel Model;
+	std::string		SpecificGame;
+};
+
+#include "Shared/GamesList/GamesList.h"
+#include <Util/FileUtil.h>
+
+class FCpcGameLoader : public IGameLoader
 {
 public:
-	FCPCEmu()
+	void Init(cpc_t* pCpc)
+	{
+		pCpcEmuState = pCpc;
+	}
+	bool LoadGame(const char* pFileName) override
+	{
+		size_t byteCount = 0;
+		uint8_t* pData = (uint8_t*)LoadBinaryFile(pFileName, byteCount);
+		if (!pData)
+			return false;
+		cpc_quickload(pCpcEmuState, pData, static_cast<int>(byteCount));
+		free(pData);
+		return true;
+	};
+	ESnapshotType GetSnapshotTypeFromFileName(const std::string& fn) override
+	{
+		if ((fn.substr(fn.find_last_of(".") + 1) == "sna") || (fn.substr(fn.find_last_of(".") + 1) == "SNA"))
+			return ESnapshotType::SNA; // will need cpc SNA, spectrum SNA etc
+		else
+			return ESnapshotType::Unknown;
+	}
+	cpc_t* pCpcEmuState = 0;
+};
+
+class FCpcEmu : public FSystem
+{
+public:
+	FCpcEmu()
 	{
 		CPUType = ECPUType::Z80;
 	}
 
-	bool	Init(/*const FSpectrumConfig& config*/);
+	bool	Init(const FCpcConfig& config);
 	void	Shutdown();
 	void	DrawMainMenu(double timeMS);
-
-	std::string GetAppTitle() override { return "CPC Analyser"; }
-	std::string GetWindowIconName() override { return "CPCALogo.png"; }
-	std::string GetROMFilename() override { return "";  }
 
 	int TrapFunction(uint16_t pc, int ticks, uint64_t pins);
 	uint64_t Z80Tick(int num, uint64_t pins);
 
-	void	Tick();
-	void	DrawUI();
-	bool	DrawDockingView();
+	void	Tick() override;
+	void	DrawUI() override;
 
 	// disable copy & assign because this class is big!
-	FCPCEmu(const FCPCEmu&) = delete;
-	FCPCEmu& operator= (const FCPCEmu&) = delete;
+	FCpcEmu(const FCpcEmu&) = delete;
+	FCpcEmu& operator= (const FCpcEmu&) = delete;
 
 	//ICPUInterface Begin
 	uint8_t		ReadByte(uint16_t address) const override;
@@ -82,35 +120,34 @@ public:
 	uint16_t	GetSP(void) override;
 	bool		IsAddressBreakpointed(uint16_t addr);
 	bool		ToggleExecBreakpointAtAddress(uint16_t addr) override;
-	bool		ToggleDataBreakpointAtAddress(uint16_t addr, uint16_t dataSize);
-	void		Break(void);
-	void		Continue(void);
-	void		StepOver(void);
-	void		StepInto(void);
-	void		StepFrame(void);
-	void		StepScreenWrite(void);
-	void		GraphicsViewerSetView(uint16_t address, int charWidth);
+	bool		ToggleDataBreakpointAtAddress(uint16_t addr, uint16_t dataSize) override;
+	void		Break(void) override;
+	void		Continue(void) override;
+	void		StepOver(void) override;
+	void		StepInto(void) override;
+	void		StepFrame(void) override;
+	void		StepScreenWrite(void) override;
+	void		GraphicsViewerSetView(uint16_t address, int charWidth) override;
 	bool		ShouldExecThisFrame(void) const override;
 	bool		IsStopped(void) const override;
 	void* GetCPUEmulator(void) override;
 	//ICPUInterface End
 
 	// Emulator 
-	cpc_t			CPCEmuState;	// Chips CPC State
+	cpc_t			CpcEmuState;		// Chips CPC State
 	int				CurrentLayer = 0;	// layer ??
 
-	unsigned char*	FrameBuffer;	// pixel buffer to store emu output
-	ImTextureID		Texture;		// texture 
-	
 	bool			ExecThisFrame = true; // Whether the emulator should execute this frame (controlled by UI)
 	float			ExecSpeedScale = 1.0f;
 
 	ui_cpc_t		UICPC;
 
-	FCPCViewer						CPCViewer;
+	FCpcViewer				CpcViewer;
 	FCodeAnalysisState		CodeAnalysis;
 
 private:
+	FCpcGameLoader	GameLoader;
+
 	z80_tick_t	OldTickCB = nullptr;
 	void*		OldTickUserData = nullptr;
 

@@ -5,19 +5,19 @@
 #include "imgui.h"
 #include "Misc/InputEventHandler.h"
 
-class FCPCEmu;
+class FCpcEmu;
 
-class FCPCViewer
+class FCpcViewer
 {
 public:
-	FCPCViewer() {}
+	FCpcViewer() {}
 
-	void	Init(FCPCEmu* pEmu);
+	void	Init(FCpcEmu* pEmu);
 	void	Draw();
 	void	Tick(void);
 
 private:
-	FCPCEmu* pCPCEmu = nullptr;
+	FCpcEmu* pCPCEmu = nullptr;
 
 	// screen inspector
 	/*bool		bScreenCharSelected = false;

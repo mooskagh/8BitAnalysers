@@ -109,6 +109,8 @@ set ( vendor_src ${imgui_src} ${imgui_backend_src} ${implot_src} ${chips_src} ${
 # program source
 file ( GLOB program_src 
 	./*.cpp ./*.h
+	Shared/GamesList/*.cpp Shared/GamesList/*.h
+	Shared/System/*.cpp Shared/System/*.h
 	Exporters/*.cpp Exporters/*.h
 	GameViewers/*.cpp GameViewers/*.h
 	Importers/*.cpp Importers/*.h
