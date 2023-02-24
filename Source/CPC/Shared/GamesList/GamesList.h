@@ -37,19 +37,13 @@ public:
 	}
 	bool	EnumerateGames(const char* pRootDir);
 	bool	LoadGame(int index);
-	// make pure virtual
-	//bool	LoadGame(const char* pFileName);
 
 	int		GetNoGames() const { return (int)GamesList.size(); }
 	const FGameSnapshot& GetGame(int index) const { return GamesList[index]; }
 	//const std::string& GetGameName(int index) const { return GamesList[index].DisplayName; }
 
 private:
-	//FSystem* pSystem = nullptr;
 	std::vector< FGameSnapshot>	GamesList;
 	std::string RootDir;
 	IGameLoader* pGameLoader = 0;
 };
-
-// we will need to provide an implmentation per platform
-//ESnapshotType GetSnapshotTypeFromFileName(const std::string& fn);

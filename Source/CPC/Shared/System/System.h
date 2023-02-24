@@ -32,6 +32,14 @@ public:
 
 	virtual void Tick();
 	virtual void DrawMainMenu(double timeMS);
+	virtual void DrawFileMenu();
+	virtual void DrawSystemMenu();
+	virtual void DrawHardwareMenu();
+	virtual void DrawOptionsMenu();
+	virtual void DrawToolsMenu();
+	virtual void DrawWindowsMenu();
+	virtual void DrawDebugMenu();
+	virtual void DrawMenus();
 	virtual void DrawUI();
 
 	//ICPUInterface Begin
@@ -70,9 +78,12 @@ public:
 
 protected:
 	bool DrawDockingView();
+	void ExportAsmGui();
 
 	bool	bStepToNextFrame = false;
 	bool	bStepToNextScreenWrite = false;
+	
+	bool	bExportAsm = false;
 
 	bool	bShowDebugLog = false;
 	bool	bInitialised = false;

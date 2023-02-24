@@ -181,16 +181,15 @@ int main(int argc, char** argv)
         ImGui_ImplGlfw_NewFrame();
         ImGui::NewFrame();
 
+		// cpc update & render
 		pCpcEmulator->Tick();
-#if SPECCY
-		// speccy update & render
-		// 1. Show the big demo window (Most of the sample code is in ImGui::ShowDemoWindow()! You can browse its code to learn more about Dear ImGui!).
-		if (pSpectrumEmulator->bShowImGuiDemo)
-			ImGui::ShowDemoWindow(&pSpectrumEmulator->bShowImGuiDemo);
 
-		if (pSpectrumEmulator->bShowImPlotDemo)
-			ImPlot::ShowDemoWindow(&pSpectrumEmulator->bShowImPlotDemo);
-#endif
+		// 1. Show the big demo window (Most of the sample code is in ImGui::ShowDemoWindow()! You can browse its code to learn more about Dear ImGui!).
+		if (pCpcEmulator->bShowImGuiDemo)
+			ImGui::ShowDemoWindow(&pCpcEmulator->bShowImGuiDemo);
+
+		if (pCpcEmulator->bShowImPlotDemo)
+			ImPlot::ShowDemoWindow(&pCpcEmulator->bShowImPlotDemo);
 
         // Rendering
         ImGui::Render();
