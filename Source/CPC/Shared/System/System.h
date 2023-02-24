@@ -32,6 +32,9 @@ public:
 
 	virtual void Tick();
 	virtual void DrawMainMenu(double timeMS);
+	
+	// override any of these to add your own menu items after (or before) the system ones.
+	// will need to call the FSystem function in the overriden code obviously.
 	virtual void DrawFileMenu();
 	virtual void DrawSystemMenu();
 	virtual void DrawHardwareMenu();
@@ -39,6 +42,7 @@ public:
 	virtual void DrawToolsMenu();
 	virtual void DrawWindowsMenu();
 	virtual void DrawDebugMenu();
+	
 	virtual void DrawMenus();
 	virtual void DrawUI();
 
@@ -73,18 +77,18 @@ public:
 	
 	bool			ExecThisFrame = true; // Whether the emulator should execute this frame (controlled by UI)
 	float			ExecSpeedScale = 1.0f;
-	bool bShowImGuiDemo = false;
-	bool bShowImPlotDemo = false;
+	bool			bShowImGuiDemo = false;
+	bool			bShowImPlotDemo = false;
 
 protected:
 	bool DrawDockingView();
 	void ExportAsmGui();
-
-	bool	bStepToNextFrame = false;
-	bool	bStepToNextScreenWrite = false;
-	
-	bool	bExportAsm = false;
-
-	bool	bShowDebugLog = false;
-	bool	bInitialised = false;
+		 
+	bool bStepToNextFrame = false;
+	bool bStepToNextScreenWrite = false;
+		 
+	bool bExportAsm = false;
+		 
+	bool bShowDebugLog = false;
+	bool bInitialised = false;
 };

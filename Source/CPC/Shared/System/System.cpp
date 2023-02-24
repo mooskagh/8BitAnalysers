@@ -154,7 +154,8 @@ void FSystem::DrawSystemMenu()
 
 void FSystem::DrawHardwareMenu()
 {
-
+	// no menu items here.
+	// anything added here will appear before the CPC menu items.
 }
 
 void FSystem::DrawOptionsMenu()
@@ -273,6 +274,8 @@ void FSystem::DrawDebugMenu()
 	}*/
 }
 
+// This can be overriden in the derived class if the platform code wants to insert it's own menu.
+// This might be OTT?
 void FSystem::DrawMenus()
 {
 	DrawFileMenu();

@@ -239,6 +239,8 @@ static uint64_t Z80TickThunk(int num, uint64_t pins, void* user_data)
 
 bool FCpcEmu::Init(const FCpcConfig& config)
 {
+	// A class that deals with loading games.
+	// This gets passed to the FSystem class so the GamesList can load cpc games.
 	GameLoader.Init(this);
 
 	// Initialise the System
@@ -346,6 +348,7 @@ void FCpcEmu::Tick()
 		ImGui_UpdateTextureRGBA(Texture, FrameBuffer);
 	}
 	
+	// Draw the docking view.
 	FSystem::Tick();
 }
 
@@ -361,6 +364,7 @@ void FCpcEmu::DrawUI()
 	static int maxInst = 0;
 	maxInst = std::max(maxInst, instructionsThisFrame);
 
+	// Draw the main menu
 	FSystem::DrawUI();
 
 	/*if (pCPCUI->memmap.open)
