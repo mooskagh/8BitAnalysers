@@ -45,6 +45,7 @@
 
 #include "CodeAnalyser/CodeAnalyser.h"
 #include "Viewers/CPCViewer.h"
+#include "Viewers/GraphicsViewer.h"
 
 enum class ECpcModel
 {
@@ -123,8 +124,10 @@ public:
 
 	ui_cpc_t		UICpc;
 
+	// Viewers
 	FCpcViewer				CpcViewer;
 	FCodeAnalysisState		CodeAnalysis;
+	FGraphicsViewerState	GraphicsViewer;
 
 	unsigned char* FrameBuffer;	// pixel buffer to store emu output
 	ImTextureID		Texture;		// texture 

@@ -261,7 +261,8 @@ bool FCpcEmu::Init(const FCpcConfig& config)
 
 	// Initialise the CPC emulator
 
-	cpc_type_t type = CPC_TYPE_464;
+	//cpc_type_t type = CPC_TYPE_464;
+	cpc_type_t type = CPC_TYPE_6128;
 	cpc_joystick_type_t joy_type = CPC_JOYSTICK_NONE;
 
 	cpc_desc_t desc;
@@ -323,6 +324,9 @@ bool FCpcEmu::Init(const FCpcConfig& config)
 		desc.dbg_keys.toggle_breakpoint_name = "F9";
 		ui_cpc_init(&UICpc, &desc);
 	}
+
+	GraphicsViewer.pEmu = this;
+	InitGraphicsViewer(GraphicsViewer);
 
 	CpcViewer.Init(this);
 
@@ -714,6 +718,8 @@ void FCpcEmu::DrawUI()
 		CpcViewer.Draw();
 	}
 	ImGui::End();
+
+	DrawGraphicsViewer(GraphicsViewer);
 }
 
 bool FCpcEmu::DrawDockingView()
