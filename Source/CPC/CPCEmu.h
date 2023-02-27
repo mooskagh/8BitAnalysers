@@ -1,6 +1,5 @@
 #pragma once
 
-#include "Shared/System/System.h"
 #include "SnapshotLoaders/GameLoader.h"
 
 #define UI_DBG_USE_Z80
@@ -60,7 +59,7 @@ struct FCpcConfig
 	std::string	SpecificGame;
 };
 
-class FCpcEmu : public FSystem
+class FCpcEmu : public ICPUInterface
 {
 public:
 	FCpcEmu()
@@ -71,12 +70,23 @@ public:
 	bool	Init(const FCpcConfig& config);
 	void	Shutdown();
 
-	void	DrawHardwareMenu() override;
 	int TrapFunction(uint16_t pc, int ticks, uint64_t pins);
 	uint64_t Z80Tick(int num, uint64_t pins);
 
-	void	Tick() override;
-	void	DrawUI() override;
+	void	Tick();
+	void	DrawUI();
+	bool	DrawDockingView();
+
+	void	DrawFileMenu();
+	void	DrawSystemMenu();
+	void	DrawHardwareMenu();
+	void	DrawOptionsMenu();
+	void	DrawToolsMenu();
+	void	DrawWindowsMenu();
+	void	DrawDebugMenu();
+	void	DrawMenus();
+	void	DrawMainMenu(double timeMS);
+	void	ExportAsmGui();
 
 	// disable copy & assign because this class is big!
 	FCpcEmu(const FCpcEmu&) = delete;
@@ -116,11 +126,20 @@ public:
 	FCpcViewer				CpcViewer;
 	FCodeAnalysisState		CodeAnalysis;
 
+	unsigned char* FrameBuffer;	// pixel buffer to store emu output
+	ImTextureID		Texture;		// texture 
+
+	bool	bShowImGuiDemo = false;
+	bool	bShowImPlotDemo = false;
+
 private:
+	FGamesList			GamesList;
 	FCpcGameLoader	GameLoader;
 
 	z80_tick_t	OldTickCB = nullptr;
 	void*		OldTickUserData = nullptr;
+
+	bool bExportAsm = false;
 
 	bool	bStepToNextFrame = false;
 	bool	bStepToNextScreenWrite = false;
