@@ -15,7 +15,16 @@
 
 const std::string kAppTitle = "CPC Analyser";
 
-// TODO
+const uint8_t* FCpcEmu::GetMemPtr(uint16_t address) const 
+{
+	// todo: deal with 464/6128 differences
+
+	const int bank = address >> 14;
+	const int bankAddr = address & 0x3fff;
+
+	return &CpcEmuState.ram[bank][bankAddr];
+}
+
 #if 0
 // Memory access functions
 uint8_t* MemGetPtr(cpc_t* cpc, int layer, uint16_t addr)
@@ -45,10 +54,6 @@ uint16_tFCpcEmu::ReadWord(uint16_t address) const
 	return ReadByte(address) | (ReadByte(address + 1) << 8);
 }
 
-const uint8_t* FCpcEmu::GetMemPtr(uint16_t address) const 
-{
-	return 0;
-}
 
 
 void FCpcEmu::WriteByte(uint16_t address, uint8_t value)
@@ -261,8 +266,8 @@ bool FCpcEmu::Init(const FCpcConfig& config)
 
 	// Initialise the CPC emulator
 
-	//cpc_type_t type = CPC_TYPE_464;
-	cpc_type_t type = CPC_TYPE_6128;
+	cpc_type_t type = CPC_TYPE_464;
+	//cpc_type_t type = CPC_TYPE_6128;
 	cpc_joystick_type_t joy_type = CPC_JOYSTICK_NONE;
 
 	cpc_desc_t desc;

@@ -95,31 +95,18 @@ void DrawMemoryAsGraphicsColumn(FGraphicsViewerState &state,uint16_t startAddr, 
 		{
 			const uint8_t *pImage = state.pEmu->GetMemPtr(memAddr);
 			const uint8_t col = GetHeatmapColourForMemoryAddress(state.pEmu->CodeAnalysis, memAddr, state.HeatmapThreshold);
-			/*
-			FDataInfo *pDataInfo = state.pUI->CodeAnalysis.DataInfo[memAddr];
-			FCodeInfo *pCodeInfo = state.pUI->CodeAnalysis.CodeInfo[memAddr];
-			uint8_t col = 7;	// white
-			if (pCodeInfo)
-			{
-				const int framesSinceAccessed = state.pUI->CodeAnalysis.CurrentFrameNo - pCodeInfo->FrameLastAccessed;
-				if (pCodeInfo->FrameLastAccessed != -1 && (framesSinceAccessed < state.HeatmapThreshold))
-					col = 6;	// yellow code
-			}
-			else if (pDataInfo)
-			{
-				const int framesSinceWritten = state.pUI->CodeAnalysis.CurrentFrameNo - pDataInfo->LastFrameWritten;
-				const int framesSinceRead = state.pUI->CodeAnalysis.CurrentFrameNo - pDataInfo->LastFrameRead;
-				if (pDataInfo->LastFrameWritten != -1 && (framesSinceWritten < state.HeatmapThreshold))
-					col = 2;
-				if (pDataInfo->LastFrameRead != -1 && (framesSinceRead < state.HeatmapThreshold))
-					col = 4;
-			}*/
-
+	
 			pGraphicsView->DrawCharLine(*pImage, xPos + (xChar * 8), y,col);
 
 			memAddr++;
 		}
 	}
+}
+
+// get address of pixel line
+uint16_t GetLineAddress(unsigned char nLine)
+{
+  return (uint16_t) (0xC000 + ((nLine / 8) * 80) + ((nLine % 8) * 2048));
 }
 
 // Viewer to view cpc graphics
@@ -227,30 +214,6 @@ void DrawGraphicsViewer(FGraphicsViewerState &state)
 		ImGui::InputInt("YSize Fine", &state.YSize, 1, 8);
 		ImGui::InputInt("Count", &state.ImageCount, 1, 4);
 
-		/*ImGui::Separator();
-		ImGui::InputText("Config Name", &state.NewConfigName);
-		ImGui::SameLine();
-		if (ImGui::Button("Store"))
-		{
-			// Store this in the config map
-			auto& spriteConfigs = state.pGame->pConfig->SpriteConfigs;
-			if(spriteConfigs.find(state.NewConfigName) == spriteConfigs.end())	// not found - add
-			{
-				FSpriteDefConfig newConfig;
-				newConfig.BaseAddress = state.Address;
-				newConfig.Count = state.ImageCount;
-				newConfig.Width = state.XSize;
-				newConfig.Height = state.YSize / 8;	// sprite height in chars atm - TODO: move to line count
-				spriteConfigs[state.NewConfigName] = newConfig;
-
-				// TODO: tell sprite view to refresh
-				GenerateSpriteListsFromConfig(state, state.pGame->pConfig);
-
-				// TODO: Save Config?
-			}
-			
-		}*/
-
 		state.XSize = std::min(std::max(1, state.XSize), kHorizontalDispCharCount);
 		state.YSize = std::min(std::max(1, state.YSize), kVerticalDispPixCount);
 
@@ -303,10 +266,42 @@ void DrawGraphicsViewer(FGraphicsViewerState &state)
 	}
 	else if (state.ViewMode == GraphicsViewMode::Screen)
 	{
-#if SPECCY
-		// http://www.breakintoprogram.co.uk/computers/zx-spectrum/screen-memory-layout
-		state.Address = 0x4000;// (int)addrInput;
+		// http://www.cpcmania.com/Docs/Programming/Painting_pixels_introduction_to_video_memory.htm
+		state.Address = 0xc000;// (int)addrInput;
 
+		int offset = 0;
+		for (int y = 0; y < 200; y++)
+		{
+			uint16_t addr = GetLineAddress(y);
+			const uint8_t *pSrc = state.pEmu->GetMemPtr(addr);
+
+			uint32_t* pLineAddr = pGraphicsView->GetPixelBuffer() + (y * kGraphicsViewerWidth);
+
+			//const uint32_t colRGBA = bSet ? g_kColourLUT[col] : 0xff000000;
+
+			for (int x = 0; x < 160 / 8; x++)
+			{
+				const uint8_t charLine = *pSrc++;
+
+				for (int xpix = 0; xpix < 8; xpix++)
+				{
+					const bool bSet = (charLine & (1 << (7 - xpix))) != 0;
+					const uint32_t colRGBA = bSet ? 0xffffffff : 0xff000000;
+					*(pLineAddr + xpix + (x * 8)) = colRGBA;
+				}
+			}
+			//pScreen = GetLineAddress(nLine);
+
+			//offset += 256 / 8;	// advance to next line
+
+
+			/**(pLineAddr + xpix + (x * 8)) = colRGBA;
+
+			for (int nByte = 0; nByte < 80; nByte++)
+				pScreen[nByte] = (unsigned char)(rand() % 256);*/
+		}
+
+#if SPECCY
 		int offset = 0;
 		for (int y = 0; y < 192; y++)
 		{
@@ -314,32 +309,34 @@ void DrawGraphicsViewer(FGraphicsViewerState &state)
 				break;
 
 			uint16_t addr = state.Address + offset;
-			const uint8_t *pSrc = state.pEmu->GetMemPtr(addr);
-			const int y0to2 = ((offset >> 8) & 7);
-			const int y3to5 = ((offset >> 5) & 7) << 3;
-			const int y6to7 = ((offset >> 11) & 3) << 6;
-			const int yDestPos = y0to2 | y3to5 | y6to7;	// or offsets together
-
-			// determine dest pointer for scanline
-			uint32_t* pLineAddr = pGraphicsView->GetPixelBuffer() + (yDestPos * kGraphicsViewerWidth);
-
-			// pixel line
-			for (int x = 0; x < 256 / 8; x++)
+			if (const uint8_t *pSrc = state.pEmu->GetMemPtr(addr))
 			{
-				const uint8_t charLine = *pSrc++;
-				const uint8_t col = GetHeatmapColourForMemoryAddress(state.pEmu->CodeAnalysis, addr, state.HeatmapThreshold);
-				
-				for (int xpix = 0; xpix < 8; xpix++)
+				const int y0to2 = ((offset >> 8) & 7);
+				const int y3to5 = ((offset >> 5) & 7) << 3;
+				const int y6to7 = ((offset >> 11) & 3) << 6;
+				const int yDestPos = y0to2 | y3to5 | y6to7;	// or offsets together
+
+				// determine dest pointer for scanline
+				uint32_t* pLineAddr = pGraphicsView->GetPixelBuffer() + (yDestPos * kGraphicsViewerWidth);
+
+				// pixel line
+				for (int x = 0; x < 256 / 8; x++)
 				{
-					const bool bSet = (charLine & (1 << (7 - xpix))) != 0;
-					const uint32_t colRGBA = bSet ? g_kColourLUT[col] : 0xff000000;
-					*(pLineAddr + xpix + (x * 8)) = colRGBA;
+					const uint8_t charLine = *pSrc++;
+					const uint8_t col = GetHeatmapColourForMemoryAddress(state.pEmu->CodeAnalysis, addr, state.HeatmapThreshold);
+				
+					for (int xpix = 0; xpix < 8; xpix++)
+					{
+						const bool bSet = (charLine & (1 << (7 - xpix))) != 0;
+						const uint32_t colRGBA = bSet ? g_kColourLUT[col] : 0xff000000;
+						*(pLineAddr + xpix + (x * 8)) = colRGBA;
+					}
+
+					addr++;
 				}
 
-				addr++;
+				offset += 256 / 8;	// advance to next line
 			}
-
-			offset += 256 / 8;	// advance to next line
 		}
 #endif
 	}

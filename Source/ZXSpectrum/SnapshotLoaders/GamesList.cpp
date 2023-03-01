@@ -55,7 +55,7 @@ bool FGamesList::LoadGame(const char* pFileName)
 {
 	const std::string fn(pFileName);
 
-	switch (GetSnapshotTypeFromFileName(pFileName))
+	switch (GetSnapshotTypeFromFileName(fn))
 	{
 	case ESnapshotType::Z80:
 		return LoadZ80File(pSpectrumEmu, pFileName);

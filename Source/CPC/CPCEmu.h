@@ -96,7 +96,7 @@ public:
 	//ICPUInterface Begin
 	uint8_t		ReadByte(uint16_t address) const override { /* todo */ return 0; }
 	uint16_t	ReadWord(uint16_t address) const override { /* todo */ return 0; }
-	const uint8_t* GetMemPtr(uint16_t address) const override { /* todo */ return 0; }
+	const uint8_t* GetMemPtr(uint16_t address) const override;
 	void		WriteByte(uint16_t address, uint8_t value) override { /* todo */ }
 	uint16_t	GetPC(void) override { /* todo */ return 0; }
 	uint16_t	GetSP(void) override { /* todo */ return 0; }

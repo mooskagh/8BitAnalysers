@@ -15,5 +15,5 @@ public:
 
 private:
 
-	static const uint32_t ColourLUT[8];
+	static const uint32_t ColourLUT[32];
 };

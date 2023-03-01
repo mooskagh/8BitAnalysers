@@ -41,8 +41,8 @@ struct FGraphicsViewerState
 
 	// housekeeping
 	FCpcGraphicsView*	pGraphicsView = nullptr;
-	FCpcEmu*	pEmu = nullptr;
-	FGame*			pGame = nullptr;
+	FCpcEmu*			pEmu = nullptr;
+	FGame*				pGame = nullptr;
 
 };
 
