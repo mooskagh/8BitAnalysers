@@ -465,8 +465,6 @@ void FCpcEmu::DrawHardwareMenu()
 		ImGui::MenuItem("Z80 CPU", 0, &UICpc.cpu.open);
 		ImGui::MenuItem("MC6845 (CRTC)", 0, &UICpc.vdc.open);
 		ImGui::MenuItem("AM40010 (Gate Array)", 0, &UICpc.ga.open);
-		ImGui::MenuItem("Scanline Debug", 0, &UICpc.dbg_scanline);
-		ImGui::MenuItem("Vsync Debug", 0, &UICpc.dbg_vsync);
 		ImGui::EndMenu();
 	}
 }
@@ -676,6 +674,8 @@ void FCpcEmu::ExportAsmGui()
 
 void FCpcEmu::Tick()
 {
+	CpcViewer.Tick();
+
 	ExecThisFrame = ui_cpc_before_exec(&UICpc);
 
 	if (ExecThisFrame)

@@ -136,7 +136,7 @@ public:
 	bool	bShowImPlotDemo = false;
 
 private:
-	FGamesList			GamesList;
+	FGamesList		GamesList;
 	FCpcGameLoader	GameLoader;
 
 	z80_tick_t	OldTickCB = nullptr;

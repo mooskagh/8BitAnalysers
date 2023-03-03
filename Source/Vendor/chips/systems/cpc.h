@@ -779,16 +779,23 @@ static void _cpc_init_keymap(cpc_t* sys) {
     kbd_register_key(&sys->kbd, 0x0C, 2, 0, 0); /* clr */
     kbd_register_key(&sys->kbd, 0x0D, 2, 2, 0); /* return */
     kbd_register_key(&sys->kbd, 0x03, 8, 2, 0); /* escape */
-    kbd_register_key(&sys->kbd, 0xF1, 1, 5, 0); /* F1...*/
-    kbd_register_key(&sys->kbd, 0xF2, 1, 6, 0);
-    kbd_register_key(&sys->kbd, 0xF3, 0, 5, 0);
-    kbd_register_key(&sys->kbd, 0xF4, 4, 2, 0);
-    kbd_register_key(&sys->kbd, 0xF5, 4, 1, 0);
-    kbd_register_key(&sys->kbd, 0xF6, 4, 0, 0);
-    kbd_register_key(&sys->kbd, 0xF7, 2, 1, 0);
-    kbd_register_key(&sys->kbd, 0xF8, 3, 1, 0);
-    kbd_register_key(&sys->kbd, 0xF9, 3, 0, 0);
-    kbd_register_key(&sys->kbd, 0xFA, 7, 1, 0); /* F0 -> F10 */
+    
+    // Sam. Added missing keys BEGIN
+    kbd_register_key(&sys->kbd, 0x05, 1, 1, 0); /* Copy*/
+    kbd_register_key(&sys->kbd, 0x06, 8, 4, 0); /* Tab*/
+    kbd_register_key(&sys->kbd, 0x07, 8, 6, 0); /* CapsLock*/
+    // Sam. Added missing keys END
+    
+    kbd_register_key(&sys->kbd, 0xF1, 1, 5, 0); /* F1 */
+    kbd_register_key(&sys->kbd, 0xF2, 1, 6, 0); /* F2 */
+    kbd_register_key(&sys->kbd, 0xF3, 0, 5, 0); /* F3 */
+    kbd_register_key(&sys->kbd, 0xF4, 2, 4, 0); /* F4 */            /* Sam. Fixed matrix values */
+    kbd_register_key(&sys->kbd, 0xF5, 1, 4, 0); /* F5 */            /* Sam. Fixed matrix values */
+    kbd_register_key(&sys->kbd, 0xF6, 0, 4, 0); /* F6 */            /* Sam. Fixed matrix values */
+    kbd_register_key(&sys->kbd, 0xF7, 1, 2, 0); /* F7 */            /* Sam. Fixed matrix values */
+    kbd_register_key(&sys->kbd, 0xF8, 1, 3, 0); /* F8 */            /* Sam. Fixed matrix values */
+    kbd_register_key(&sys->kbd, 0xF9, 0, 3, 0); /* F9 */            /* Sam. Fixed matrix values */
+    kbd_register_key(&sys->kbd, 0xFA, 1, 7, 0); /* F0 -> F10 */     /* Sam. Fixed matrix values */
 }
 
 /* CPC6128 RAM block indices */
