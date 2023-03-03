@@ -266,8 +266,8 @@ bool FCpcEmu::Init(const FCpcConfig& config)
 
 	// Initialise the CPC emulator
 
-	cpc_type_t type = CPC_TYPE_464;
-	//cpc_type_t type = CPC_TYPE_6128;
+	//cpc_type_t type = CPC_TYPE_464;
+	cpc_type_t type = CPC_TYPE_6128;
 	cpc_joystick_type_t joy_type = CPC_JOYSTICK_NONE;
 
 	cpc_desc_t desc;
@@ -463,6 +463,10 @@ void FCpcEmu::DrawHardwareMenu()
 		ImGui::MenuItem("Keyboard Matrix", 0, &UICpc.kbd.open);
 		ImGui::MenuItem("Audio Output", 0, &UICpc.audio.open);
 		ImGui::MenuItem("Z80 CPU", 0, &UICpc.cpu.open);
+		ImGui::MenuItem("MC6845 (CRTC)", 0, &UICpc.vdc.open);
+		ImGui::MenuItem("AM40010 (Gate Array)", 0, &UICpc.ga.open);
+		ImGui::MenuItem("Scanline Debug", 0, &UICpc.dbg_scanline);
+		ImGui::MenuItem("Vsync Debug", 0, &UICpc.dbg_vsync);
 		ImGui::EndMenu();
 	}
 }
@@ -717,6 +721,8 @@ void FCpcEmu::DrawUI()
 	ui_ay38910_draw(&pCPCUI->psg);
 	ui_kbd_draw(&pCPCUI->kbd);
 	ui_memmap_draw(&pCPCUI->memmap);
+	ui_am40010_draw(&pCPCUI->ga);
+	ui_mc6845_draw(&pCPCUI->vdc);
 
 	if (ImGui::Begin("CPC View"))
 	{
