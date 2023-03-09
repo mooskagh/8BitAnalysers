@@ -10,9 +10,10 @@
 #include <sokol_audio.h>
 #include "cpc-roms.h"
 
-#include <ImGuiSupport/ImGuiTexture.h>
+#include "CodeAnalyser/UI/CodeAnalyserUI.h"
 #include "App.h"
 
+#include <ImGuiSupport/ImGuiTexture.h>
 const std::string kAppTitle = "CPC Analyser";
 
 const uint8_t* FCpcEmu::GetMemPtr(uint16_t address) const 
@@ -244,6 +245,66 @@ static uint64_t Z80TickThunk(int num, uint64_t pins, void* user_data)
 	return pEmu->Z80Tick(num, pins);
 }
 
+void CheckAddressSpaceItems(const FCodeAnalysisState& state)
+{
+	for (int addr = 0; addr < 1 << 16; addr++)
+	{
+		const FDataInfo* pDataInfo = state.GetReadDataInfoForAddress(addr);
+		assert(pDataInfo->Address == addr);
+	}
+}
+
+// Bank is ROM bank 0 or 1
+// this is always slot 0
+void FCpcEmu::SetROMBank(int bankNo)
+{
+	if (ROMBank == bankNo)
+		return;
+
+	const uint16_t firstBankPage = bankNo * kNoSlotPages;
+
+	for (int pageNo = 0; pageNo < kNoSlotPages; pageNo++)
+	{
+		ROMPages[firstBankPage + pageNo].ChangeAddress((pageNo * FCodeAnalysisPage::kPageSize));
+		CodeAnalysis.SetCodeAnalysisRWPage(pageNo, &ROMPages[firstBankPage + pageNo], &ROMPages[firstBankPage + pageNo]);	// Read/Write
+	}
+
+	CodeAnalysis.SetMemoryRemapped();
+#ifdef _DEBUG
+	if (bInitialised)
+		CheckAddressSpaceItems(CodeAnalysis);
+#endif
+}
+
+// Slot is physical 16K memory region (0-3) 
+// Bank is a 16K Spectrum RAM bank (0-7)
+void FCpcEmu::SetRAMBank(int slot, int bankNo)
+{
+	if (RAMBanks[slot] == bankNo)
+		return;
+	RAMBanks[slot] = bankNo;
+
+	const uint16_t firstSlotPage = slot * kNoSlotPages;
+	const uint16_t firstBankPage = bankNo * kNoBankPages;
+	uint16_t slotAddress = firstSlotPage * FCodeAnalysisPage::kPageSize;
+
+	for (int pageNo = 0; pageNo < kNoSlotPages; pageNo++)
+	{
+		const int slotPageNo = firstSlotPage + pageNo;
+		FCodeAnalysisPage& bankPage = RAMPages[firstBankPage + pageNo];
+		bankPage.ChangeAddress(slotAddress);
+		CodeAnalysis.SetCodeAnalysisRWPage(slotPageNo, &bankPage, &bankPage);	// Read/Write
+		slotAddress += FCodeAnalysisPage::kPageSize;
+	}
+
+	CodeAnalysis.SetMemoryRemapped();
+
+#ifdef _DEBUG
+	if (bInitialised)
+		CheckAddressSpaceItems(CodeAnalysis);
+#endif
+
+}
 
 bool FCpcEmu::Init(const FCpcConfig& config)
 {
@@ -334,6 +395,84 @@ bool FCpcEmu::Init(const FCpcConfig& config)
 	InitGraphicsViewer(GraphicsViewer);
 
 	CpcViewer.Init(this);
+
+
+
+	// Set up code analysis
+	// initialise code analysis pages
+//#if SPECCY
+
+	// ROM
+	for (int pageNo = 0; pageNo < kNoROMPages; pageNo++)
+	{
+		char pageName[32];
+		sprintf(pageName, "ROM:%d", pageNo);
+		ROMPages[pageNo].Initialise(0);
+		CodeAnalysis.RegisterPage(&ROMPages[pageNo], pageName);
+	}
+	// RAM
+	for (int pageNo = 0; pageNo < kNoRAMPages; pageNo++)
+	{
+		char pageName[32];
+		sprintf(pageName, "RAM:%d", pageNo);
+		RAMPages[pageNo].Initialise(0);
+		CodeAnalysis.RegisterPage(&RAMPages[pageNo], pageName);
+	}
+
+	// Setup initial machine memory config
+	//if (config.Model == ESpectrumModel::Spectrum48K)
+	if (1)
+	{
+		SetROMBank(0);
+		SetRAMBank(1, 0);	// 0x4000 - 0x7fff
+		SetRAMBank(2, 1);	// 0x8000 - 0xBfff
+		SetRAMBank(3, 2);	// 0xc000 - 0xffff
+	}
+	else
+	{
+		SetROMBank(0);
+		SetRAMBank(1, 5);	// 0x4000 - 0x7fff
+		SetRAMBank(2, 2);	// 0x8000 - 0xBfff
+		SetRAMBank(3, 0);	// 0xc000 - 0xffff
+	}
+
+#ifdef _DEBUG
+	CheckAddressSpaceItems(CodeAnalysis);
+#endif
+//#endif
+
+	// load the command line game if none specified then load the last game
+	bool bLoadedGame = false;
+
+#if SPECCY
+	if (config.SpecificGame.empty() == false)
+	{
+		bLoadedGame = StartGame(config.SpecificGame.c_str());
+	}
+	else if (globalConfig.LastGame.empty() == false)
+	{
+		bLoadedGame = StartGame(globalConfig.LastGame.c_str());
+	}
+#endif
+	// Start ROM if no game has been loaded
+	if (bLoadedGame == false)
+	{
+#if SPECCY
+		std::string romJsonFName = kRomInfo48JsonFile;
+
+		if (config.Model == ESpectrumModel::Spectrum128K)
+			romJsonFName = kRomInfo128JsonFile;
+#endif
+		InitialiseCodeAnalysis(CodeAnalysis, this);
+
+#if SPECCY
+		if (FileExists(romJsonFName.c_str()))
+			ImportAnalysisJson(CodeAnalysis, romJsonFName.c_str());
+#endif
+	}
+
+
+
 
 	bInitialised = true;
 
@@ -427,8 +566,8 @@ void FCpcEmu::DrawSystemMenu()
 		}*/
 		if (ImGui::MenuItem("Reset"))
 		{
-			//cpc_reset(pCPCUI->cpc);
-			//ui_dbg_reset(&pCPCUI->dbg);
+			cpc_reset(&CpcEmuState);
+			ui_dbg_reset(&UICpc.dbg);
 		}
 
 		if (ImGui::BeginMenu("Joystick"))
@@ -545,7 +684,7 @@ void FCpcEmu::DrawWindowsMenu()
 {
 	if (ImGui::BeginMenu("Windows"))
 	{
-		/*ImGui::MenuItem("DebugLog", 0, &bShowDebugLog);
+		//ImGui::MenuItem("DebugLog", 0, &bShowDebugLog);
 		if (ImGui::BeginMenu("Code Analysis"))
 		{
 			for (int codeAnalysisNo = 0; codeAnalysisNo < FCodeAnalysisState::kNoViewStates; codeAnalysisNo++)
@@ -558,7 +697,7 @@ void FCpcEmu::DrawWindowsMenu()
 			ImGui::EndMenu();
 		}
 
-		for (auto Viewer : Viewers)
+		/*for (auto Viewer : Viewers)
 		{
 			ImGui::MenuItem(Viewer->GetName(), 0, &Viewer->bOpen);
 
@@ -715,6 +854,11 @@ void FCpcEmu::DrawUI()
 		UpdateMemmap(pCPCUI);
 	}*/
 
+	if (pCPCUI->memmap.open) 
+	{
+		_ui_cpc_update_memmap(pCPCUI);
+	}
+
 	// call the Chips UI functions
 	ui_audio_draw(&pCPCUI->audio, pCPCUI->cpc->sample_pos);
 	ui_z80_draw(&pCPCUI->cpu);
@@ -731,6 +875,22 @@ void FCpcEmu::DrawUI()
 	ImGui::End();
 
 	DrawGraphicsViewer(GraphicsViewer);
+
+	// Code analysis views
+	for (int codeAnalysisNo = 0; codeAnalysisNo < FCodeAnalysisState::kNoViewStates; codeAnalysisNo++)
+	{
+		char name[32];
+		sprintf(name, "Code Analysis %d", codeAnalysisNo + 1);
+		if (CodeAnalysis.ViewState[codeAnalysisNo].Enabled)
+		{
+			if (ImGui::Begin(name, &CodeAnalysis.ViewState[codeAnalysisNo].Enabled))
+			{
+				DrawCodeAnalysisData(CodeAnalysis, codeAnalysisNo);
+			}
+			ImGui::End();
+		}
+
+	}
 }
 
 bool FCpcEmu::DrawDockingView()

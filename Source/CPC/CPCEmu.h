@@ -115,6 +115,9 @@ public:
 	void*		GetCPUEmulator(void) override { /* todo */ return 0; }
 	//ICPUInterface End
 
+	void SetROMBank(int bankNo);
+	void SetRAMBank(int slot, int bankNo);
+
 	// Emulator 
 	cpc_t			CpcEmuState;		// Chips CPC State
 	int				CurrentLayer = 0;	// layer ??
@@ -128,6 +131,16 @@ public:
 	FCpcViewer				CpcViewer;
 	FCodeAnalysisState		CodeAnalysis;
 	FGraphicsViewerState	GraphicsViewer;
+
+	// Code analysis pages - to cover 464 & 6128 
+	static const int kNoBankPages = 16;	// no of pages per physical address slot (16k)
+	static const int kNoSlotPages = 16;	// no of pages per physical address slot (16k)
+	static const int kNoROMPages = 16 + 16;	// 48K ROM & 128K ROM
+	static const int kNoRAMPages = 128;
+	FCodeAnalysisPage	ROMPages[kNoROMPages];
+	FCodeAnalysisPage	RAMPages[kNoRAMPages];
+	int					ROMBank = -1;
+	int					RAMBanks[4] = { -1,-1,-1,-1 };
 
 	unsigned char* FrameBuffer;	// pixel buffer to store emu output
 	ImTextureID		Texture;		// texture 
