@@ -784,6 +784,8 @@ static void _cpc_init_keymap(cpc_t* sys) {
     kbd_register_key(&sys->kbd, 0x05, 1, 1, 0); /* Copy*/
     kbd_register_key(&sys->kbd, 0x06, 8, 4, 0); /* Tab*/
     kbd_register_key(&sys->kbd, 0x07, 8, 6, 0); /* CapsLock*/
+    kbd_register_key(&sys->kbd, 0x0E, 2, 5, 0); /* Shift */
+    kbd_register_key(&sys->kbd, 0x0Ff, 2, 7, 0); /* Ctrl */
     // Sam. Added missing keys END
     
     kbd_register_key(&sys->kbd, 0xF1, 1, 5, 0); /* F1 */

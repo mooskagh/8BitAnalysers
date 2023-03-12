@@ -90,7 +90,7 @@ int CpcKeyFromImGuiKey(ImGuiKey key)
 	}
 	else if (key == ImGuiKey_Apostrophe)
 	{
-		// @ symbol
+		// ; semicolon
 		cpcKey = 0x3b;
 	}
 	else if (key == ImGuiKey_Equal)
@@ -110,7 +110,7 @@ int CpcKeyFromImGuiKey(ImGuiKey key)
 	}
 	else if (key == ImGuiKey_Slash)
 	{
-		// forward slash
+		// forward slash /
 		cpcKey = 0x2f;
 	}
 	else if (key == ImGuiKey_LeftBracket)
@@ -125,13 +125,13 @@ int CpcKeyFromImGuiKey(ImGuiKey key)
 	}
 	else if (key == ImGuiKey_Backslash)
 	{
-		// #
-		cpcKey = 0x40;
-	}
-	else if (key == ImGuiKey_GraveAccent)
-	{
-		// Copy
+		// backslash '\'
 		cpcKey = 0x5c;
+	}
+	else if (key == ImGuiKey_GraveAccent) // `
+	{
+		// @
+		cpcKey = 0x40;
 	}
 	else if (key == ImGuiKey_LeftArrow)
 	{
@@ -149,6 +149,15 @@ int CpcKeyFromImGuiKey(ImGuiKey key)
 	{
 		cpcKey = 0xa;
 	}
+	else if (key == ImGuiKey_LeftShift || key == ImGuiKey_RightShift)
+	{
+		cpcKey = 0xe;
+	}
+	else if (key == ImGuiKey_LeftCtrl || key == ImGuiKey_RightCtrl)
+	{
+		cpcKey = 0xf;
+	}
+
 	
 	/*
 	no way to press the following keys:
