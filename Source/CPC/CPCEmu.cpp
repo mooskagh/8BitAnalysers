@@ -3,7 +3,16 @@
 #define CHIPS_IMPL
 #include <imgui.h>
 
-//typedef void (*z80dasm_output_t)(char c, void* user_data);
+typedef void (*z80dasm_output_t)(char c, void* user_data);
+
+void DasmOutputU8(uint8_t val, z80dasm_output_t out_cb, void* user_data);
+void DasmOutputU16(uint16_t val, z80dasm_output_t out_cb, void* user_data);
+void DasmOutputD8(int8_t val, z80dasm_output_t out_cb, void* user_data);
+
+
+#define _STR_U8(u8) DasmOutputU8((uint8_t)(u8),out_cb,user_data);
+#define _STR_U16(u16) DasmOutputU16((uint16_t)(u16),out_cb,user_data);
+#define _STR_D8(d8) DasmOutputD8((int8_t)(d8),out_cb,user_data);
 
 #include "CPCEmu.h"
 
@@ -16,8 +25,53 @@
 #include <ImGuiSupport/ImGuiTexture.h>
 const std::string kAppTitle = "CPC Analyser";
 
+/* output an unsigned 8-bit value as hex string */
+void DasmOutputU8(uint8_t val, z80dasm_output_t out_cb, void* user_data) 
+{
+	IDasmNumberOutput* pNumberOutput = GetNumberOutput();
+	if(pNumberOutput)
+		pNumberOutput->OutputU8(val, out_cb);
+	
+}
+
+/* output an unsigned 16-bit value as hex string */
+void DasmOutputU16(uint16_t val, z80dasm_output_t out_cb, void* user_data) 
+{
+	IDasmNumberOutput* pNumberOutput = GetNumberOutput();
+	if (pNumberOutput)
+		pNumberOutput->OutputU16(val, out_cb);
+}
+
+/* output a signed 8-bit offset as hex string */
+void DasmOutputD8(int8_t val, z80dasm_output_t out_cb, void* user_data) 
+{
+	IDasmNumberOutput* pNumberOutput = GetNumberOutput();
+	if (pNumberOutput)
+		pNumberOutput->OutputD8(val, out_cb);
+}
+
+uint8_t MemReadFunc(int layer, uint16_t addr, void* user_data)
+{
+	cpc_t* cpc = (cpc_t*) user_data;
+    //cpc_t* cpc = ui_cpc->cpc;
+    if (layer == _UI_CPC_MEMLAYER_CPU) {
+        /* CPU mapped RAM layer */
+        return mem_rd(&cpc->mem, addr);
+    }
+    else {
+        uint8_t* ptr = _ui_cpc_memptr(cpc, layer, addr);
+        if (ptr) {
+            return *ptr;
+        }
+        else {
+            return 0xFF;
+        }
+    }
+}
+
 const uint8_t* FCpcEmu::GetMemPtr(uint16_t address) const 
 {
+	// this logic is from the Speccy so might not work on the cpc
 	// todo: deal with 464/6128 differences
 
 	const int bank = address >> 14;
@@ -26,42 +80,20 @@ const uint8_t* FCpcEmu::GetMemPtr(uint16_t address) const
 	return &CpcEmuState.ram[bank][bankAddr];
 }
 
-#if 0
-// Memory access functions
-uint8_t* MemGetPtr(cpc_t* cpc, int layer, uint16_t addr)
-{
-
-	return 0;
-}
-
-uint8_t MemReadFunc(int layer, uint16_t addr, void* user_data)
-{
-
-	return 0xFF;
-}
-
-void MemWriteFunc(int layer, uint16_t addr, uint8_t data, void* user_data)
-{
-
-}
-
 uint8_t	FCpcEmu::ReadByte(uint16_t address) const
 {
 	return MemReadFunc(CurrentLayer, address, const_cast<cpc_t *>(&CpcEmuState));
 
 }
-uint16_tFCpcEmu::ReadWord(uint16_t address) const 
+uint16_t FCpcEmu::ReadWord(uint16_t address) const 
 {
 	return ReadByte(address) | (ReadByte(address + 1) << 8);
 }
 
-
-
-void FCpcEmu::WriteByte(uint16_t address, uint8_t value)
+void* FCpcEmu::GetCPUEmulator(void)
 {
-	MemWriteFunc(CurrentLayer, address, value, &CpcEmuState);
+	return &CpcEmuState.cpu;
 }
-
 
 uint16_t FCpcEmu::GetPC(void) 
 {
@@ -73,9 +105,50 @@ uint16_t FCpcEmu::GetSP(void)
 	return z80_sp(&CpcEmuState.cpu);
 }
 
-void* FCpcEmu::GetCPUEmulator(void)
+void FCpcEmu::Break(void)
 {
-	return &CpcEmuState.cpu;
+	_ui_dbg_break(&UICpc.dbg);
+}
+
+void FCpcEmu::Continue(void) 
+{
+	_ui_dbg_continue(&UICpc.dbg);
+}
+
+void FCpcEmu::StepOver(void)
+{
+	_ui_dbg_step_over(&UICpc.dbg);
+}
+
+void FCpcEmu::StepInto(void)
+{
+	_ui_dbg_step_into(&UICpc.dbg);
+}
+
+void FCpcEmu::StepFrame()
+{
+	_ui_dbg_continue(&UICpc.dbg);
+	bStepToNextFrame = true;
+}
+
+
+#if 0
+// Memory access functions
+uint8_t* MemGetPtr(cpc_t* cpc, int layer, uint16_t addr)
+{
+
+	return 0;
+}
+
+
+void MemWriteFunc(int layer, uint16_t addr, uint8_t data, void* user_data)
+{
+
+}
+
+void FCpcEmu::WriteByte(uint16_t address, uint8_t value)
+{
+	MemWriteFunc(CurrentLayer, address, value, &CpcEmuState);
 }
 
 bool FCpcEmu::IsAddressBreakpointed(uint16_t addr)
@@ -133,32 +206,6 @@ bool FCpcEmu::ToggleDataBreakpointAtAddress(uint16_t addr, uint16_t dataSize)
 			return false;
 		}
 	}
-}
-
-void FCpcEmu::Break(void)
-{
-	_ui_dbg_break(&UICpc.dbg);
-}
-
-void FCpcEmu::Continue(void) 
-{
-	_ui_dbg_continue(&UICpc.dbg);
-}
-
-void FCpcEmu::StepOver(void)
-{
-	_ui_dbg_step_over(&UICpc.dbg);
-}
-
-void FCpcEmu::StepInto(void)
-{
-	_ui_dbg_step_into(&UICpc.dbg);
-}
-
-void FCpcEmu::StepFrame()
-{
-	_ui_dbg_continue(&UICpc.dbg);
-	bStepToNextFrame = true;
 }
 
 void FCpcEmu::StepScreenWrite()
@@ -227,15 +274,77 @@ int CPCTrapCallback(uint16_t pc, int ticks, uint64_t pins, void* user_data)
 // They are only written back at end of exec function
 int	FCpcEmu::TrapFunction(uint16_t pc, int ticks, uint64_t pins)
 {
-	return 0;
+	FCodeAnalysisState &state = CodeAnalysis;
+	const uint16_t addr = Z80_GET_ADDR(pins);
+	const bool bMemAccess = !!((pins & Z80_CTRL_MASK) & Z80_MREQ);
+	const bool bWrite = (pins & Z80_CTRL_MASK) == (Z80_MREQ | Z80_WR);
+	const bool irq = (pins & Z80_INT) && z80_iff1(&CpcEmuState.cpu);	
 
+	const uint16_t nextpc = pc;
+	// store program count in history
+	const uint16_t prevPC = PCHistory[PCHistoryPos];
+	PCHistoryPos = (PCHistoryPos + 1) % FCpcEmu::kPCHistorySize;
+	PCHistory[PCHistoryPos] = pc;
 
+	pc = prevPC;	// set PC to pc of instruction just executed
+
+	if (irq)
+	{
+		FCPUFunctionCall callInfo;
+		callInfo.CallAddr = prevPC;
+		callInfo.FunctionAddr = pc;
+		callInfo.ReturnAddr = prevPC;
+		state.CallStack.push_back(callInfo);
+		//return UI_DBG_BP_BASE_TRAPID + 255;	//hack
+	}
+
+	bool bBreak = RegisterCodeExecuted(state, pc, nextpc);
+	//FCodeInfo* pCodeInfo = state.GetCodeInfoForAddress(pc);
+	//pCodeInfo->FrameLastAccessed = state.CurrentFrameNo;
+	// check for breakpointed code line
+	if (bBreak)
+		return UI_DBG_BP_BASE_TRAPID;
+	
+	int trapId = MemoryHandlerTrapFunction(pc, ticks, pins, this);
+
+	// break on screen memory write
+	if (bWrite && addr >= 0x4000 && addr < 0x5800)
+	{
+		if (bStepToNextScreenWrite)
+		{
+			bStepToNextScreenWrite = false;
+			return UI_DBG_BP_BASE_TRAPID;
+		}
+	}
+#if ENABLE_CAPTURES
+	FLabelInfo* pLabel = state.GetLabelForAddress(pc);
+	if (pLabel != nullptr)
+	{
+		if(pLabel->LabelType == ELabelType::Function)
+			trapId = kCaptureTrapId;
+	}
+#endif
+	// work out stack size
+	const uint16_t sp = z80_sp(&CpcEmuState.cpu);	// this won't get the proper stack pos (see comment above function)
+	if (sp == state.StackMin - 2 || state.StackMin == 0xffff)
+		state.StackMin = sp;
+	if (sp == state.StackMax + 2 || state.StackMax == 0 )
+		state.StackMax = sp;
+
+	// work out instruction count
+	int iCount = 1;
+	uint8_t opcode = ReadByte(pc);
+	if (opcode == 0xED || opcode == 0xCB)
+		iCount++;
+
+	return trapId;
 }
 
 // Note - you can't read the cpu vars during tick
 // They are only written back at end of exec function
 uint64_t FCpcEmu::Z80Tick(int num, uint64_t pins)
 {
+	pins =  OldTickCB(num, pins, OldTickUserData);
 	return pins;
 }
 
@@ -364,11 +473,11 @@ bool FCpcEmu::Init(const FCpcConfig& config)
 	z80_trap_cb(&CpcEmuState.cpu, CPCTrapCallback, this);
 
 	// todo: put this back in
-	// Setup out tick callback
-	//OldTickCB = CPCEmuState.cpu.tick_cb;
-	//OldTickUserData = CPCEmuState.cpu.user_data;
-	//CPCEmuState.cpu.tick_cb = Z80TickThunk;
-	//CPCEmuState.cpu.user_data = this;
+	// Setup our tick callback
+	OldTickCB = CpcEmuState.cpu.tick_cb;
+	OldTickUserData = CpcEmuState.cpu.user_data;
+	CpcEmuState.cpu.tick_cb = Z80TickThunk;
+	CpcEmuState.cpu.user_data = this;
 
 	//ui_init(zxui_draw);
 	{
@@ -396,12 +505,16 @@ bool FCpcEmu::Init(const FCpcConfig& config)
 
 	CpcViewer.Init(this);
 
+	CodeAnalysis.ViewState[0].Enabled = true;	// always have first view enabled
+
 
 
 	// Set up code analysis
 	// initialise code analysis pages
 //#if SPECCY
 
+	// todo look at _ui_cpc_update_memmap
+	// 
 	// ROM
 	for (int pageNo = 0; pageNo < kNoROMPages; pageNo++)
 	{
@@ -470,9 +583,6 @@ bool FCpcEmu::Init(const FCpcConfig& config)
 			ImportAnalysisJson(CodeAnalysis, romJsonFName.c_str());
 #endif
 	}
-
-
-
 
 	bInitialised = true;
 
@@ -873,6 +983,17 @@ void FCpcEmu::DrawUI()
 		CpcViewer.Draw();
 	}
 	ImGui::End();
+
+	if (ImGui::Begin("Trace"))
+	{
+		DrawTrace(CodeAnalysis);
+	}
+	ImGui::End();
+	/*if (ImGui::Begin("Frame Trace"))
+	{
+		FrameTraceViewer.Draw();
+	}
+	ImGui::End();*/
 
 	DrawGraphicsViewer(GraphicsViewer);
 

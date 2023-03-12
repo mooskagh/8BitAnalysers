@@ -46,6 +46,7 @@
 #include "CodeAnalyser/CodeAnalyser.h"
 #include "Viewers/CPCViewer.h"
 #include "Viewers/GraphicsViewer.h"
+#include "MemoryHandlers.h"
 
 enum class ECpcModel
 {
@@ -94,25 +95,25 @@ public:
 	FCpcEmu& operator= (const FCpcEmu&) = delete;
 
 	//ICPUInterface Begin
-	uint8_t		ReadByte(uint16_t address) const override { /* todo */ return 0; }
-	uint16_t	ReadWord(uint16_t address) const override { /* todo */ return 0; }
+	uint8_t		ReadByte(uint16_t address) const override;
+	uint16_t	ReadWord(uint16_t address) const override;
 	const uint8_t* GetMemPtr(uint16_t address) const override;
 	void		WriteByte(uint16_t address, uint8_t value) override { /* todo */ }
-	uint16_t	GetPC(void) override { /* todo */ return 0; }
-	uint16_t	GetSP(void) override { /* todo */ return 0; }
+	uint16_t	GetPC(void) override;
+	uint16_t	GetSP(void) override;
 	bool		IsAddressBreakpointed(uint16_t addr) { /* todo */ return 0; }
 	bool		ToggleExecBreakpointAtAddress(uint16_t addr) override { /* todo */ return 0; }
 	bool		ToggleDataBreakpointAtAddress(uint16_t addr, uint16_t dataSize) override { /* todo */ return 0; }
-	void		Break(void) override { /* todo */ }
-	void		Continue(void) override { /* todo */ }
-	void		StepOver(void) override { /* todo */ }
-	void		StepInto(void) override { /* todo */ }
-	void		StepFrame(void) override { /* todo */ }
+	void		Break(void) override;
+	void		Continue(void) override;
+	void		StepOver(void) override;
+	void		StepInto(void) override;
+	void		StepFrame(void) override;
 	void		StepScreenWrite(void) override { /* todo */ }
 	void		GraphicsViewerSetView(uint16_t address, int charWidth) override { /* todo */ }
 	bool		ShouldExecThisFrame(void) const override;
 	bool		IsStopped(void) const override;
-	void*		GetCPUEmulator(void) override { /* todo */ return 0; }
+	void*		GetCPUEmulator(void) override;
 	//ICPUInterface End
 
 	void SetROMBank(int bankNo);
@@ -129,6 +130,7 @@ public:
 
 	// Viewers
 	FCpcViewer				CpcViewer;
+	//FFrameTraceViewer		FrameTraceViewer;
 	FCodeAnalysisState		CodeAnalysis;
 	FGraphicsViewerState	GraphicsViewer;
 
@@ -142,8 +144,20 @@ public:
 	int					ROMBank = -1;
 	int					RAMBanks[4] = { -1,-1,-1,-1 };
 
+	// Memory handling
+	std::string				SelectedMemoryHandler;
+	std::vector< FMemoryAccessHandler>	MemoryAccessHandlers;
+	std::vector< FMemoryAccess>	FrameScreenPixWrites;
+	std::vector< FMemoryAccess>	FrameScreenAttrWrites;
+
+	FMemoryStats	MemStats;
+
 	unsigned char* FrameBuffer;	// pixel buffer to store emu output
 	ImTextureID		Texture;		// texture 
+
+	static const int kPCHistorySize = 32;
+	uint16_t PCHistory[kPCHistorySize];
+	int PCHistoryPos = 0;
 
 	bool	bShowImGuiDemo = false;
 	bool	bShowImPlotDemo = false;
