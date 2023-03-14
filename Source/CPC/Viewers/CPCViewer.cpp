@@ -10,21 +10,64 @@
 //#include "../GlobalConfig.h"
 
 #include <Util/Misc.h>
-
+#include <algorithm>
 
 void FCpcViewer::Init(FCpcEmu* pEmu)
 {
-	pCPCEmu = pEmu;
+	pCpcEmu = pEmu;
 }
 
 void FCpcViewer::Draw()
 {
-	ImGui::Image(pCPCEmu->Texture, ImVec2(AM40010_DISPLAY_WIDTH/2, AM40010_DISPLAY_HEIGHT));		
+	const uint8_t dispStartH = pCpcEmu->CpcEmuState.crtc.start_addr_hi; // R12
+	const uint8_t dispStartL = pCpcEmu->CpcEmuState.crtc.start_addr_lo; // R13
+	const uint16_t wordValue = (dispStartH << 8) | dispStartL;
+	const uint16_t page = (wordValue >> 12) & 0x3; // bits 12 & 13
+	const uint16_t baseAddr = page * 0x4000;
+	const uint16_t offset = (wordValue & 0x3ff) << 1; // 1024 positions. bits 0..9
+	ImGui::Text("screen base=%x. offset=%x. scr addr=%x", baseAddr, offset, pCpcEmu->GetScreenAddrStart());
 
-	ImGui::SliderFloat("Speed Scale", &pCPCEmu->ExecSpeedScale, 0.0f, 2.0f);
+	ImVec2 pos = ImGui::GetCursorScreenPos();
+	uint16_t textureWidth = AM40010_DISPLAY_WIDTH / 2;
+	uint16_t textureHeight = AM40010_DISPLAY_HEIGHT;
+	ImGui::Image(pCpcEmu->Texture, ImVec2(textureWidth, textureHeight));
+
+	uint16_t screenWidth = 320;
+	uint16_t screenHeight = 200;
+	ImGuiIO& io = ImGui::GetIO();
+	const int borderOffsetX = (textureWidth - screenWidth) / 2; // todo get this from registers
+	const int borderOffsetY = (textureHeight - screenHeight) / 2;
+	if (ImGui::IsItemHovered())
+	{
+		const int xp = std::min(std::max((int)(io.MousePos.x - pos.x - borderOffsetX), 0), screenWidth-1);
+		const int yp = std::min(std::max((int)(io.MousePos.y - pos.y - borderOffsetY), 0), screenHeight-1);
+
+		uint16_t scrAddress = 0;
+		if (pCpcEmu->GetScreenMemoryAddress(xp, yp, scrAddress))
+		{
+			ImDrawList* dl = ImGui::GetWindowDrawList();
+			const int rx = static_cast<int>(pos.x) + borderOffsetX + (xp & ~0x7);
+			const int ry = static_cast<int>(pos.y) + borderOffsetY + (yp & ~0x7);
+			dl->AddRect(ImVec2((float)rx, (float)ry), ImVec2((float)rx + 8, (float)ry + 8), 0xffffffff);
+			
+			ImGui::BeginTooltip();
+			ImGui::Text("Screen Pos (%d,%d)", xp, yp);
+			ImGui::Text("Addr: %s", NumStr(scrAddress));
+			ImGui::EndTooltip();
+
+			if (ImGui::IsMouseClicked(0))
+			{
+				pCpcEmu->WriteByte(scrAddress, 0xff);
+			}
+		}
+	}
+
+	
+
+	ImGui::SliderFloat("Speed Scale", &pCpcEmu->ExecSpeedScale, 0.0f, 2.0f);
 	//ImGui::SameLine();
 	if (ImGui::Button("Reset"))
-		pCPCEmu->ExecSpeedScale = 1.0f;
+		pCpcEmu->ExecSpeedScale = 1.0f;
 	ImGui::Text("Application average %.3f ms/frame (%.1f FPS)", 1000.0f / ImGui::GetIO().Framerate, ImGui::GetIO().Framerate);
 }
 
@@ -176,13 +219,13 @@ void FCpcViewer::Tick(void)
 		{ 
 			int cpcKey = CpcKeyFromImGuiKey(key);
 			if (cpcKey != 0)
-				cpc_key_down(&pCPCEmu->CpcEmuState, cpcKey);
+				cpc_key_down(&pCpcEmu->CpcEmuState, cpcKey);
 		}
 		else if (ImGui::IsKeyReleased(key))
 		{
 			const int cpcKey = CpcKeyFromImGuiKey(key);
 			if (cpcKey != 0)
-				cpc_key_up(&pCPCEmu->CpcEmuState, cpcKey);
+				cpc_key_up(&pCpcEmu->CpcEmuState, cpcKey);
 		}
 	}
 }

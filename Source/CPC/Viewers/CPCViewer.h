@@ -17,7 +17,7 @@ public:
 	void	Tick(void);
 
 private:
-	FCpcEmu* pCPCEmu = nullptr;
+	FCpcEmu* pCpcEmu = nullptr;
 
 	// screen inspector
 	/*bool		bScreenCharSelected = false;

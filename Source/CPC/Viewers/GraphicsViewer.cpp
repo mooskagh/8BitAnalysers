@@ -12,7 +12,7 @@
 
 
 // Graphics Viewer
-static int kGraphicsViewerWidth = 256;
+static int kGraphicsViewerWidth = 320;
 static int kGraphicsViewerHeight = 512;
 
 bool InitGraphicsViewer(FGraphicsViewerState &state)
@@ -103,10 +103,22 @@ void DrawMemoryAsGraphicsColumn(FGraphicsViewerState &state,uint16_t startAddr, 
 	}
 }
 
-// get address of pixel line
-uint16_t GetLineAddress(unsigned char nLine)
+// Get address of a horizontal pixel line
+uint16_t GetLineAddress(FGraphicsViewerState& state, uint8_t nLine)
 {
-  return (uint16_t) (0xC000 + ((nLine / 8) * 80) + ((nLine % 8) * 2048));
+	uint8_t charWidth = 0;
+	switch (state.pEmu->CpcEmuState.ga.video.mode)
+	{
+		case 0:
+			charWidth = 20;
+			break;
+		case 1:
+			charWidth = 80;
+			break;
+		case 2:
+			break;
+	}
+  return (uint16_t) (state.pEmu->GetScreenAddrStart() + ((nLine / 8) * charWidth) + ((nLine % 8) * 2048));
 }
 
 // Viewer to view cpc graphics
@@ -269,36 +281,56 @@ void DrawGraphicsViewer(FGraphicsViewerState &state)
 		// http://www.cpcmania.com/Docs/Programming/Painting_pixels_introduction_to_video_memory.htm
 		state.Address = 0xc000;// (int)addrInput;
 
-		int offset = 0;
-		for (int y = 0; y < 200; y++)
+		switch (state.pEmu->CpcEmuState.ga.video.mode)
 		{
-			uint16_t addr = GetLineAddress(y);
-			const uint8_t *pSrc = state.pEmu->GetMemPtr(addr);
-
-			uint32_t* pLineAddr = pGraphicsView->GetPixelBuffer() + (y * kGraphicsViewerWidth);
-
-			//const uint32_t colRGBA = bSet ? g_kColourLUT[col] : 0xff000000;
-
-			for (int x = 0; x < 160 / 8; x++)
+		case 0:
+			// 160 x 200 @ 16 colours
+			// 4 bits per pixel
+			for (int y = 0; y < 200; y++)
 			{
-				const uint8_t charLine = *pSrc++;
+				uint16_t addr = GetLineAddress(state, y);
+				const uint8_t* pSrc = state.pEmu->GetMemPtr(addr);
+				uint32_t* pDest = pGraphicsView->GetPixelBuffer() + (y * kGraphicsViewerWidth);
 
-				for (int xpix = 0; xpix < 8; xpix++)
+				for (int x = 0; x < 160/2; x++)
 				{
-					const bool bSet = (charLine & (1 << (7 - xpix))) != 0;
-					const uint32_t colRGBA = bSet ? 0xffffffff : 0xff000000;
-					*(pLineAddr + xpix + (x * 8)) = colRGBA;
+					const uint8_t c = *pSrc++;
+					uint32_t p;
+
+					p = ((c >> 7) & 0x1) | ((c >> 2) & 0x2) | ((c >> 3) & 0x4) | ((c << 2) & 0x8);
+					*pDest++ = p ? 0xffffffff : 0xff000000;
+					p = ((c >> 6) & 0x1) | ((c >> 1) & 0x2) | ((c >> 2) & 0x4) | ((c << 3) & 0x8);
+					*pDest++ = p ? 0xffffffff : 0xff000000;
 				}
 			}
-			//pScreen = GetLineAddress(nLine);
+			break;
+		case 1:
+			// 320 x 200 @ 4 colours
+			// 2 bits per pixel
+			for (int y = 0; y < 200; y++)
+			{
+				uint16_t addr = GetLineAddress(state, y);
+				const uint8_t* pSrc = state.pEmu->GetMemPtr(addr);
+				uint32_t* pDest = pGraphicsView->GetPixelBuffer() + (y * kGraphicsViewerWidth);
 
-			//offset += 256 / 8;	// advance to next line
+				for (int x = 0; x < 320 / 4; x++)
+				{
+					const uint8_t c = *pSrc++;
+					uint32_t p;
 
-
-			/**(pLineAddr + xpix + (x * 8)) = colRGBA;
-
-			for (int nByte = 0; nByte < 80; nByte++)
-				pScreen[nByte] = (unsigned char)(rand() % 256);*/
+					p = ((c >> 2) & 2) | ((c >> 7) & 1);
+					*pDest++ = p ? 0xffffffff : 0xff000000; 
+					p = ((c >> 1) & 2) | ((c >> 6) & 1);
+					*pDest++ = p ? 0xffffffff : 0xff000000;
+					p = ((c >> 0) & 2) | ((c >> 5) & 1);
+					*pDest++ = p ? 0xffffffff : 0xff000000;
+					p = ((c << 1) & 2) | ((c >> 4) & 1);
+					*pDest++ = p ? 0xffffffff : 0xff000000;
+				}
+			}
+			break;
+		case 2:
+			break;
 		}
 
 #if SPECCY

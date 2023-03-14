@@ -98,12 +98,12 @@ public:
 	uint8_t		ReadByte(uint16_t address) const override;
 	uint16_t	ReadWord(uint16_t address) const override;
 	const uint8_t* GetMemPtr(uint16_t address) const override;
-	void		WriteByte(uint16_t address, uint8_t value) override { /* todo */ }
+	void		WriteByte(uint16_t address, uint8_t value) override;
 	uint16_t	GetPC(void) override;
 	uint16_t	GetSP(void) override;
-	bool		IsAddressBreakpointed(uint16_t addr) { /* todo */ return 0; }
-	bool		ToggleExecBreakpointAtAddress(uint16_t addr) override { /* todo */ return 0; }
-	bool		ToggleDataBreakpointAtAddress(uint16_t addr, uint16_t dataSize) override { /* todo */ return 0; }
+	bool		IsAddressBreakpointed(uint16_t addr) override;
+	bool		ToggleExecBreakpointAtAddress(uint16_t addr) override;
+	bool		ToggleDataBreakpointAtAddress(uint16_t addr, uint16_t dataSize) override;
 	void		Break(void) override;
 	void		Continue(void) override;
 	void		StepOver(void) override;
@@ -118,6 +118,11 @@ public:
 
 	void SetROMBank(int bankNo);
 	void SetRAMBank(int slot, int bankNo);
+
+	uint16_t GetScreenAddrStart() const;
+	uint16_t GetScreenAddrEnd() const;
+	uint16_t GetScreenMemSize() const;
+	bool GetScreenMemoryAddress(int x, int y, uint16_t& addr) const;
 
 	// Emulator 
 	cpc_t			CpcEmuState;		// Chips CPC State

@@ -131,29 +131,9 @@ void FCpcEmu::StepFrame()
 	bStepToNextFrame = true;
 }
 
-
-#if 0
-// Memory access functions
-uint8_t* MemGetPtr(cpc_t* cpc, int layer, uint16_t addr)
-{
-
-	return 0;
-}
-
-
-void MemWriteFunc(int layer, uint16_t addr, uint8_t data, void* user_data)
-{
-
-}
-
-void FCpcEmu::WriteByte(uint16_t address, uint8_t value)
-{
-	MemWriteFunc(CurrentLayer, address, value, &CpcEmuState);
-}
-
 bool FCpcEmu::IsAddressBreakpointed(uint16_t addr)
 {
-	for (int i = 0; i < UICpc.dbg.dbg.num_breakpoints; i++) 
+	for (int i = 0; i < UICpc.dbg.dbg.num_breakpoints; i++)
 	{
 		if (UICpc.dbg.dbg.breakpoints[i].addr == addr)
 			return true;
@@ -165,13 +145,13 @@ bool FCpcEmu::IsAddressBreakpointed(uint16_t addr)
 bool FCpcEmu::ToggleExecBreakpointAtAddress(uint16_t addr)
 {
 	int index = _ui_dbg_bp_find(&UICpc.dbg, UI_DBG_BREAKTYPE_EXEC, addr);
-	if (index >= 0) 
+	if (index >= 0)
 	{
 		/* breakpoint already exists, remove */
 		_ui_dbg_bp_del(&UICpc.dbg, index);
 		return false;
 	}
-	else 
+	else
 	{
 		/* breakpoint doesn't exist, add a new one */
 		return _ui_dbg_bp_add_exec(&UICpc.dbg, true, addr);
@@ -201,13 +181,105 @@ bool FCpcEmu::ToggleDataBreakpointAtAddress(uint16_t addr, uint16_t dataSize)
 			bp->enabled = true;
 			return true;
 		}
-		else 
+		else
 		{
 			return false;
 		}
 	}
 }
 
+// Memory access functions
+uint8_t* MemGetPtr(cpc_t* cpc, int layer, uint16_t addr)
+{
+	if (layer == 1) // GA
+	{
+		uint8_t* ram = &cpc->ram[0][0];
+		return ram + addr;
+	}
+	else if (layer == 2) // ROMS
+	{
+		if (addr < 0x4000)
+		{
+			return &cpc->rom_os[addr];
+		}
+		else if (addr >= 0xC000)
+		{
+			return &cpc->rom_basic[addr - 0xC000];
+		}
+		else
+		{
+			return 0;
+		}
+	}
+	else if (layer == 3) // AMSDOS
+	{
+		if ((CPC_TYPE_6128 == cpc->type) && (addr >= 0xC000))
+		{
+			return &cpc->rom_amsdos[addr - 0xC000];
+		}
+		else
+		{
+			return 0;
+		}
+	}
+	else
+	{
+		/* one of the 7 RAM layers */
+		const int ram_config_index = (CPC_TYPE_6128 == cpc->type) ? (cpc->ga.ram_config & 7) : 0;
+		const int ram_bank = layer - _UI_CPC_MEMLAYER_RAM0;
+		bool ram_mapped = false;
+		for (int i = 0; i < 4; i++)
+		{
+			if (ram_bank == _ui_cpc_ram_config[ram_config_index][i])
+			{
+				const uint16_t start = 0x4000 * i;
+				const uint32_t end = start + 0x4000;
+				ram_mapped = true;
+				if ((addr >= start) && (addr < end))
+				{
+					return &cpc->ram[ram_bank][addr - start];
+				}
+			}
+		}
+		if (!ram_mapped && (CPC_TYPE_6128 != cpc->type))
+		{
+			/* if the RAM bank is not currently mapped to a CPU visible address,
+					just use start address zero, this will throw off disassemblers
+					though
+			*/
+			if (addr < 0x4000)
+			{
+				return &cpc->ram[ram_bank][addr];
+			}
+		}
+	}
+	/* fallthrough: address isn't mapped to physical RAM */
+	return 0;
+}
+
+void MemWriteFunc(int layer, uint16_t addr, uint8_t data, void* user_data)
+{
+	cpc_t* cpc = (cpc_t*)user_data;
+	if (layer == 0) 
+	{
+		mem_wr(&cpc->mem, addr, data);
+	}
+	else 
+	{
+		uint8_t* ptr = MemGetPtr(cpc, layer, addr);
+		if (ptr) 
+		{
+			*ptr = data;
+		}
+	}
+}
+
+void FCpcEmu::WriteByte(uint16_t address, uint8_t value)
+{
+	MemWriteFunc(CurrentLayer, address, value, &CpcEmuState);
+}
+
+#if 0
 void FCpcEmu::StepScreenWrite()
 {
 	_ui_dbg_continue(&UICpc.dbg);
@@ -307,6 +379,7 @@ int	FCpcEmu::TrapFunction(uint16_t pc, int ticks, uint64_t pins)
 	
 	int trapId = MemoryHandlerTrapFunction(pc, ticks, pins, this);
 
+#if SPECCY
 	// break on screen memory write
 	if (bWrite && addr >= 0x4000 && addr < 0x5800)
 	{
@@ -316,6 +389,7 @@ int	FCpcEmu::TrapFunction(uint16_t pc, int ticks, uint64_t pins)
 			return UI_DBG_BP_BASE_TRAPID;
 		}
 	}
+#endif
 #if ENABLE_CAPTURES
 	FLabelInfo* pLabel = state.GetLabelForAddress(pc);
 	if (pLabel != nullptr)
@@ -1079,3 +1153,35 @@ bool FCpcEmu::DrawDockingView()
 	return bQuit;
 }
 
+// https://gist.github.com/neuro-sys/eeb7a323b27a9d8ad891b41144916946#registers
+uint16_t FCpcEmu::GetScreenAddrStart() const
+{
+	const uint16_t dispStart = (CpcEmuState.crtc.start_addr_hi << 8) | CpcEmuState.crtc.start_addr_lo;
+	const uint16_t pageIndex = (dispStart >> 12) & 0x3; // bits 12 & 13
+	const uint16_t baseAddr = pageIndex * 0x4000;
+	const uint16_t offset = (dispStart & 0x3ff) << 1; // 1024 positions. bits 0..9
+	return baseAddr + offset;
+}
+
+uint16_t FCpcEmu::GetScreenAddrEnd() const
+{
+	return GetScreenAddrStart() + GetScreenMemSize() - 1;
+}
+
+uint16_t FCpcEmu::GetScreenMemSize() const
+{
+	const uint16_t dispSize = (CpcEmuState.crtc.start_addr_hi >> 2) & 0x3;
+	return dispSize == 0x3 ? 0x4000 : 0x8000;
+}
+
+bool FCpcEmu::GetScreenMemoryAddress(int x, int y, uint16_t& addr) const
+{
+	// todo. return false if out of range
+	//if (x < 0 || x>255 || y < 0 || y> 191)
+	//	return false;
+
+	// todo deal with screen modes and logical width and heights
+
+	addr = GetScreenAddrStart() + ((y / 8) * 80) + ((y % 8) * 2048) + x/2;
+	return true;
+}
