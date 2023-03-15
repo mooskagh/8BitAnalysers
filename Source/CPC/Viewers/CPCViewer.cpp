@@ -45,20 +45,37 @@ void FCpcViewer::Draw()
 		uint16_t scrAddress = 0;
 		if (pCpcEmu->GetScreenMemoryAddress(xp, yp, scrAddress))
 		{
+
 			ImDrawList* dl = ImGui::GetWindowDrawList();
 			const int rx = static_cast<int>(pos.x) + borderOffsetX + (xp & ~0x7);
-			const int ry = static_cast<int>(pos.y) + borderOffsetY + (yp & ~0x7);
+			const int ry = static_cast<int>(pos.y) + borderOffsetY + (yp & ~0x7) + 1;
 			dl->AddRect(ImVec2((float)rx, (float)ry), ImVec2((float)rx + 8, (float)ry + 8), 0xffffffff);
-			
-			ImGui::BeginTooltip();
-			ImGui::Text("Screen Pos (%d,%d)", xp, yp);
-			ImGui::Text("Addr: %s", NumStr(scrAddress));
-			ImGui::EndTooltip();
+
+			const int plotX = xp & ~0x7;
+			const int plotY = yp & ~0x7;
 
 			if (ImGui::IsMouseClicked(0))
 			{
-				pCpcEmu->WriteByte(scrAddress, 0xff);
+				uint16_t plotAddress = 0;
+				for (int y = 0; y < 8; y++)
+				{
+					if (pCpcEmu->GetScreenMemoryAddress(plotX, plotY+y, plotAddress))
+					{
+						pCpcEmu->WriteByte(plotAddress, 0xff);
+						pCpcEmu->WriteByte(plotAddress + 1, 0xff);
+					}
+				}
 			}
+			
+			ImGui::BeginTooltip();
+			ImGui::Text("Screen Pos (%d,%d) (%d,%d)", xp, yp, plotX, plotY);
+			ImGui::Text("Addr: %s", NumStr(scrAddress));
+			ImGui::EndTooltip();
+
+			/*if (ImGui::IsMouseClicked(0))
+			{
+				pCpcEmu->WriteByte(scrAddress, 0xff);
+			}*/
 		}
 	}
 

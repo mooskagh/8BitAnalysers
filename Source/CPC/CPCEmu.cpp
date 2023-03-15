@@ -1157,7 +1157,7 @@ bool FCpcEmu::DrawDockingView()
 uint16_t FCpcEmu::GetScreenAddrStart() const
 {
 	const uint16_t dispStart = (CpcEmuState.crtc.start_addr_hi << 8) | CpcEmuState.crtc.start_addr_lo;
-	const uint16_t pageIndex = (dispStart >> 12) & 0x3; // bits 12 & 13
+	const uint16_t pageIndex = (dispStart >> 12) & 0x3; // bits 12 & 13 hold the page index
 	const uint16_t baseAddr = pageIndex * 0x4000;
 	const uint16_t offset = (dispStart & 0x3ff) << 1; // 1024 positions. bits 0..9
 	return baseAddr + offset;
@@ -1168,6 +1168,7 @@ uint16_t FCpcEmu::GetScreenAddrEnd() const
 	return GetScreenAddrStart() + GetScreenMemSize() - 1;
 }
 
+// Usually screen mem size is 16k but it's possible to be set to 32k if bits 10 & 11 are both set.
 uint16_t FCpcEmu::GetScreenMemSize() const
 {
 	const uint16_t dispSize = (CpcEmuState.crtc.start_addr_hi >> 2) & 0x3;
@@ -1182,6 +1183,6 @@ bool FCpcEmu::GetScreenMemoryAddress(int x, int y, uint16_t& addr) const
 
 	// todo deal with screen modes and logical width and heights
 
-	addr = GetScreenAddrStart() + ((y / 8) * 80) + ((y % 8) * 2048) + x/2;
+	addr = GetScreenAddrStart() + ((y / 8) * 80) + ((y % 8) * 2048) + (x / 4);
 	return true;
 }
