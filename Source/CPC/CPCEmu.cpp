@@ -1153,6 +1153,7 @@ bool FCpcEmu::DrawDockingView()
 	return bQuit;
 }
 
+
 // https://gist.github.com/neuro-sys/eeb7a323b27a9d8ad891b41144916946#registers
 uint16_t FCpcEmu::GetScreenAddrStart() const
 {
@@ -1182,7 +1183,24 @@ bool FCpcEmu::GetScreenMemoryAddress(int x, int y, uint16_t& addr) const
 	//	return false;
 
 	// todo deal with screen modes and logical width and heights
-
-	addr = GetScreenAddrStart() + ((y / 8) * 80) + ((y % 8) * 2048) + (x / 4);
+	const uint8_t w = CpcEmuState.crtc.h_displayed * 2;
+	addr = GetScreenAddrStart() + ((y / 8) * w) + ((y % 8) * 2048) + (x / 4);
 	return true;
+}
+
+uint8_t FCpcEmu::GetBitsPerPixel() const
+{
+	uint8_t bpp = 0;
+	switch (CpcEmuState.ga.video.mode)
+	{
+	case 0:
+		return 4;
+	case 1:
+		return 2;
+	case 2:
+		return 1;
+	case 3: // unsupported
+		return 4;
+	}
+	return 0;
 }

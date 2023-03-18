@@ -119,10 +119,12 @@ public:
 	void SetROMBank(int bankNo);
 	void SetRAMBank(int slot, int bankNo);
 
+	// util functions related to the screen. put in a different file?
 	uint16_t GetScreenAddrStart() const;
 	uint16_t GetScreenAddrEnd() const;
 	uint16_t GetScreenMemSize() const;
 	bool GetScreenMemoryAddress(int x, int y, uint16_t& addr) const;
+	uint8_t GetBitsPerPixel() const;
 
 	// Emulator 
 	cpc_t			CpcEmuState;		// Chips CPC State
