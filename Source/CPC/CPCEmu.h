@@ -109,7 +109,7 @@ public:
 	void		StepOver(void) override;
 	void		StepInto(void) override;
 	void		StepFrame(void) override;
-	void		StepScreenWrite(void) override { /* todo */ }
+	void		StepScreenWrite(void) override;
 	void		GraphicsViewerSetView(uint16_t address, int charWidth) override { /* todo */ }
 	bool		ShouldExecThisFrame(void) const override;
 	bool		IsStopped(void) const override;
@@ -155,7 +155,6 @@ public:
 	std::string				SelectedMemoryHandler;
 	std::vector< FMemoryAccessHandler>	MemoryAccessHandlers;
 	std::vector< FMemoryAccess>	FrameScreenPixWrites;
-	std::vector< FMemoryAccess>	FrameScreenAttrWrites;
 
 	FMemoryStats	MemStats;
 
@@ -168,6 +167,8 @@ public:
 
 	bool	bShowImGuiDemo = false;
 	bool	bShowImPlotDemo = false;
+
+	const FGamesList& GetGamesList() const { return GamesList;  }
 
 private:
 	FGamesList		GamesList;

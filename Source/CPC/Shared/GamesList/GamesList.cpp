@@ -28,7 +28,7 @@ bool FGamesList::EnumerateGames(const char* pDir)
 	return true;
 }
 
-bool FGamesList::LoadGame(int index)
+bool FGamesList::LoadGame(int index) const
 {
 	if (index < 0 || index >= GamesList.size())
 		return false;

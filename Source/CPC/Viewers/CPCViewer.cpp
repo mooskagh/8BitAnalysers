@@ -31,7 +31,7 @@ void FCpcViewer::Draw()
 	
 #ifndef NDEBUG
 	// debug code to manually iterate through all snaps in a directory
-	if (pCpcEmu->GamesList.GetNoGames())
+	if (pCpcEmu->GetGamesList().GetNoGames())
 	{
 		static int gGameIndex = 0;
 		bool bLoadSnap = false;
@@ -44,15 +44,15 @@ void FCpcViewer::Draw()
 		ImGui::SameLine();
 		if (ImGui::Button("Next snap") || ImGui::IsKeyPressed(ImGuiKey_F2))
 		{
-			if (gGameIndex < pCpcEmu->GamesList.GetNoGames()-1) 
+			if (gGameIndex < pCpcEmu->GetGamesList().GetNoGames()-1) 
 				gGameIndex++;
 			bLoadSnap = true;
 		}
 		ImGui::SameLine();
-		const FGameSnapshot& game = pCpcEmu->GamesList.GetGame(gGameIndex);
-		ImGui::Text("(%d/%d) %s", gGameIndex+1, pCpcEmu->GamesList.GetNoGames(), game.DisplayName.c_str());
+		const FGameSnapshot& game = pCpcEmu->GetGamesList().GetGame(gGameIndex);
+		ImGui::Text("(%d/%d) %s", gGameIndex+1, pCpcEmu->GetGamesList().GetNoGames(), game.DisplayName.c_str());
 		if (bLoadSnap)
-			pCpcEmu->GamesList.LoadGame(gGameIndex);
+			pCpcEmu->GetGamesList().LoadGame(gGameIndex);
 	}
 #endif
 

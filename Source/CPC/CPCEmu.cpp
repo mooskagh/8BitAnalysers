@@ -279,13 +279,13 @@ void FCpcEmu::WriteByte(uint16_t address, uint8_t value)
 	MemWriteFunc(CurrentLayer, address, value, &CpcEmuState);
 }
 
-#if 0
 void FCpcEmu::StepScreenWrite()
 {
 	_ui_dbg_continue(&UICpc.dbg);
 	bStepToNextScreenWrite = true;
 }
 
+#if 0
 void FCpcEmu::GraphicsViewerSetView(uint16_t address, int charWidth)
 {
 #if SPECCY
@@ -379,9 +379,8 @@ int	FCpcEmu::TrapFunction(uint16_t pc, int ticks, uint64_t pins)
 	
 	int trapId = MemoryHandlerTrapFunction(pc, ticks, pins, this);
 
-#if SPECCY
 	// break on screen memory write
-	if (bWrite && addr >= 0x4000 && addr < 0x5800)
+	if (bWrite && addr >= GetScreenAddrStart() && addr <= GetScreenAddrEnd())
 	{
 		if (bStepToNextScreenWrite)
 		{
@@ -389,7 +388,6 @@ int	FCpcEmu::TrapFunction(uint16_t pc, int ticks, uint64_t pins)
 			return UI_DBG_BP_BASE_TRAPID;
 		}
 	}
-#endif
 #if ENABLE_CAPTURES
 	FLabelInfo* pLabel = state.GetLabelForAddress(pc);
 	if (pLabel != nullptr)
@@ -418,6 +416,56 @@ int	FCpcEmu::TrapFunction(uint16_t pc, int ticks, uint64_t pins)
 // They are only written back at end of exec function
 uint64_t FCpcEmu::Z80Tick(int num, uint64_t pins)
 {
+	FCodeAnalysisState& state = CodeAnalysis;
+
+	// we have to pass data to the tick through an internal state struct because the z80_t struct only gets updated after an emulation exec period
+	z80_t* pCPU = (z80_t*)state.CPUInterface->GetCPUEmulator();
+	const FZ80InternalState& cpuState = pCPU->internal_state;
+	const uint16_t pc = cpuState.PC;
+
+	/* memory and IO requests */
+	if (pins & Z80_MREQ) 
+	{
+		const uint16_t addr = Z80_GET_ADDR(pins);
+		const uint8_t value = Z80_GET_DATA(pins);
+		if (pins & Z80_RD) 
+		{
+			if (cpuState.IRQ)
+			{
+				// todo interrupt handler?
+			}
+			else
+			{
+				if (state.bRegisterDataAccesses)
+					RegisterDataRead(state, pc, addr);
+			}
+		}
+		else if (pins & Z80_WR) 
+		{
+			if (state.bRegisterDataAccesses)
+				RegisterDataWrite(state, pc, addr);
+
+			state.SetLastWriterForAddress(addr, pc);
+
+			// Log screen pixel writes
+			if (addr >= GetScreenAddrStart() && addr <= GetScreenAddrEnd())
+			{
+				FrameScreenPixWrites.push_back({ addr,value, pc });
+			}
+			
+			FCodeInfo* pCodeWrittenTo = state.GetCodeInfoForAddress(addr);
+			if (pCodeWrittenTo != nullptr && pCodeWrittenTo->bSelfModifyingCode == false)
+			{
+				// TODO: record some info such as what byte was written
+				pCodeWrittenTo->bSelfModifyingCode = true;
+			}
+		}
+		else if (pins & Z80_IORQ)
+		{
+			// todo
+		}
+	}
+
 	pins =  OldTickCB(num, pins, OldTickUserData);
 	return pins;
 }
@@ -1013,8 +1061,30 @@ void FCpcEmu::Tick()
 		cpc_exec(&CpcEmuState, microSeconds);
 		
 		ImGui_UpdateTextureRGBA(Texture, FrameBuffer);
+
+#if SPECCY
+		FrameTraceViewer.CaptureFrame();
+#endif
+		FrameScreenPixWrites.clear();
+
+		if (bStepToNextFrame)
+		{
+			_ui_dbg_break(&UICpc.dbg);
+			CodeAnalyserGoToAddress(CodeAnalysis.GetFocussedViewState(), GetPC());
+			bStepToNextFrame = false;
+		}
+
+
+		// on debug break send code analyser to address
+		else if (UICpc.dbg.dbg.z80->trap_id >= UI_DBG_STEP_TRAPID)
+		{
+			CodeAnalyserGoToAddress(CodeAnalysis.GetFocussedViewState(), GetPC());
+		}
 	}
 	
+#if SPECCY
+	UpdateCharacterSets(CodeAnalysis);
+#endif
 	DrawDockingView();
 }
 
@@ -1153,7 +1223,6 @@ bool FCpcEmu::DrawDockingView()
 	return bQuit;
 }
 
-
 // https://gist.github.com/neuro-sys/eeb7a323b27a9d8ad891b41144916946#registers
 uint16_t FCpcEmu::GetScreenAddrStart() const
 {
@@ -1173,7 +1242,7 @@ uint16_t FCpcEmu::GetScreenAddrEnd() const
 uint16_t FCpcEmu::GetScreenMemSize() const
 {
 	const uint16_t dispSize = (CpcEmuState.crtc.start_addr_hi >> 2) & 0x3;
-	return dispSize == 0x3 ? 0x4000 : 0x8000;
+	return dispSize == 0x3 ? 0x8000 : 0x4000;
 }
 
 bool FCpcEmu::GetScreenMemoryAddress(int x, int y, uint16_t& addr) const
