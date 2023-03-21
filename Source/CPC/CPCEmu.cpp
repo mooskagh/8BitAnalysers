@@ -1238,7 +1238,7 @@ uint16_t FCpcEmu::GetScreenAddrEnd() const
 	return GetScreenAddrStart() + GetScreenMemSize() - 1;
 }
 
-// Usually screen mem size is 16k but it's possible to be set to 32k if bits 10 & 11 are both set.
+// Usually screen mem size is 16k but it's possible to be set to 32k if both bits are set.
 uint16_t FCpcEmu::GetScreenMemSize() const
 {
 	const uint16_t dispSize = (CpcEmuState.crtc.start_addr_hi >> 2) & 0x3;
@@ -1251,16 +1251,35 @@ bool FCpcEmu::GetScreenMemoryAddress(int x, int y, uint16_t& addr) const
 	//if (x < 0 || x>255 || y < 0 || y> 191)
 	//	return false;
 
-	// todo deal with screen modes and logical width and heights
+	//screenaddr = screenbase + (y AND 7)*&800 + int(y/8)*2*R1 + int(x/M)
+
+	const uint8_t charHeight = CpcEmuState.crtc.max_scanline_addr + 1; 
 	const uint8_t w = CpcEmuState.crtc.h_displayed * 2;
-	addr = GetScreenAddrStart() + ((y / 8) * w) + ((y % 8) * 2048) + (x / 4);
+	addr = GetScreenAddrStart() + ((y / charHeight) * w) + ((y % charHeight) * 2048) + (x / 4);
 	return true;
 }
 
-uint8_t FCpcEmu::GetBitsPerPixel() const
+uint8_t GetPixelsPerByte(int screenMode)
 {
 	uint8_t bpp = 0;
-	switch (CpcEmuState.ga.video.mode)
+	switch (screenMode)
+	{
+	case 0:
+		return 2;
+	case 1:
+		return 4;
+	case 2:
+		return 8;
+	case 3: // unsupported
+		return 4;
+	}
+	return 0;
+}
+
+uint8_t GetBitsPerPixel(int screenMode)
+{
+	uint8_t bpp = 0;
+	switch (screenMode)
 	{
 	case 0:
 		return 4;

@@ -124,7 +124,6 @@ public:
 	uint16_t GetScreenAddrEnd() const;
 	uint16_t GetScreenMemSize() const;
 	bool GetScreenMemoryAddress(int x, int y, uint16_t& addr) const;
-	uint8_t GetBitsPerPixel() const;
 
 	// Emulator 
 	cpc_t			CpcEmuState;		// Chips CPC State
@@ -183,3 +182,6 @@ private:
 	bool	bStepToNextScreenWrite = false;
 	bool	bInitialised = false;
 };
+
+uint8_t GetBitsPerPixel(int screenMode);
+uint8_t GetPixelsPerByte(int screenMode);

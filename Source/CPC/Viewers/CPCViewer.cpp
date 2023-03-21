@@ -18,17 +18,7 @@ void FCpcViewer::Init(FCpcEmu* pEmu)
 }
 
 void FCpcViewer::Draw()
-{
-	// test code. remove me
-	/*
-	const uint8_t dispStartH = crtc.start_addr_hi; // R12
-	const uint8_t dispStartL = crtc.start_addr_lo; // R13
-	const uint16_t wordValue = (dispStartH << 8) | dispStartL;
-	const uint16_t page = (wordValue >> 12) & 0x3; // bits 12 & 13
-	const uint16_t baseAddr = page * 0x4000;
-	const uint16_t offset = (wordValue & 0x3ff) << 1; // 1024 positions. bits 0..9
-	ImGui::Text("screen base=%x, offset=%x, scr addr=%x", baseAddr, offset, pCpcEmu->GetScreenAddrStart());*/
-	
+{	
 #ifndef NDEBUG
 	// debug code to manually iterate through all snaps in a directory
 	if (pCpcEmu->GetGamesList().GetNoGames())
@@ -57,8 +47,10 @@ void FCpcViewer::Draw()
 #endif
 
 #ifndef NDEBUG
-	static bool bDrawScreenExtents = true;
-	ImGui::Checkbox("Draw screen extents", &bDrawScreenExtents);
+	static bool bDrawScreenExtentsHoriz = true;
+	static bool bDrawScreenExtentsVert = true;
+	ImGui::Checkbox("Draw screen extents Horiz", &bDrawScreenExtentsHoriz);
+	ImGui::Checkbox("Draw screen extents Vert", &bDrawScreenExtentsVert);
 	static bool bClickWritesToScreen = true;
 	ImGui::Checkbox("Write to screen on click", &bClickWritesToScreen);
 #endif
@@ -80,61 +72,72 @@ void FCpcViewer::Draw()
 		ImGui::Text("v sync pos=%d(%d), h sync pos=%d(%d)", crtc.v_sync_pos, crtc.v_sync_pos*8, crtc.h_sync_pos, crtc.h_sync_pos*8);
 	}
 
-	ImVec2 pos = ImGui::GetCursorScreenPos();
-	uint16_t textureWidth = AM40010_DISPLAY_WIDTH / 2;
-	uint16_t textureHeight = AM40010_DISPLAY_HEIGHT;
+	const ImVec2 pos = ImGui::GetCursorScreenPos();
+	const uint16_t textureWidth = AM40010_DISPLAY_WIDTH / 2;
+	const uint16_t textureHeight = AM40010_DISPLAY_HEIGHT;
 	ImGui::Image(pCpcEmu->Texture, ImVec2(textureWidth, textureHeight));
 
-	uint16_t screenWidth = crtc.h_displayed * 8;
-	uint16_t screenHeight = crtc.v_displayed * 8;
+	// crtc register 9 defines how many scanlines in a character square
+	const uint8_t charHeight = crtc.max_scanline_addr + 1; 
+	const uint16_t screenWidth = crtc.h_displayed * 8;
+	const uint16_t screenHeight = crtc.v_displayed * charHeight;
 	ImGuiIO& io = ImGui::GetIO();
 
+	const int offset = 37 - (8 - (crtc.max_scanline_addr+1)) * 9; 
+	//ImGui::InputScalar("offset", ImGuiDataType_U8, &offset, NULL, NULL, "%u", ImGuiInputTextFlags_CharsDecimal);
+
 	const int hSyncOffset = (crtc.h_sync_pos - 46) * 8; // offset based on the default horiz sync position (46)
-	const int vSyncOffset = (crtc.v_sync_pos - 30) * 8; // offset based on the default vert sync position (30)
-	const int vTotalOffset = (crtc.v_total - 38) * 8;
+	const int vSyncOffset = (crtc.v_sync_pos - 30) * charHeight; // offset based on the default vert sync position (30)
+	const int vTotalOffset = (crtc.v_total - 38) * charHeight;
 	const int screenEdgeL = crtc.h_displayed*8 - hSyncOffset + 32 - screenWidth;
-	const int screenTop = crtc.v_displayed*8 - vSyncOffset + 37 - screenHeight + crtc.v_total_adjust + vTotalOffset;
+	const int screenTop = crtc.v_displayed*charHeight - vSyncOffset + offset - screenHeight + crtc.v_total_adjust + vTotalOffset;
 	
 	ImDrawList* dl = ImGui::GetWindowDrawList();
 
 #ifndef NDEBUG
 	// draw screen area. todo clip when off screen
-	// games not working: live and let die, backtro
-	// registers not hooked up: r0,r3,r4,r5
-	if (bDrawScreenExtents)
+	// registers not hooked up: r0,r3
+	if (bDrawScreenExtentsVert)
 	{
-		dl->AddRect(ImVec2(pos.x+screenEdgeL, pos.y+screenTop), ImVec2(pos.x+screenEdgeL+screenWidth, pos.y+screenTop+screenHeight), 0xffffffff);
+		dl->AddLine(ImVec2(pos.x, pos.y+screenTop), ImVec2(pos.x+textureWidth, pos.y+screenTop), 0xffffffff);
+		dl->AddLine(ImVec2(pos.x, pos.y+screenTop+screenHeight-1), ImVec2(pos.x+textureWidth, pos.y+screenTop+screenHeight-1), 0xffffffff);
+	}
+	if (bDrawScreenExtentsHoriz)
+	{
+		dl->AddLine(ImVec2(pos.x+screenEdgeL, pos.y), ImVec2(pos.x+screenEdgeL, pos.y+textureHeight), 0xffffffff);
+		dl->AddLine(ImVec2(pos.x+screenEdgeL+screenWidth-1, pos.y), ImVec2(pos.x+screenEdgeL+screenWidth-1, pos.y+textureHeight), 0xffffffff);
+		
+		//dl->AddRect(ImVec2(pos.x+screenEdgeL, pos.y+screenTop), ImVec2(pos.x+screenEdgeL+screenWidth, pos.y+screenTop+screenHeight), 0xffffffff);
 	}
 #endif
 
 	if (ImGui::IsItemHovered())
 	{
-		int charWidth = scrMode == 0 ? 16 : 8; // todo: screen mode 2
+		const int charWidth = scrMode == 0 ? 16 : 8; // todo: screen mode 2
 		const int xp = std::min(std::max((int)(io.MousePos.x - pos.x - screenEdgeL), 0), screenWidth-1);
 		const int yp = std::min(std::max((int)(io.MousePos.y - pos.y - screenTop), 0), screenHeight-1);
 
 		uint16_t scrAddress = 0;
 		if (pCpcEmu->GetScreenMemoryAddress(xp, yp, scrAddress))
 		{
-			int rx = static_cast<int>(pos.x) + screenEdgeL + (xp & ~(charWidth-1));
-			int ry = static_cast<int>(pos.y) + screenTop + (yp & ~0x7);
+			const int charX = xp & ~(charWidth-1);
+			const int charY = (yp / charHeight) * charHeight;
+			const int rx = static_cast<int>(pos.x) + screenEdgeL + charX;
+			const int ry = static_cast<int>(pos.y) + screenTop + charY;
 			
-			// highlight the current 8x8 character
-			dl->AddRect(ImVec2((float)rx, (float)ry), ImVec2((float)rx + charWidth, (float)ry + 8), 0xffffffff);
-			
-			int plotX = xp & ~(charWidth-1);
-			int plotY = yp & ~0x7;
+			// highlight the current character "square" (could be a rectangle)
+			dl->AddRect(ImVec2((float)rx, (float)ry), ImVec2((float)rx + charWidth, (float)ry + charHeight), 0xffffffff);
 
 			if (ImGui::IsMouseClicked(0))
 			{
 #ifndef NDEBUG
 				if (bClickWritesToScreen)
 				{
-					const uint8_t numBytes = pCpcEmu->GetBitsPerPixel();
+					const uint8_t numBytes = GetBitsPerPixel(scrMode);
 					uint16_t plotAddress = 0;
-					for (int y = 0; y < 8; y++)
+					for (int y = 0; y < charHeight; y++)
 					{
-						if (pCpcEmu->GetScreenMemoryAddress(plotX, plotY+y, plotAddress))
+						if (pCpcEmu->GetScreenMemoryAddress(charX, charY+y, plotAddress))
 						{
 							for (int b=0; b<numBytes; b++)
 							{
@@ -147,7 +150,7 @@ void FCpcViewer::Draw()
 			}
 			ImGui::BeginTooltip();
 			// this screen pos is wrong in mode 0
-			ImGui::Text("Screen Pos (%d,%d) (%d,%d)", xp, yp, plotX, plotY);
+			ImGui::Text("Screen Pos (%d,%d)", xp, yp);
 			ImGui::Text("Addr: %s", NumStr(scrAddress));
 			ImGui::EndTooltip();
 		}
