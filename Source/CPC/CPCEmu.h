@@ -169,6 +169,9 @@ public:
 
 	const FGamesList& GetGamesList() const { return GamesList;  }
 
+	// put this somewhere else
+	int ScreenModePerScanline[AM40010_DISPLAY_HEIGHT] = {-1 };
+	int LastScanline = -1;
 private:
 	FGamesList		GamesList;
 	FCpcGameLoader	GameLoader;

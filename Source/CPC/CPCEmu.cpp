@@ -409,6 +409,15 @@ int	FCpcEmu::TrapFunction(uint16_t pc, int ticks, uint64_t pins)
 	if (opcode == 0xED || opcode == 0xCB)
 		iCount++;
 
+	// Store the screen mode per scanline.
+	// Shame to do this here. Would be nice to have a horizontal blank callback
+	const int curScanline = CpcEmuState.ga.crt.pos_y;
+	if (LastScanline != curScanline)
+	{
+		const uint8_t screenMode = CpcEmuState.ga.video.mode;
+		ScreenModePerScanline[curScanline] = screenMode;
+		LastScanline = CpcEmuState.ga.crt.pos_y;
+	}
 	return trapId;
 }
 

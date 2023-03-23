@@ -18,7 +18,7 @@ void FCpcViewer::Init(FCpcEmu* pEmu)
 }
 
 void FCpcViewer::Draw()
-{	
+{		
 #ifndef NDEBUG
 	// debug code to manually iterate through all snaps in a directory
 	if (pCpcEmu->GetGamesList().GetNoGames())
@@ -47,85 +47,86 @@ void FCpcViewer::Draw()
 #endif
 
 #ifndef NDEBUG
-	static bool bDrawScreenExtentsHoriz = true;
-	static bool bDrawScreenExtentsVert = true;
-	ImGui::Checkbox("Draw screen extents Horiz", &bDrawScreenExtentsHoriz);
-	ImGui::Checkbox("Draw screen extents Vert", &bDrawScreenExtentsVert);
+	static bool bDrawScreenExtents = true;
+	ImGui::Checkbox("Draw screen extents", &bDrawScreenExtents);
+	ImGui::SameLine();
+	static uint8_t scrRectAlpha = 0xff;
+	ImGui::PushItemWidth(40);
+	ImGui::InputScalar("Alpha", ImGuiDataType_U8, &scrRectAlpha, NULL, NULL, "%u", ImGuiInputTextFlags_CharsDecimal);
+	ImGui::PopItemWidth();
+
 	static bool bClickWritesToScreen = true;
 	ImGui::Checkbox("Write to screen on click", &bClickWritesToScreen);
+	static bool bShowScreenmodeChanges = true;
+	ImGui::Checkbox("Show screenmode changes", &bShowScreenmodeChanges);
 #endif
 
-	// todo remove this or tidy up
-	const mc6845_t& crtc = pCpcEmu->CpcEmuState.crtc;
-	const uint8_t scrMode = pCpcEmu->CpcEmuState.ga.video.mode;
-	// mode 0 x4
-	// mode 1 x8
-	// mode 2 
-	if (scrMode == 0)
-	{
-		ImGui::Text("logical w=%d(%d), logical h=%d(%d)", crtc.h_displayed, crtc.h_displayed*4, crtc.v_displayed, crtc.v_displayed*8);
-		ImGui::Text("v sync pos=%d(%d), h sync pos=%d(%d)", crtc.v_sync_pos, crtc.v_sync_pos*8, crtc.h_sync_pos, crtc.h_sync_pos*8);
-	}
-	else if (scrMode == 1)
-	{
-		ImGui::Text("logical w=%d(%d), logical h=%d(%d)", crtc.h_displayed, crtc.h_displayed*8, crtc.v_displayed, crtc.v_displayed*8);
-		ImGui::Text("v sync pos=%d(%d), h sync pos=%d(%d)", crtc.v_sync_pos, crtc.v_sync_pos*8, crtc.h_sync_pos, crtc.h_sync_pos*8);
-	}
-
+	// draw the cpc display
 	const ImVec2 pos = ImGui::GetCursorScreenPos();
-	const uint16_t textureWidth = AM40010_DISPLAY_WIDTH / 2;
-	const uint16_t textureHeight = AM40010_DISPLAY_HEIGHT;
+	const int textureWidth = AM40010_DISPLAY_WIDTH / 2;
+	const int textureHeight = AM40010_DISPLAY_HEIGHT;
 	ImGui::Image(pCpcEmu->Texture, ImVec2(textureWidth, textureHeight));
-
-	// crtc register 9 defines how many scanlines in a character square
-	const uint8_t charHeight = crtc.max_scanline_addr + 1; 
-	const uint16_t screenWidth = crtc.h_displayed * 8;
-	const uint16_t screenHeight = crtc.v_displayed * charHeight;
-	ImGuiIO& io = ImGui::GetIO();
-
-	const int offset = 37 - (8 - (crtc.max_scanline_addr+1)) * 9; 
-	//ImGui::InputScalar("offset", ImGuiDataType_U8, &offset, NULL, NULL, "%u", ImGuiInputTextFlags_CharsDecimal);
-
-	const int hSyncOffset = (crtc.h_sync_pos - 46) * 8; // offset based on the default horiz sync position (46)
-	const int vSyncOffset = (crtc.v_sync_pos - 30) * charHeight; // offset based on the default vert sync position (30)
-	const int vTotalOffset = (crtc.v_total - 38) * charHeight;
-	const int screenEdgeL = crtc.h_displayed*8 - hSyncOffset + 32 - screenWidth;
-	const int screenTop = crtc.v_displayed*charHeight - vSyncOffset + offset - screenHeight + crtc.v_total_adjust + vTotalOffset;
+	
+	// work out the position and size of the logical cpc screen based on the crtc registers.
+	// note: these calculations will be wrong if the game sets crtc registers dynamically during the frame.
+	const mc6845_t& crtc = pCpcEmu->CpcEmuState.crtc;
+	const uint8_t charHeight = crtc.max_scanline_addr + 1;			// crtc register 9 defines how many scanlines in a character square
+	const int scrWidth = crtc.h_displayed * 8;
+	const int scrHeight = crtc.v_displayed * charHeight;
+	const int scanLinesPerCharOffset = 37 - (8 - (crtc.max_scanline_addr + 1)) * 9; 
+	const int hTotOffset = (crtc.h_total - 63) * 8;					// offset based on the default horiz total size (63 chars)
+	const int vTotalOffset = (crtc.v_total - 38) * charHeight;		// offset based on the default vertical total size (38 chars)
+	const int hSyncOffset = (crtc.h_sync_pos - 46) * 8;				// offset based on the default horiz sync position (46 chars)
+	const int vSyncOffset = (crtc.v_sync_pos - 30) * charHeight;	// offset based on the default vert sync position (30 chars)
+	const int scrEdgeL = crtc.h_displayed * 8 - hSyncOffset + 32 - scrWidth + hTotOffset;
+	const int scrTop = crtc.v_displayed * charHeight - vSyncOffset + scanLinesPerCharOffset - scrHeight + crtc.v_total_adjust + vTotalOffset;
 	
 	ImDrawList* dl = ImGui::GetWindowDrawList();
 
+	// registers not hooked up: r3
 #ifndef NDEBUG
-	// draw screen area. todo clip when off screen
-	// registers not hooked up: r0,r3
-	if (bDrawScreenExtentsVert)
+	// draw screen area.
+	if (bDrawScreenExtents)
 	{
-		dl->AddLine(ImVec2(pos.x, pos.y+screenTop), ImVec2(pos.x+textureWidth, pos.y+screenTop), 0xffffffff);
-		dl->AddLine(ImVec2(pos.x, pos.y+screenTop+screenHeight-1), ImVec2(pos.x+textureWidth, pos.y+screenTop+screenHeight-1), 0xffffffff);
+		const int top = std::max(scrTop, 0);
+		const int bot = std::min(scrTop + scrHeight, textureHeight);
+		const int r = std::min(scrEdgeL + scrWidth, textureWidth);
+		const int l = std::max(scrEdgeL, 0);
+		dl->AddRect(ImVec2(pos.x + l, pos.y + top), ImVec2(pos.x + r, pos.y + bot), scrRectAlpha << 24 | 0xffffff);
 	}
-	if (bDrawScreenExtentsHoriz)
+
+	// colourize scanlines depending on the screen mode
+	if (bShowScreenmodeChanges)
 	{
-		dl->AddLine(ImVec2(pos.x+screenEdgeL, pos.y), ImVec2(pos.x+screenEdgeL, pos.y+textureHeight), 0xffffffff);
-		dl->AddLine(ImVec2(pos.x+screenEdgeL+screenWidth-1, pos.y), ImVec2(pos.x+screenEdgeL+screenWidth-1, pos.y+textureHeight), 0xffffffff);
-		
-		//dl->AddRect(ImVec2(pos.x+screenEdgeL, pos.y+screenTop), ImVec2(pos.x+screenEdgeL+screenWidth, pos.y+screenTop+screenHeight), 0xffffffff);
+		for (int s=0; s< AM40010_DISPLAY_HEIGHT; s++)
+		{
+			uint8_t scrMode = pCpcEmu->ScreenModePerScanline[s];
+			dl->AddLine(ImVec2(pos.x, pos.y + s), ImVec2(pos.x + textureWidth, pos.y + s), scrMode == 0 ? 0x40ffff00 : 0x4000ffff);
+		}
 	}
 #endif
 
 	if (ImGui::IsItemHovered())
 	{
+		ImGuiIO& io = ImGui::GetIO();
+		// get mouse cursor coords clamped to logical screen area
+		const int xp = std::min(std::max((int)(io.MousePos.x - pos.x - scrEdgeL), 0), scrWidth-1);
+		const int yp = std::min(std::max((int)(io.MousePos.y - pos.y - scrTop), 0), scrHeight-1);
+		
+		// get the screen mode for this raster line
+		const int scanline = std::min(std::max((int)(io.MousePos.y - pos.y), 0), scrHeight - 1);
+		const uint8_t scrMode = pCpcEmu->ScreenModePerScanline[scanline];
 		const int charWidth = scrMode == 0 ? 16 : 8; // todo: screen mode 2
-		const int xp = std::min(std::max((int)(io.MousePos.x - pos.x - screenEdgeL), 0), screenWidth-1);
-		const int yp = std::min(std::max((int)(io.MousePos.y - pos.y - screenTop), 0), screenHeight-1);
 
 		uint16_t scrAddress = 0;
 		if (pCpcEmu->GetScreenMemoryAddress(xp, yp, scrAddress))
 		{
 			const int charX = xp & ~(charWidth-1);
 			const int charY = (yp / charHeight) * charHeight;
-			const int rx = static_cast<int>(pos.x) + screenEdgeL + charX;
-			const int ry = static_cast<int>(pos.y) + screenTop + charY;
+			const int rx = static_cast<int>(pos.x) + scrEdgeL + charX;
+			const int ry = static_cast<int>(pos.y) + scrTop + charY;
 			
-			// highlight the current character "square" (could be a rectangle)
+			// highlight the current character "square" (could actually be a rectangle if the char height is not 8)
 			dl->AddRect(ImVec2((float)rx, (float)ry), ImVec2((float)rx + charWidth, (float)ry + charHeight), 0xffffffff);
 
 			if (ImGui::IsMouseClicked(0))
@@ -137,7 +138,7 @@ void FCpcViewer::Draw()
 					uint16_t plotAddress = 0;
 					for (int y = 0; y < charHeight; y++)
 					{
-						if (pCpcEmu->GetScreenMemoryAddress(charX, charY+y, plotAddress))
+						if (pCpcEmu->GetScreenMemoryAddress(charX, charY + y, plotAddress))
 						{
 							for (int b=0; b<numBytes; b++)
 							{
@@ -152,6 +153,7 @@ void FCpcViewer::Draw()
 			// this screen pos is wrong in mode 0
 			ImGui::Text("Screen Pos (%d,%d)", xp, yp);
 			ImGui::Text("Addr: %s", NumStr(scrAddress));
+			ImGui::Text("Screen Mode: %d", scrMode);
 			ImGui::EndTooltip();
 		}
 	}
