@@ -4,13 +4,15 @@
 
 #include <imgui.h>
 #include "../CPCEmu.h"
-//#include "../CPCConstants.h"
 #include <CodeAnalyser/UI/CodeAnalyserUI.h>
-//#include "GraphicsViewer.h"
-//#include "../GlobalConfig.h"
 
 #include <Util/Misc.h>
 #include <algorithm>
+
+template<typename T> static inline T Clamp(T v, T mn, T mx)
+{ 
+	return (v < mn) ? mn : (v > mx) ? mx : v; 
+}
 
 void FCpcViewer::Init(FCpcEmu* pEmu)
 {
@@ -57,22 +59,46 @@ void FCpcViewer::Draw()
 
 	static bool bClickWritesToScreen = true;
 	ImGui::Checkbox("Write to screen on click", &bClickWritesToScreen);
-	static bool bShowScreenmodeChanges = true;
+	static bool bShowScreenmodeChanges = false;
 	ImGui::Checkbox("Show screenmode changes", &bShowScreenmodeChanges);
 #endif
 
+	// see if mixed screen modes are used
+	int scrMode = pCpcEmu->CpcEmuState.ga.video.mode;
+	for (int s=0; s< AM40010_DISPLAY_HEIGHT; s++)
+	{
+		if (pCpcEmu->ScreenModePerScanline[s] != scrMode)
+		{
+			scrMode = -1;
+			break;
+		}
+	}
+
+	// display screen mode and resolution
+	const mc6845_t& crtc = pCpcEmu->CpcEmuState.crtc;
+	const uint8_t charHeight = crtc.max_scanline_addr + 1;			// crtc register 9 defines how many scanlines in a character square
+	const int scrWidth = crtc.h_displayed * 8;
+	const int scrHeight = crtc.v_displayed * charHeight;
+	if(scrMode == -1)
+	{
+		ImGui::Text("Screen mode: mixed", scrWidth, scrHeight);
+		ImGui::Text("Resolution: %d x %d", scrWidth, scrHeight);
+	}
+	else
+	{
+		int multiplier[4] = {4, 8, 16, 4};
+		ImGui::Text("Screen mode: %d", scrMode);
+		ImGui::Text("Resolution: %d x %d", crtc.h_displayed * multiplier[scrMode], scrHeight);
+	}
+
 	// draw the cpc display
-	const ImVec2 pos = ImGui::GetCursorScreenPos();
+	const ImVec2 pos = ImGui::GetCursorScreenPos();					// get the position of the texture
 	const int textureWidth = AM40010_DISPLAY_WIDTH / 2;
 	const int textureHeight = AM40010_DISPLAY_HEIGHT;
 	ImGui::Image(pCpcEmu->Texture, ImVec2(textureWidth, textureHeight));
 	
 	// work out the position and size of the logical cpc screen based on the crtc registers.
 	// note: these calculations will be wrong if the game sets crtc registers dynamically during the frame.
-	const mc6845_t& crtc = pCpcEmu->CpcEmuState.crtc;
-	const uint8_t charHeight = crtc.max_scanline_addr + 1;			// crtc register 9 defines how many scanlines in a character square
-	const int scrWidth = crtc.h_displayed * 8;
-	const int scrHeight = crtc.v_displayed * charHeight;
 	const int scanLinesPerCharOffset = 37 - (8 - (crtc.max_scanline_addr + 1)) * 9; 
 	const int hTotOffset = (crtc.h_total - 63) * 8;					// offset based on the default horiz total size (63 chars)
 	const int vTotalOffset = (crtc.v_total - 38) * charHeight;		// offset based on the default vertical total size (38 chars)
@@ -88,11 +114,12 @@ void FCpcViewer::Draw()
 	// draw screen area.
 	if (bDrawScreenExtents)
 	{
-		const int top = std::max(scrTop, 0);
-		const int bot = std::min(scrTop + scrHeight, textureHeight);
-		const int r = std::min(scrEdgeL + scrWidth, textureWidth);
-		const int l = std::max(scrEdgeL, 0);
-		dl->AddRect(ImVec2(pos.x + l, pos.y + top), ImVec2(pos.x + r, pos.y + bot), scrRectAlpha << 24 | 0xffffff);
+		const float y_min = Clamp(pos.y + scrTop, pos.y, pos.y + textureHeight);
+		const float y_max = Clamp(pos.y + scrTop + scrHeight, pos.y, pos.y + textureHeight);
+		const float x_min = Clamp(pos.x + scrEdgeL, pos.x, pos.x + textureWidth);
+		const float x_max = Clamp(pos.x + scrEdgeL + scrWidth, pos.x, pos.x + textureWidth);
+
+		dl->AddRect(ImVec2(x_min, y_min), ImVec2(x_max, y_max), scrRectAlpha << 24 | 0xffffff);
 	}
 
 	// colourize scanlines depending on the screen mode
@@ -109,25 +136,28 @@ void FCpcViewer::Draw()
 	if (ImGui::IsItemHovered())
 	{
 		ImGuiIO& io = ImGui::GetIO();
-		// get mouse cursor coords clamped to logical screen area
-		const int xp = std::min(std::max((int)(io.MousePos.x - pos.x - scrEdgeL), 0), scrWidth-1);
-		const int yp = std::min(std::max((int)(io.MousePos.y - pos.y - scrTop), 0), scrHeight-1);
-		
-		// get the screen mode for this raster line
-		const int scanline = std::min(std::max((int)(io.MousePos.y - pos.y), 0), scrHeight - 1);
-		const uint8_t scrMode = pCpcEmu->ScreenModePerScanline[scanline];
-		const int charWidth = scrMode == 0 ? 16 : 8; // todo: screen mode 2
 
+		// get mouse cursor coords in logical screen area space
+		const int xp = Clamp((int)(io.MousePos.x - pos.x - scrEdgeL), 0, scrWidth-1);
+		const int yp = Clamp((int)(io.MousePos.y - pos.y - scrTop), 0, scrHeight-1);
+		
+		// get the screen mode for the raster line the mouse is pointed at
+		// note: the logic doesn't always work and we sometimes end up with a negative scanline.
+		// for example, this can happen for demos that set the scanlines-per-character to 1.
+		const int scanline = scrTop + yp;
+		const int scrMode = scanline > 0 && scanline < AM40010_DISPLAY_HEIGHT ? pCpcEmu->ScreenModePerScanline[scanline] : -1;
+		const int charWidth = scrMode == 0 ? 16 : 8; // todo: screen mode 2
+		
 		uint16_t scrAddress = 0;
 		if (pCpcEmu->GetScreenMemoryAddress(xp, yp, scrAddress))
 		{
 			const int charX = xp & ~(charWidth-1);
 			const int charY = (yp / charHeight) * charHeight;
-			const int rx = static_cast<int>(pos.x) + scrEdgeL + charX;
-			const int ry = static_cast<int>(pos.y) + scrTop + charY;
-			
+			const float rx = Clamp(pos.x + scrEdgeL + charX, pos.x, pos.x + textureWidth);
+			const float ry = Clamp(pos.y + scrTop + charY, pos.y, pos.y + textureHeight);
+
 			// highlight the current character "square" (could actually be a rectangle if the char height is not 8)
-			dl->AddRect(ImVec2((float)rx, (float)ry), ImVec2((float)rx + charWidth, (float)ry + charHeight), 0xffffffff);
+			dl->AddRect(ImVec2(rx, ry), ImVec2((float)rx + charWidth, (float)ry + charHeight), 0xffffffff);
 
 			if (ImGui::IsMouseClicked(0))
 			{
@@ -153,7 +183,10 @@ void FCpcViewer::Draw()
 			// this screen pos is wrong in mode 0
 			ImGui::Text("Screen Pos (%d,%d)", xp, yp);
 			ImGui::Text("Addr: %s", NumStr(scrAddress));
-			ImGui::Text("Screen Mode: %d", scrMode);
+			if (scrMode == -1)
+				ImGui::Text("Screen Mode: unknown", scrMode);
+			else
+				ImGui::Text("Screen Mode: %d", scrMode);
 			ImGui::EndTooltip();
 		}
 	}
