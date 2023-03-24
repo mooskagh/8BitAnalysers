@@ -48,7 +48,6 @@ void FCpcViewer::Draw()
 	}
 #endif
 
-#ifndef NDEBUG
 	static bool bDrawScreenExtents = true;
 	ImGui::Checkbox("Draw screen extents", &bDrawScreenExtents);
 	ImGui::SameLine();
@@ -56,11 +55,11 @@ void FCpcViewer::Draw()
 	ImGui::PushItemWidth(40);
 	ImGui::InputScalar("Alpha", ImGuiDataType_U8, &scrRectAlpha, NULL, NULL, "%u", ImGuiInputTextFlags_CharsDecimal);
 	ImGui::PopItemWidth();
-
-	static bool bClickWritesToScreen = true;
-	ImGui::Checkbox("Write to screen on click", &bClickWritesToScreen);
 	static bool bShowScreenmodeChanges = false;
 	ImGui::Checkbox("Show screenmode changes", &bShowScreenmodeChanges);
+#ifndef NDEBUG
+	static bool bClickWritesToScreen = true;
+	ImGui::Checkbox("Write to screen on click", &bClickWritesToScreen);
 #endif
 
 	// see if mixed screen modes are used
@@ -79,14 +78,14 @@ void FCpcViewer::Draw()
 	const uint8_t charHeight = crtc.max_scanline_addr + 1;			// crtc register 9 defines how many scanlines in a character square
 	const int scrWidth = crtc.h_displayed * 8;
 	const int scrHeight = crtc.v_displayed * charHeight;
+	int multiplier[4] = {4, 8, 16, 4};
 	if(scrMode == -1)
 	{
 		ImGui::Text("Screen mode: mixed", scrWidth, scrHeight);
-		ImGui::Text("Resolution: %d x %d", scrWidth, scrHeight);
+		ImGui::Text("Resolution: mixed (%d) x %d", scrWidth, scrHeight);
 	}
 	else
 	{
-		int multiplier[4] = {4, 8, 16, 4};
 		ImGui::Text("Screen mode: %d", scrMode);
 		ImGui::Text("Resolution: %d x %d", crtc.h_displayed * multiplier[scrMode], scrHeight);
 	}
@@ -99,6 +98,7 @@ void FCpcViewer::Draw()
 	
 	// work out the position and size of the logical cpc screen based on the crtc registers.
 	// note: these calculations will be wrong if the game sets crtc registers dynamically during the frame.
+	// registers not hooked up: R3
 	const int scanLinesPerCharOffset = 37 - (8 - (crtc.max_scanline_addr + 1)) * 9; 
 	const int hTotOffset = (crtc.h_total - 63) * 8;					// offset based on the default horiz total size (63 chars)
 	const int vTotalOffset = (crtc.v_total - 38) * charHeight;		// offset based on the default vertical total size (38 chars)
@@ -109,8 +109,7 @@ void FCpcViewer::Draw()
 	
 	ImDrawList* dl = ImGui::GetWindowDrawList();
 
-	// registers not hooked up: r3
-#ifndef NDEBUG
+	
 	// draw screen area.
 	if (bDrawScreenExtents)
 	{
@@ -131,7 +130,6 @@ void FCpcViewer::Draw()
 			dl->AddLine(ImVec2(pos.x, pos.y + s), ImVec2(pos.x + textureWidth, pos.y + s), scrMode == 0 ? 0x40ffff00 : 0x4000ffff);
 		}
 	}
-#endif
 
 	if (ImGui::IsItemHovered())
 	{
@@ -149,6 +147,8 @@ void FCpcViewer::Draw()
 		const int charWidth = scrMode == 0 ? 16 : 8; // todo: screen mode 2
 		
 		uint16_t scrAddress = 0;
+		// note: for screen mode 0 this will be in coord space of 320 x 200.
+		// not sure that is right?
 		if (pCpcEmu->GetScreenMemoryAddress(xp, yp, scrAddress))
 		{
 			const int charX = xp & ~(charWidth-1);
@@ -180,8 +180,12 @@ void FCpcViewer::Draw()
 #endif			
 			}
 			ImGui::BeginTooltip();
-			// this screen pos is wrong in mode 0
-			ImGui::Text("Screen Pos (%d,%d)", xp, yp);
+
+			// adjust the x position based on the screen mode for the scanline
+			const int divisor[4] = { 4, 2, 1, 2};
+			const int x_adj = (xp * 2) / (scrMode == -1 ? 2 : divisor[scrMode]);
+			
+			ImGui::Text("Screen Pos (%d,%d)", x_adj, yp);
 			ImGui::Text("Addr: %s", NumStr(scrAddress));
 			if (scrMode == -1)
 				ImGui::Text("Screen Mode: unknown", scrMode);
