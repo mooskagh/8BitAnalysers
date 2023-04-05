@@ -48,6 +48,11 @@
 #include "Viewers/GraphicsViewer.h"
 #include "MemoryHandlers.h"
 
+struct FGameViewerData;
+struct FGameConfig;
+struct FViewerConfig;
+class FViewerBase;
+
 enum class ECpcModel
 {
 	CPC_464,
@@ -61,6 +66,13 @@ struct FCpcConfig
 	std::string	SpecificGame;
 };
 
+struct FGame
+{
+	FGameConfig* pConfig = nullptr;
+	FViewerConfig* pViewerConfig = nullptr;
+	FGameViewerData* pViewerData = nullptr;
+};
+
 class FCpcEmu : public ICPUInterface
 {
 public:
@@ -71,6 +83,9 @@ public:
 
 	bool	Init(const FCpcConfig& config);
 	void	Shutdown();
+	void	StartGame(FGameConfig* pGameConfig);
+	bool	StartGame(const char* pGameName);
+	void	SaveCurrentGameData();
 
 	int TrapFunction(uint16_t pc, int ticks, uint64_t pins);
 	uint64_t Z80Tick(int num, uint64_t pins);
@@ -134,6 +149,8 @@ public:
 
 	ui_cpc_t		UICpc;
 
+	FGame*			pActiveGame = nullptr;
+
 	// Viewers
 	FCpcViewer				CpcViewer;
 	//FFrameTraceViewer		FrameTraceViewer;
@@ -178,6 +195,8 @@ private:
 
 	z80_tick_t	OldTickCB = nullptr;
 	void*		OldTickUserData = nullptr;
+
+	std::vector<FViewerBase*>	Viewers;
 
 	bool bExportAsm = false;
 

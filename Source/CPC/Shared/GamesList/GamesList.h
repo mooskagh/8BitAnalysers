@@ -37,6 +37,7 @@ public:
 	}
 	bool	EnumerateGames(const char* pRootDir);
 	bool	LoadGame(int index) const;
+	bool	LoadGame(const char* pFileName) const;
 
 	int		GetNoGames() const { return (int)GamesList.size(); }
 	const FGameSnapshot& GetGame(int index) const { return GamesList[index]; }

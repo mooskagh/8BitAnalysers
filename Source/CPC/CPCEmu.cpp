@@ -16,14 +16,23 @@ void DasmOutputD8(int8_t val, z80dasm_output_t out_cb, void* user_data);
 
 #include "CPCEmu.h"
 
+#include "GlobalConfig.h"
+#include "GameConfig.h"
+#include "Exporters/JsonExport.h"
+#include "Util/FileUtil.h"
+#include "CodeAnalyser/UI/CodeAnalyserUI.h"
+#include "App.h"
+#include "Viewers/BreakpointViewer.h"
+
 #include <sokol_audio.h>
 #include "cpc-roms.h"
 
-#include "CodeAnalyser/UI/CodeAnalyserUI.h"
-#include "App.h"
-
 #include <ImGuiSupport/ImGuiTexture.h>
+
 const std::string kAppTitle = "CPC Analyser";
+
+const char* kGlobalConfigFilename = "GlobalConfig.json";
+
 
 /* output an unsigned 8-bit value as hex string */
 void DasmOutputU8(uint8_t val, z80dasm_output_t out_cb, void* user_data) 
@@ -518,6 +527,7 @@ void FCpcEmu::SetROMBank(int bankNo)
 
 // Slot is physical 16K memory region (0-3) 
 // Bank is a 16K Spectrum RAM bank (0-7)
+// todo make cpc specific
 void FCpcEmu::SetRAMBank(int slot, int bankNo)
 {
 	if (RAMBanks[slot] == bankNo)
@@ -543,7 +553,6 @@ void FCpcEmu::SetRAMBank(int slot, int bankNo)
 	if (bInitialised)
 		CheckAddressSpaceItems(CodeAnalysis);
 #endif
-
 }
 
 bool FCpcEmu::Init(const FCpcConfig& config)
@@ -558,14 +567,16 @@ bool FCpcEmu::Init(const FCpcConfig& config)
 	// setup texture
 	Texture = ImGui_CreateTextureRGBA(FrameBuffer, AM40010_DISPLAY_WIDTH, AM40010_DISPLAY_HEIGHT);
 
+	// Initialise the CPC emulator
+	LoadGlobalConfig(kGlobalConfigFilename);
+	FGlobalConfig& globalConfig = GetGlobalConfig();
+	SetNumberDisplayMode(globalConfig.NumberDisplayMode);
+	CodeAnalysis.Config.bShowOpcodeValues = globalConfig.bShowOpcodeValues;
+	
 	// A class that deals with loading games.
 	GameLoader.Init(this);
 	GamesList.Init(&GameLoader);
-	
-	// todo: get snapshot folder
-	GamesList.EnumerateGames(".\\");
-
-	// Initialise the CPC emulator
+	GamesList.EnumerateGames(globalConfig.SnapshotFolder.c_str());
 
 	//cpc_type_t type = CPC_TYPE_464;
 	cpc_type_t type = CPC_TYPE_6128;
@@ -631,6 +642,19 @@ bool FCpcEmu::Init(const FCpcConfig& config)
 		ui_cpc_init(&UICpc, &desc);
 	}
 
+	// This is where we add the viewers we want
+	Viewers.push_back(new FBreakpointViewer(this));
+	//Viewers.push_back(new FOverviewViewer(this));
+
+	// Initialise Viewers
+	for (auto Viewer : Viewers)
+	{
+		if (Viewer->Init() == false)
+		{
+			// TODO: report error
+		}
+	}
+
 	GraphicsViewer.pEmu = this;
 	InitGraphicsViewer(GraphicsViewer);
 
@@ -638,7 +662,7 @@ bool FCpcEmu::Init(const FCpcConfig& config)
 
 	CodeAnalysis.ViewState[0].Enabled = true;	// always have first view enabled
 
-
+	LoadGameConfigs(this);
 
 	// Set up code analysis
 	// initialise code analysis pages
@@ -665,6 +689,7 @@ bool FCpcEmu::Init(const FCpcConfig& config)
 
 	// Setup initial machine memory config
 	//if (config.Model == ESpectrumModel::Spectrum48K)
+	// todo this is most probably wrong for cpc 
 	if (1)
 	{
 		SetROMBank(0);
@@ -688,7 +713,6 @@ bool FCpcEmu::Init(const FCpcConfig& config)
 	// load the command line game if none specified then load the last game
 	bool bLoadedGame = false;
 
-#if SPECCY
 	if (config.SpecificGame.empty() == false)
 	{
 		bLoadedGame = StartGame(config.SpecificGame.c_str());
@@ -697,7 +721,6 @@ bool FCpcEmu::Init(const FCpcConfig& config)
 	{
 		bLoadedGame = StartGame(globalConfig.LastGame.c_str());
 	}
-#endif
 	// Start ROM if no game has been loaded
 	if (bLoadedGame == false)
 	{
@@ -722,6 +745,227 @@ bool FCpcEmu::Init(const FCpcConfig& config)
 
 void FCpcEmu::Shutdown()
 {
+	SaveCurrentGameData();	// save on close
+
+	// Save Global Config - move to function?
+	FGlobalConfig& config = GetGlobalConfig();
+
+	if (pActiveGame != nullptr)
+		config.LastGame = pActiveGame->pConfig->Name;
+
+	config.NumberDisplayMode = GetNumberDisplayMode();
+	config.bShowOpcodeValues = CodeAnalysis.Config.bShowOpcodeValues;
+
+	SaveGlobalConfig(kGlobalConfigFilename);
+}
+
+
+void FCpcEmu::StartGame(FGameConfig* pGameConfig)
+{
+	MemoryAccessHandlers.clear();	// remove old memory handlers
+
+	ResetMemoryStats(MemStats);
+
+	const std::string windowTitle = kAppTitle + " - " + pGameConfig->Name;
+	SetWindowTitle(windowTitle.c_str());
+
+	// start up game
+#if SPECCY
+	if (pActiveGame != nullptr)
+		delete pActiveGame->pViewerData;
+#endif
+	delete pActiveGame;
+
+	FGame* pNewGame = new FGame;
+	pNewGame->pConfig = pGameConfig;
+#if SPECCY
+	pNewGame->pViewerConfig = pGameConfig->pViewerConfig;
+	assert(pGameConfig->pViewerConfig != nullptr);
+#endif
+	GraphicsViewer.pGame = pNewGame;
+	pActiveGame = pNewGame;
+
+#if SPECCY
+	pNewGame->pViewerData = pNewGame->pViewerConfig->pInitFunction(this, pGameConfig);
+	GenerateSpriteListsFromConfig(GraphicsViewer, pGameConfig);
+#endif
+	// Initialise code analysis
+	InitialiseCodeAnalysis(CodeAnalysis, this);
+
+	// Set options from config
+	for (int i = 0; i < FCodeAnalysisState::kNoViewStates; i++)
+	{
+		CodeAnalysis.ViewState[i].Enabled = pGameConfig->ViewConfigs[i].bEnabled;
+		CodeAnalysis.ViewState[i].GoToAddress = pGameConfig->ViewConfigs[i].ViewAddress;
+	}
+
+	const std::string root = GetGlobalConfig().WorkspaceRoot;
+	const std::string dataFName = root + "GameData/" + pGameConfig->Name + ".bin";
+#if SPECCY
+	std::string romJsonFName = kRomInfo48JsonFile;
+
+	if (ZXEmuState.type == ZX_TYPE_128)
+		romJsonFName = root + kRomInfo128JsonFile;
+#endif
+
+	const std::string analysisJsonFName = root + "AnalysisJson/" + pGameConfig->Name + ".json";
+	ImportAnalysisJson(CodeAnalysis, analysisJsonFName.c_str());
+	
+#if SPECCY
+	const std::string saveStateFName = root + "SaveStates/" + pGameConfig->Name + ".state";
+	LoadGameState(this, saveStateFName.c_str());
+
+	if (FileExists(romJsonFName.c_str()))
+		ImportAnalysisJson(CodeAnalysis, romJsonFName.c_str());
+
+	// where do we want pokes to live?
+	LoadPOKFile(*pGameConfig, std::string(GetGlobalConfig().PokesFolder + pGameConfig->Name + ".pok").c_str());
+#endif
+
+	ReAnalyseCode(CodeAnalysis);
+	GenerateGlobalInfo(CodeAnalysis);
+#if SPECCY
+	FormatSpectrumMemory(CodeAnalysis);
+#endif
+	CodeAnalysis.SetCodeAnalysisDirty();
+
+#if SPECCY
+
+	// Start in break mode so the memory will be in it's initial state. 
+	// Otherwise, if we export a skool/asm file once the game is running the memory could be in an arbitrary state.
+	// 
+	// decode whole screen
+	const int oldScanlineVal = ZXEmuState.scanline_y;
+	ZXEmuState.scanline_y = 0;
+	for (int i = 0; i < ZXEmuState.frame_scan_lines; i++)
+	{
+		_zx_decode_scanline(&ZXEmuState);
+	}
+	ZXEmuState.scanline_y = oldScanlineVal;
+	ImGui_UpdateTextureRGBA(Texture, FrameBuffer);
+#endif
+
+	/*
+	int dst_x = ga->crt.pos_x * 16;
+	int dst_y = ga->crt.pos_y;
+	bool black = ga->video.sync;
+	uint32_t* dst = &ga->rgba8_buffer[dst_x + dst_y * AM40010_DISPLAY_WIDTH];
+	//if (crtc_pins & AM40010_DE) 
+	{
+		_am40010_decode_pixels(ga, dst, crtc_pins);
+	}
+	else if (black) 
+	{
+		for (int i = 0; i < 16; i++) 
+		{
+			*dst++ = 0xFF000000;
+		}
+	}
+	else 
+	{
+		uint32_t brd = ga->colors.border_rgba8;
+		for (int i = 0; i < 16; i++) 
+		{
+			*dst++ = brd;
+		}
+	}*/
+
+	/*CpcEmuState.ga.crt.visible = true;
+	_am40010_decode_video(&CpcEmuState.ga, 1);
+	_am40010_decode_video(&CpcEmuState.ga, 2);
+	_am40010_decode_video(&CpcEmuState.ga, 3);
+	_am40010_decode_video(&CpcEmuState.ga, 4);
+	_am40010_decode_video(&CpcEmuState.ga, 5);
+	_am40010_decode_video(&CpcEmuState.ga, 6);
+	_am40010_decode_video(&CpcEmuState.ga, 7);
+	_am40010_decode_video(&CpcEmuState.ga, 8);
+	_am40010_decode_video(&CpcEmuState.ga, 9);
+	_am40010_decode_video(&CpcEmuState.ga, 10);
+	_am40010_decode_video(&CpcEmuState.ga, 11);
+	_am40010_decode_video(&CpcEmuState.ga, 12);
+	_am40010_decode_video(&CpcEmuState.ga, 13);
+	_am40010_decode_video(&CpcEmuState.ga, 14);
+	_am40010_decode_video(&CpcEmuState.ga, 15);
+	_am40010_decode_video(&CpcEmuState.ga, 16);
+	_am40010_decode_video(&CpcEmuState.ga, 17);
+	_am40010_decode_video(&CpcEmuState.ga, 18);
+	_am40010_decode_video(&CpcEmuState.ga, 19);
+	_am40010_decode_video(&CpcEmuState.ga, 20);
+	_am40010_decode_video(&CpcEmuState.ga, 21);
+	_am40010_decode_video(&CpcEmuState.ga, 22);
+	*/
+	/*
+	*/
+	ImGui_UpdateTextureRGBA(Texture, FrameBuffer);
+
+	Break();
+}
+
+bool FCpcEmu::StartGame(const char* pGameName)
+{
+	for (const auto& pGameConfig : GetGameConfigs())
+	{
+		if (pGameConfig->Name == pGameName)
+		{
+			const std::string snapFolder = GetGlobalConfig().SnapshotFolder;
+			const std::string gameFile = snapFolder + pGameConfig->SnapshotFile;
+			if (GamesList.LoadGame(gameFile.c_str()))
+			{
+				StartGame(pGameConfig);
+				return true;
+			}
+		}
+	}
+
+	return false;
+}
+
+// save config & data
+void FCpcEmu::SaveCurrentGameData()
+{
+	if (pActiveGame != nullptr)
+	{
+		FGameConfig* pGameConfig = pActiveGame->pConfig;
+		if (pGameConfig->Name.empty())
+		{
+
+		}
+		else
+		{
+			const std::string root = GetGlobalConfig().WorkspaceRoot;
+			const std::string configFName = root + "Configs/" + pGameConfig->Name + ".json";
+			const std::string dataFName = root + "GameData/" + pGameConfig->Name + ".bin";
+			const std::string analysisJsonFName = root + "AnalysisJson/" + pGameConfig->Name + ".json";
+			const std::string saveStateFName = root + "SaveStates/" + pGameConfig->Name + ".state";
+			EnsureDirectoryExists(std::string(root + "Configs").c_str());
+			EnsureDirectoryExists(std::string(root + "GameData").c_str());
+			EnsureDirectoryExists(std::string(root + "AnalysisJson").c_str());
+			EnsureDirectoryExists(std::string(root + "SaveStates").c_str());
+
+			// set config values
+			for (int i = 0; i < FCodeAnalysisState::kNoViewStates; i++)
+			{
+				const FCodeAnalysisViewState& viewState = CodeAnalysis.ViewState[i];
+				FCodeAnalysisViewConfig& viewConfig = pGameConfig->ViewConfigs[i];
+
+				viewConfig.bEnabled = viewState.Enabled;
+				viewConfig.ViewAddress = viewState.GetCursorItem() ? viewState.GetCursorItem()->Address : 0;
+			}
+
+			SaveGameConfigToFile(*pGameConfig, configFName.c_str());
+#if SPECCY			
+			// The Future
+			SaveGameState(this, saveStateFName.c_str());
+#endif // #if SPECCY
+			ExportGameJson(this, analysisJsonFName.c_str());
+		}
+	}
+
+	// TODO: get this working?
+#if	SAVE_ROM_JSON
+	const std::string romJsonFName = root + kRomInfoJsonFile;
+	ExportROMJson(CodeAnalysis, romJsonFName.c_str());
+#endif
 }
 
 void FCpcEmu::DrawFileMenu()
@@ -738,9 +982,9 @@ void FCpcEmu::DrawFileMenu()
 				{
 					if (GamesList.LoadGame(gameNo))
 					{
-						/*FGameConfig *pNewConfig = CreateNewGameConfigFromSnapshot(game);
+						FGameConfig *pNewConfig = CreateNewGameConfigFromSnapshot(game);
 						if(pNewConfig != nullptr)
-							StartGame(pNewConfig);*/
+							StartGame(pNewConfig);
 					}
 				}
 			}
@@ -750,23 +994,25 @@ void FCpcEmu::DrawFileMenu()
 
 		if (ImGui::BeginMenu("Open Game"))
 		{
-			/*for (const auto& pGameConfig : GetGameConfigs())
+			for (const auto& pGameConfig : GetGameConfigs())
 			{
 				if (ImGui::MenuItem(pGameConfig->Name.c_str()))
 				{
 					const std::string snapFolder = GetGlobalConfig().SnapshotFolder;
 					const std::string gameFile = snapFolder + pGameConfig->SnapshotFile;
-
+//#if SPECCY
 					if(GamesList.LoadGame(gameFile.c_str()))
 					{
 						StartGame(pGameConfig);
 					}
+//#endif
 				}
-			}*/
+			}
 
 			ImGui::EndMenu();
 		}
 
+		// todo remove?
 		if (ImGui::MenuItem("Save Game Data"))
 		{
 			//SaveCurrentGameData();
@@ -853,7 +1099,7 @@ void FCpcEmu::DrawOptionsMenu()
 {
 	if (ImGui::BeginMenu("Options"))
 	{
-		/*FGlobalConfig& config = GetGlobalConfig();
+		FGlobalConfig& config = GetGlobalConfig();
 
 		if (ImGui::BeginMenu("Number Mode"))
 		{
@@ -891,12 +1137,14 @@ void FCpcEmu::DrawOptionsMenu()
 
 			ImGui::EndMenu();
 		}
+#if SPECCY
 		ImGui::MenuItem("Scan Line Indicator", 0, &config.bShowScanLineIndicator);
 		ImGui::MenuItem("Enable Audio", 0, &config.bEnableAudio);
 		ImGui::MenuItem("Edit Mode", 0, &CodeAnalysis.bAllowEditing);
-		ImGui::MenuItem("Show Opcode Values", 0, &CodeAnalysis.Config.bShowOpcodeValues);
 		if(pActiveGame!=nullptr)
-			ImGui::MenuItem("Save Snapshot with game", 0, &pActiveGame->pConfig->WriteSnapshot);*/
+			ImGui::MenuItem("Save Snapshot with game", 0, &pActiveGame->pConfig->WriteSnapshot);
+#endif
+		ImGui::MenuItem("Show Opcode Values", 0, &CodeAnalysis.Config.bShowOpcodeValues);
 
 #ifndef NDEBUG
 		ImGui::MenuItem("ImGui Demo", 0, &bShowImGuiDemo);
@@ -938,11 +1186,11 @@ void FCpcEmu::DrawWindowsMenu()
 			ImGui::EndMenu();
 		}
 
-		/*for (auto Viewer : Viewers)
+		for (auto Viewer : Viewers)
 		{
 			ImGui::MenuItem(Viewer->GetName(), 0, &Viewer->bOpen);
 
-		}*/
+		}
 		ImGui::EndMenu();
 	}
 }
@@ -1131,15 +1379,44 @@ void FCpcEmu::DrawUI()
 	ui_am40010_draw(&pCPCUI->ga);
 	ui_mc6845_draw(&pCPCUI->vdc);
 
+	// Draw registered viewers
+	for (auto Viewer : Viewers)
+	{
+		if (Viewer->bOpen)
+		{
+			if (ImGui::Begin(Viewer->GetName(), &Viewer->bOpen))
+				Viewer->DrawUI();
+			ImGui::End();
+		}
+	}
+
 	if (ImGui::Begin("CPC View"))
 	{
 		CpcViewer.Draw();
 	}
 	ImGui::End();
 
+	if (ImGui::Begin("Call Stack"))
+	{
+		DrawStackInfo(CodeAnalysis);
+	}
+	ImGui::End();
+
 	if (ImGui::Begin("Trace"))
 	{
 		DrawTrace(CodeAnalysis);
+	}
+	ImGui::End();
+
+	if (ImGui::Begin("Registers"))
+	{
+		DrawRegisters(CodeAnalysis);
+	}
+	ImGui::End();
+
+	if (ImGui::Begin("Watches"))
+	{
+		DrawWatchWindow(CodeAnalysis);
 	}
 	ImGui::End();
 	/*if (ImGui::Begin("Frame Trace"))

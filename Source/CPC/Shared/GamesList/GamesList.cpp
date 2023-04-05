@@ -35,3 +35,8 @@ bool FGamesList::LoadGame(int index) const
 
 	return pGameLoader->LoadGame(GamesList[index].FileName.c_str());
 }
+
+bool FGamesList::LoadGame(const char* pFileName) const
+{
+	return pGameLoader->LoadGame(pFileName);
+}
