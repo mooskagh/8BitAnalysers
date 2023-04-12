@@ -26,9 +26,7 @@ bool LoadSNAFileCached(FCpcEmu* pEmu, const char* fName, uint8_t*& pData , size_
 		if (!pData)
 			return false;
 	}
-	const bool bSuccess = LoadSNAFromMemory(pEmu, pData, dataSize);
-
-	return bSuccess;
+	return LoadSNAFromMemory(pEmu, pData, dataSize);
 }
 
 bool LoadSNAFromMemory(FCpcEmu * pEmu, const uint8_t * pData, size_t dataSize)

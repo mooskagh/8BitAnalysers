@@ -19,6 +19,7 @@ public:
 	void SetCachingEnabled(bool bEnabled);
 	void ClearCache();
 
+private:
 	FCpcEmu* pCpcEmu = 0;
 
 	bool bCachingEnabled = false;

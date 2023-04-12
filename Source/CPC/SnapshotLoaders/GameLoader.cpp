@@ -37,6 +37,8 @@ bool FCpcGameLoader::LoadGame(const char* pFileName)
 
 			if (bOk)
 				CachedFilename = pFileName;
+			else
+				ClearCache();
 		}
 		else
 		{
