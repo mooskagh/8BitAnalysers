@@ -577,6 +577,11 @@ bool FCpcEmu::Init(const FCpcConfig& config)
 	GameLoader.Init(this);
 	GamesList.Init(&GameLoader);
 	GamesList.EnumerateGames(globalConfig.SnapshotFolder.c_str());
+	
+	// Turn caching on for the game loader. This means that if the same game is loaded more than once
+	// the second time will involve no disk i/o.
+	// We use this so we can quickly restore the game state after running ahead to generate the frame buffer in StartGame().
+	GameLoader.SetCachingEnabled(true);
 
 	//cpc_type_t type = CPC_TYPE_464;
 	cpc_type_t type = CPC_TYPE_6128;
@@ -759,7 +764,6 @@ void FCpcEmu::Shutdown()
 	SaveGlobalConfig(kGlobalConfigFilename);
 }
 
-
 void FCpcEmu::StartGame(FGameConfig* pGameConfig)
 {
 	MemoryAccessHandlers.clear();	// remove old memory handlers
@@ -829,75 +833,18 @@ void FCpcEmu::StartGame(FGameConfig* pGameConfig)
 #endif
 	CodeAnalysis.SetCodeAnalysisDirty();
 
-#if SPECCY
+	// Run the cpc for long enough to generate a frame buffer. Otherwise the user will be staring at a black screen.
+	cpc_exec(&CpcEmuState, 64000);
+
+	ImGui_UpdateTextureRGBA(Texture, FrameBuffer);
+
+	// Load the game again to restore the cpc state.
+	const std::string snapFolder = GetGlobalConfig().SnapshotFolder;
+	const std::string gameFile = snapFolder + pGameConfig->SnapshotFile;
+	GamesList.LoadGame(gameFile.c_str());
 
 	// Start in break mode so the memory will be in it's initial state. 
-	// Otherwise, if we export a skool/asm file once the game is running the memory could be in an arbitrary state.
-	// 
-	// decode whole screen
-	const int oldScanlineVal = ZXEmuState.scanline_y;
-	ZXEmuState.scanline_y = 0;
-	for (int i = 0; i < ZXEmuState.frame_scan_lines; i++)
-	{
-		_zx_decode_scanline(&ZXEmuState);
-	}
-	ZXEmuState.scanline_y = oldScanlineVal;
-	ImGui_UpdateTextureRGBA(Texture, FrameBuffer);
-#endif
-
-	/*
-	int dst_x = ga->crt.pos_x * 16;
-	int dst_y = ga->crt.pos_y;
-	bool black = ga->video.sync;
-	uint32_t* dst = &ga->rgba8_buffer[dst_x + dst_y * AM40010_DISPLAY_WIDTH];
-	//if (crtc_pins & AM40010_DE) 
-	{
-		_am40010_decode_pixels(ga, dst, crtc_pins);
-	}
-	else if (black) 
-	{
-		for (int i = 0; i < 16; i++) 
-		{
-			*dst++ = 0xFF000000;
-		}
-	}
-	else 
-	{
-		uint32_t brd = ga->colors.border_rgba8;
-		for (int i = 0; i < 16; i++) 
-		{
-			*dst++ = brd;
-		}
-	}*/
-
-	/*CpcEmuState.ga.crt.visible = true;
-	_am40010_decode_video(&CpcEmuState.ga, 1);
-	_am40010_decode_video(&CpcEmuState.ga, 2);
-	_am40010_decode_video(&CpcEmuState.ga, 3);
-	_am40010_decode_video(&CpcEmuState.ga, 4);
-	_am40010_decode_video(&CpcEmuState.ga, 5);
-	_am40010_decode_video(&CpcEmuState.ga, 6);
-	_am40010_decode_video(&CpcEmuState.ga, 7);
-	_am40010_decode_video(&CpcEmuState.ga, 8);
-	_am40010_decode_video(&CpcEmuState.ga, 9);
-	_am40010_decode_video(&CpcEmuState.ga, 10);
-	_am40010_decode_video(&CpcEmuState.ga, 11);
-	_am40010_decode_video(&CpcEmuState.ga, 12);
-	_am40010_decode_video(&CpcEmuState.ga, 13);
-	_am40010_decode_video(&CpcEmuState.ga, 14);
-	_am40010_decode_video(&CpcEmuState.ga, 15);
-	_am40010_decode_video(&CpcEmuState.ga, 16);
-	_am40010_decode_video(&CpcEmuState.ga, 17);
-	_am40010_decode_video(&CpcEmuState.ga, 18);
-	_am40010_decode_video(&CpcEmuState.ga, 19);
-	_am40010_decode_video(&CpcEmuState.ga, 20);
-	_am40010_decode_video(&CpcEmuState.ga, 21);
-	_am40010_decode_video(&CpcEmuState.ga, 22);
-	*/
-	/*
-	*/
-	ImGui_UpdateTextureRGBA(Texture, FrameBuffer);
-
+	// Otherwise, if we export an asm file once the game is running the memory could be in an arbitrary state.
 	Break();
 }
 
@@ -909,6 +856,7 @@ bool FCpcEmu::StartGame(const char* pGameName)
 		{
 			const std::string snapFolder = GetGlobalConfig().SnapshotFolder;
 			const std::string gameFile = snapFolder + pGameConfig->SnapshotFile;
+			
 			if (GamesList.LoadGame(gameFile.c_str()))
 			{
 				StartGame(pGameConfig);
@@ -1000,12 +948,11 @@ void FCpcEmu::DrawFileMenu()
 				{
 					const std::string snapFolder = GetGlobalConfig().SnapshotFolder;
 					const std::string gameFile = snapFolder + pGameConfig->SnapshotFile;
-//#if SPECCY
+
 					if(GamesList.LoadGame(gameFile.c_str()))
 					{
 						StartGame(pGameConfig);
 					}
-//#endif
 				}
 			}
 
@@ -1015,7 +962,7 @@ void FCpcEmu::DrawFileMenu()
 		// todo remove?
 		if (ImGui::MenuItem("Save Game Data"))
 		{
-			//SaveCurrentGameData();
+			SaveCurrentGameData();
 		}
 		if (ImGui::MenuItem("Export Binary File"))
 		{
@@ -1309,7 +1256,6 @@ void FCpcEmu::Tick()
 	if (ExecThisFrame)
 	{
 		const float frameTime = std::min(1000000.0f / ImGui::GetIO().Framerate, 32000.0f) * ExecSpeedScale;
-		//const float frameTime = min(1000000.0f / 50, 32000.0f) * ExecSpeedScale;
 		const uint32_t microSeconds = std::max(static_cast<uint32_t>(frameTime), uint32_t(1));
 
 		// TODO: Start frame method in analyser

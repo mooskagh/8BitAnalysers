@@ -4,6 +4,21 @@
 #include <string>
 #include <algorithm>
 
+void FCpcGameLoader::SetCachingEnabled(bool bEnabled)
+{
+	ClearCache();
+	bCachingEnabled = bEnabled;
+}
+
+void FCpcGameLoader::ClearCache()
+{
+	if (pDataCache) 
+		free(pDataCache);
+	pDataCache = nullptr;
+	CachedFilename = "";
+	CachedDataSize = 0;
+}
+
 bool FCpcGameLoader::LoadGame(const char* pFileName)
 {
 	const std::string fn(pFileName);
@@ -11,7 +26,27 @@ bool FCpcGameLoader::LoadGame(const char* pFileName)
 	switch (GetSnapshotTypeFromFileName(fn))
 	{
 	case ESnapshotType::SNA:
-		return LoadSNAFile(pCpcEmu, pFileName);
+	{
+		bool bOk = false;
+		if (bCachingEnabled)
+		{
+			if (CachedFilename != pFileName)
+				ClearCache();
+
+			bOk = LoadSNAFileCached(pCpcEmu, pFileName, pDataCache, CachedDataSize);
+
+			if (bOk)
+				CachedFilename = pFileName;
+			else
+				ClearCache();
+		}
+		else
+		{
+			bOk = LoadSNAFile(pCpcEmu, pFileName);
+		}
+		return bOk;
+	}
+
 	default: return false;
 	}
 }
