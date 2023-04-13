@@ -18,9 +18,10 @@ using json = nlohmann::json;
 
 // We want to eventually move to using Json as it will allow merging 
 void WriteAddressRangeToJson(FCodeAnalysisState& state, int startAddress, int endAddress, json& jsonDoc);
-void WriteBankToJson(const FCpcEmu* pCpcEmu, int bankNo, json& jsonDoc);
+void WritePageToJson(const FCodeAnalysisPage& page, json& jsonDoc);
 void ReadBankFromJson(FCpcEmu* pCpcEmu, int bankNo, const json& jsonDoc);
 
+#if SPECCY
 // todo this wont work on cpc
 bool ExportROMJson(FCodeAnalysisState& state, const char* pJsonFileName)
 {
@@ -37,20 +38,14 @@ bool ExportROMJson(FCodeAnalysisState& state, const char* pJsonFileName)
 
 	return false;
 }
+#endif
 
-#define WRITE_BANKS 0
+#define WRITE_PAGES 1
 
 bool ExportGameJson(FCpcEmu* pCpcEmu, const char* pJsonFileName)
 {
 	FCodeAnalysisState& state = pCpcEmu->CodeAnalysis;
 	json jsonGameData;
-
-	// todo this wont work on cpc
-	// write out RAM
-	const int startAddress = 0x4000;
-	const int endAddress = 0xffff;
-
-	WriteAddressRangeToJson(state, startAddress, endAddress, jsonGameData);
 
 	// Write watches
 	for (const auto& watch : state.GetWatches())
@@ -90,20 +85,28 @@ bool ExportGameJson(FCpcEmu* pCpcEmu, const char* pJsonFileName)
 	}
 #endif
 
-	// todo I presume we need this?
-
-	// Write banks
-#if WRITE_BANKS
-	for (int bankNo = 0; bankNo < 8; bankNo++)
+#if WRITE_PAGES
+	int pagesWritten = 0;
+	for (int pageNo = 0; pageNo < FCpcEmu::kNoRAMPages; pageNo++)
 	{
-		json bankData;
-		if (pCpcEmu->RAMPages[bankNo * FCpcEmu::kNoBankPages].bUsed)
+		FCodeAnalysisPage& page = pCpcEmu->RAMPages[pageNo];
+		if (page.bUsed)
 		{
-			LOGINFO("Bank %d has been used", bankNo);
-		}
+			json pageData;
 
-		jsonGameData["Banks"].push_back(bankData);
+			WritePageToJson(page, pageData);
+			jsonGameData["Pages"].push_back(pageData);
+			pagesWritten++;
+		}
 	}
+
+	LOGINFO("%d pages written", pagesWritten);
+#else
+	// write out RAM
+	const int startAddress = 0x4000;
+	const int endAddress = 0xffff;
+
+	WriteAddressRangeToJson(state, startAddress, endAddress, jsonGameData);
 #endif
 
 	// Write file out
@@ -175,10 +178,10 @@ void WriteCodeInfoToJson(const FCodeInfo* pCodeInfoItem, json& jsonDoc, int addr
 	jsonDoc["CodeInfo"].push_back(codeInfoJson);
 }
 
-void WriteLabelInfoToJson(const FLabelInfo* pLabelInfo, json& jsonDoc, int addressOverride = -1)
+void WriteLabelInfoToJson(uint16_t addr, const FLabelInfo* pLabelInfo, json& jsonDoc, int addressOverride = -1)
 {
 	json labelInfoJson;
-	labelInfoJson["Address"] = addressOverride == -1 ? pLabelInfo->Address : addressOverride;
+	labelInfoJson["Address"] = addressOverride == -1 ? addr : addressOverride;
 	labelInfoJson["Name"] = pLabelInfo->Name;
 	if (pLabelInfo->Global)
 		labelInfoJson["Global"] = pLabelInfo->Global;
@@ -192,18 +195,19 @@ void WriteLabelInfoToJson(const FLabelInfo* pLabelInfo, json& jsonDoc, int addre
 	jsonDoc["LabelInfo"].push_back(labelInfoJson);
 }
 
-void WriteCommentBlockToJson(const FCommentBlock* pCommentBlock, json& jsonDoc, int addressOverride = -1)
+void WriteCommentBlockToJson(uint16_t addr, const FCommentBlock* pCommentBlock, json& jsonDoc, int addressOverride = -1)
 {
 	if (pCommentBlock->Comment.empty())
 		return;
 
 	json commentBlockJson;
-	commentBlockJson["Address"] = addressOverride == -1 ? pCommentBlock->Address : addressOverride;
+	commentBlockJson["Address"] = addressOverride == -1 ? addr : addressOverride;
 	commentBlockJson["Comment"] = pCommentBlock->Comment;
 
 	jsonDoc["CommentBlocks"].push_back(commentBlockJson);
 }
 
+#ifndef WRITE_PAGES
 void WriteAddressRangeToJson(FCodeAnalysisState& state, int startAddress,int endAddress, json& jsonDoc)
 {
 	int address = startAddress;
@@ -240,6 +244,7 @@ void WriteAddressRangeToJson(FCodeAnalysisState& state, int startAddress,int end
 		}
 	}
 }
+#endif // #ifndef WRITE_PAGES
 
 
 FCommentBlock* CreateCommentBlockFromJson(const json& commentBlockJson)
@@ -441,46 +446,41 @@ bool ImportAnalysisJson(FCodeAnalysisState& state, const char* pJsonFileName)
 	return true;
 }
 
-// write a 16K bank to Json
+// write a 1K page to Json
 // the plan is to move to this so we can support 128K games
-void WriteBankToJson(const FCpcEmu* pCpcEmu, int bankNo, json& jsonDoc)
+void WritePageToJson(const FCodeAnalysisPage& page, json& jsonDoc)
 {
-	const int bankPage = bankNo * 16;
-	uint16_t bankAddr = 0;
+	jsonDoc["PageId"] = page.PageId;
 
-	while (bankAddr <= 0x4000)
+	int pageAddr = 0;
+
+	while (pageAddr < FCodeAnalysisPage::kPageSize)
 	{
-		const uint16_t curPageNo = bankPage + (bankAddr / 1024);
-		const FCodeAnalysisPage& curPage = pCpcEmu->RAMPages[curPageNo];
-		const uint16_t pageAddr = bankAddr & 1023;
-
-		const FCommentBlock* pCommentBlock = curPage.CommentBlocks[pageAddr];
+		const FCommentBlock* pCommentBlock = page.CommentBlocks[pageAddr];
 		if (pCommentBlock != nullptr)
-			WriteCommentBlockToJson(pCommentBlock, jsonDoc, bankAddr);
+			WriteCommentBlockToJson(pageAddr, pCommentBlock, jsonDoc);
 
-		const FLabelInfo* pLabelInfo = curPage.Labels[pageAddr];
+		const FLabelInfo* pLabelInfo = page.Labels[pageAddr];
 		if (pLabelInfo)
-			WriteLabelInfoToJson(pLabelInfo, jsonDoc, bankAddr);
+			WriteLabelInfoToJson(pageAddr, pLabelInfo, jsonDoc);
 
-		const FCodeInfo* pCodeInfoItem = curPage.CodeInfo[pageAddr];
-		if (pCodeInfoItem && pCodeInfoItem->Address == curPage.BaseAddress + pageAddr)	// only write code items for first byte of the instruction
+		const FCodeInfo* pCodeInfoItem = page.CodeInfo[pageAddr];
+		if (pCodeInfoItem)
 		{
-			WriteCodeInfoToJson(pCodeInfoItem, jsonDoc, bankAddr);
-
-			if (pCodeInfoItem->bSelfModifyingCode == false)	// this is so that we can write info on SMC accesses
-				bankAddr += pCodeInfoItem->ByteSize;
+			WriteCodeInfoToJson(pCodeInfoItem, jsonDoc);
+			if (pCodeInfoItem->bSelfModifyingCode == false)
+			{
+				pageAddr += pCodeInfoItem->ByteSize;
+			}
 		}
 
-		if (pCodeInfoItem == nullptr || pCodeInfoItem->bSelfModifyingCode)
+		// we do want data info for SMC operands
+		if (pCodeInfoItem == nullptr || pCodeInfoItem->bSelfModifyingCode == true)
 		{
-			const FDataInfo* pDataInfo = &curPage.DataInfo[pageAddr];
-			WriteDataInfoToJson(pDataInfo, jsonDoc, bankAddr);
-			bankAddr += pDataInfo->ByteSize;
+			const FDataInfo* pDataInfo = &page.DataInfo[pageAddr];
+			WriteDataInfoToJson(pDataInfo, jsonDoc);
+			pageAddr += pDataInfo->ByteSize;
 		}
-
-		// one entry for each address in bank
-		jsonDoc["LastWriter"].push_back(curPage.LastWriter[pageAddr]);
-
 	}
 }
 
