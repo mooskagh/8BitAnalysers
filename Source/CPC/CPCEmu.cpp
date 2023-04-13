@@ -33,6 +33,7 @@ const std::string kAppTitle = "CPC Analyser";
 
 const char* kGlobalConfigFilename = "GlobalConfig.json";
 
+void StoreRegisters_Z80(FCodeAnalysisState& state);
 
 /* output an unsigned 8-bit value as hex string */
 void DasmOutputU8(uint8_t val, z80dasm_output_t out_cb, void* user_data) 
@@ -833,12 +834,14 @@ void FCpcEmu::StartGame(FGameConfig* pGameConfig)
 #endif
 	CodeAnalysis.SetCodeAnalysisDirty();
 
-	// Run the cpc for long enough to generate a frame buffer. Otherwise the user will be staring at a black screen.
-	cpc_exec(&CpcEmuState, 64000);
+	// Run the cpc for long enough to generate a frame buffer, otherwise the user will be staring at a black screen.
+	// todo: run for exactly 1 video frame. The current technique is crude and can render >1 frame, including partial frames and produce 
+	// a glitch when continuing execution.
+	cpc_exec(&CpcEmuState, 48000);
 
 	ImGui_UpdateTextureRGBA(Texture, FrameBuffer);
 
-	// Load the game again to restore the cpc state.
+	// Load the game again (from memory - it should be cached) to restore the cpc state.
 	const std::string snapFolder = GetGlobalConfig().SnapshotFolder;
 	const std::string gameFile = snapFolder + pGameConfig->SnapshotFile;
 	GamesList.LoadGame(gameFile.c_str());
@@ -1261,6 +1264,8 @@ void FCpcEmu::Tick()
 		// TODO: Start frame method in analyser
 		CodeAnalysis.FrameTrace.clear();
 		
+		StoreRegisters_Z80(CodeAnalysis);
+
 		cpc_exec(&CpcEmuState, microSeconds);
 		
 		ImGui_UpdateTextureRGBA(Texture, FrameBuffer);
