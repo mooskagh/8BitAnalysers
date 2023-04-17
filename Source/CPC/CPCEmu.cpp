@@ -340,10 +340,9 @@ void gfx_destroy_texture(void* h)
 /* audio-streaming callback */
 static void PushAudio(const float* samples, int num_samples, void* user_data)
 {
-	// todo
-	//FCPCEmu* pEmu = (FCPCEmu*)user_data;
-	//if(GetGlobalConfig().bEnableAudio)
-	//	saudio_push(samples, num_samples);
+	FCpcEmu* pEmu = (FCpcEmu*)user_data;
+	if(GetGlobalConfig().bEnableAudio)
+		saudio_push(samples, num_samples);
 }
 
 int CPCTrapCallback(uint16_t pc, int ticks, uint64_t pins, void* user_data)
@@ -837,6 +836,7 @@ void FCpcEmu::StartGame(FGameConfig* pGameConfig)
 	// Run the cpc for long enough to generate a frame buffer, otherwise the user will be staring at a black screen.
 	// todo: run for exactly 1 video frame. The current technique is crude and can render >1 frame, including partial frames and produce 
 	// a glitch when continuing execution.
+	// todo mute audio so we don't hear a frame of audio
 	cpc_exec(&CpcEmuState, 48000);
 
 	ImGui_UpdateTextureRGBA(Texture, FrameBuffer);
@@ -1087,9 +1087,10 @@ void FCpcEmu::DrawOptionsMenu()
 
 			ImGui::EndMenu();
 		}
+
+		ImGui::MenuItem("Enable Audio", 0, &config.bEnableAudio);
 #if SPECCY
 		ImGui::MenuItem("Scan Line Indicator", 0, &config.bShowScanLineIndicator);
-		ImGui::MenuItem("Enable Audio", 0, &config.bEnableAudio);
 		ImGui::MenuItem("Edit Mode", 0, &CodeAnalysis.bAllowEditing);
 		if(pActiveGame!=nullptr)
 			ImGui::MenuItem("Save Snapshot with game", 0, &pActiveGame->pConfig->WriteSnapshot);
@@ -1311,10 +1312,12 @@ void FCpcEmu::DrawUI()
 	// Draw the main menu
 	DrawMainMenu(timeMS);
 
-	/*if (pCPCUI->memmap.open)
+	if (pCPCUI->memmap.open)
 	{
-		UpdateMemmap(pCPCUI);
-	}*/
+		// todo work out why SpectrumEmu.cpp has it's own version of UpdateMemmap()
+		// why didn't Mark call _ui_zx_update_memmap()?
+		//UpdateMemmap(pCPCUI);
+	}
 
 	if (pCPCUI->memmap.open) 
 	{
