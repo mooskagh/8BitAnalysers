@@ -6,7 +6,8 @@
 #include <Util/Misc.h>
 #include <CodeAnalyser/CodeAnalyser.h>
 
-struct FCodeAnalysisState;
+class FCodeAnalysisState;
+
 #if SPECCY
 struct FGameViewerData;
 #endif
@@ -52,7 +53,7 @@ struct FViewerConfig
 struct FCodeAnalysisViewConfig
 {
 	bool		bEnabled = false;
-	uint16_t	ViewAddress = 0;
+	FAddressRef	ViewAddress;
 };
 
 struct FGameConfig
@@ -64,6 +65,7 @@ struct FGameConfig
 
 	std::string		Name;
 	std::string		SnapshotFile;
+	bool			Cpc6128Game = false;
 	bool			WriteSnapshot = false;
 
 #if SPECCY

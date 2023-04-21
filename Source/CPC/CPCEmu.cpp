@@ -18,9 +18,12 @@ void DasmOutputD8(int8_t val, z80dasm_output_t out_cb, void* user_data);
 
 #include "GlobalConfig.h"
 #include "GameConfig.h"
-#include "Exporters/JsonExport.h"
 #include "Util/FileUtil.h"
 #include "CodeAnalyser/UI/CodeAnalyserUI.h"
+#include <CodeAnalyser/CodeAnalysisState.h>
+#include "CodeAnalyser/CodeAnalysisJson.h"
+#include "Debug/DebugLog.h"
+
 #include "App.h"
 #include "Viewers/BreakpointViewer.h"
 
@@ -60,144 +63,9 @@ void DasmOutputD8(int8_t val, z80dasm_output_t out_cb, void* user_data)
 		pNumberOutput->OutputD8(val, out_cb);
 }
 
-uint8_t MemReadFunc(int layer, uint16_t addr, void* user_data)
-{
-	cpc_t* cpc = (cpc_t*) user_data;
-    //cpc_t* cpc = ui_cpc->cpc;
-    if (layer == _UI_CPC_MEMLAYER_CPU) {
-        /* CPU mapped RAM layer */
-        return mem_rd(&cpc->mem, addr);
-    }
-    else {
-        uint8_t* ptr = _ui_cpc_memptr(cpc, layer, addr);
-        if (ptr) {
-            return *ptr;
-        }
-        else {
-            return 0xFF;
-        }
-    }
-}
-
-const uint8_t* FCpcEmu::GetMemPtr(uint16_t address) const 
-{
-	// this logic is from the Speccy so might not work on the cpc
-	// todo: deal with 464/6128 differences
-
-	const int bank = address >> 14;
-	const int bankAddr = address & 0x3fff;
-
-	return &CpcEmuState.ram[bank][bankAddr];
-}
-
-uint8_t	FCpcEmu::ReadByte(uint16_t address) const
-{
-	return MemReadFunc(CurrentLayer, address, const_cast<cpc_t *>(&CpcEmuState));
-
-}
-uint16_t FCpcEmu::ReadWord(uint16_t address) const 
-{
-	return ReadByte(address) | (ReadByte(address + 1) << 8);
-}
-
-void* FCpcEmu::GetCPUEmulator(void)
-{
-	return &CpcEmuState.cpu;
-}
-
-uint16_t FCpcEmu::GetPC(void) 
-{
-	return z80_pc(&CpcEmuState.cpu);
-} 
-
-uint16_t FCpcEmu::GetSP(void)
-{
-	return z80_sp(&CpcEmuState.cpu);
-}
-
-void FCpcEmu::Break(void)
-{
-	_ui_dbg_break(&UICpc.dbg);
-}
-
-void FCpcEmu::Continue(void) 
-{
-	_ui_dbg_continue(&UICpc.dbg);
-}
-
-void FCpcEmu::StepOver(void)
-{
-	_ui_dbg_step_over(&UICpc.dbg);
-}
-
-void FCpcEmu::StepInto(void)
-{
-	_ui_dbg_step_into(&UICpc.dbg);
-}
-
-void FCpcEmu::StepFrame()
-{
-	_ui_dbg_continue(&UICpc.dbg);
-	bStepToNextFrame = true;
-}
-
-bool FCpcEmu::IsAddressBreakpointed(uint16_t addr)
-{
-	for (int i = 0; i < UICpc.dbg.dbg.num_breakpoints; i++)
-	{
-		if (UICpc.dbg.dbg.breakpoints[i].addr == addr)
-			return true;
-	}
-
-	return false;
-}
-
-bool FCpcEmu::ToggleExecBreakpointAtAddress(uint16_t addr)
-{
-	int index = _ui_dbg_bp_find(&UICpc.dbg, UI_DBG_BREAKTYPE_EXEC, addr);
-	if (index >= 0)
-	{
-		/* breakpoint already exists, remove */
-		_ui_dbg_bp_del(&UICpc.dbg, index);
-		return false;
-	}
-	else
-	{
-		/* breakpoint doesn't exist, add a new one */
-		return _ui_dbg_bp_add_exec(&UICpc.dbg, true, addr);
-	}
-}
-
-bool FCpcEmu::ToggleDataBreakpointAtAddress(uint16_t addr, uint16_t dataSize)
-{
-	const int type = dataSize == 1 ? UI_DBG_BREAKTYPE_BYTE : UI_DBG_BREAKTYPE_WORD;
-	int index = _ui_dbg_bp_find(&UICpc.dbg, type, addr);
-	if (index >= 0)
-	{
-		// breakpoint already exists, remove 
-		_ui_dbg_bp_del(&UICpc.dbg, index);
-		return false;
-	}
-	else
-	{
-		// breakpoint doesn't exist, add a new one 
-		if (UICpc.dbg.dbg.num_breakpoints < UI_DBG_MAX_BREAKPOINTS)
-		{
-			ui_dbg_breakpoint_t* bp = &UICpc.dbg.dbg.breakpoints[UICpc.dbg.dbg.num_breakpoints++];
-			bp->type = type;
-			bp->cond = UI_DBG_BREAKCOND_NONEQUAL;
-			bp->addr = addr;
-			bp->val = ReadByte(addr);
-			bp->enabled = true;
-			return true;
-		}
-		else
-		{
-			return false;
-		}
-	}
-}
-
+#if 0
+// sam. this was taken from  _ui_cpc_memptr()
+// do we need to replace it somehow?
 // Memory access functions
 uint8_t* MemGetPtr(cpc_t* cpc, int layer, uint16_t addr)
 {
@@ -267,6 +135,25 @@ uint8_t* MemGetPtr(cpc_t* cpc, int layer, uint16_t addr)
 	return 0;
 }
 
+uint8_t MemReadFunc(int layer, uint16_t addr, void* user_data)
+{
+	cpc_t* cpc = (cpc_t*) user_data;
+    //cpc_t* cpc = ui_cpc->cpc;
+    if (layer == _UI_CPC_MEMLAYER_CPU) {
+        /* CPU mapped RAM layer */
+        return mem_rd(&cpc->mem, addr);
+    }
+    else {
+        uint8_t* ptr = _ui_cpc_memptr(cpc, layer, addr);
+        if (ptr) {
+            return *ptr;
+        }
+        else {
+            return 0xFF;
+        }
+    }
+}
+
 void MemWriteFunc(int layer, uint16_t addr, uint8_t data, void* user_data)
 {
 	cpc_t* cpc = (cpc_t*)user_data;
@@ -283,10 +170,169 @@ void MemWriteFunc(int layer, uint16_t addr, uint8_t data, void* user_data)
 		}
 	}
 }
+#endif
+
+
+uint8_t	FCpcEmu::ReadByte(uint16_t address) const
+{
+	return mem_rd(const_cast<mem_t*>(&CpcEmuState.mem), address);
+	//return MemReadFunc(CurrentLayer, address, const_cast<cpc_t *>(&CpcEmuState));
+
+}
+uint16_t FCpcEmu::ReadWord(uint16_t address) const 
+{
+	return ReadByte(address) | (ReadByte(address + 1) << 8);
+}
+
+const uint8_t* FCpcEmu::GetMemPtr(uint16_t address) const 
+{
+	const int bank = address >> 14;
+	const int bankAddr = address & 0x3fff;
+
+	return &CpcEmuState.ram[bank][bankAddr];
+
+	// todo figure this out
+#if SPECCY
+	if (CpcEmuState.type == CPC_TYPE_464)
+	{
+		// this logic is from the Speccy so wont work on the cpc
+	
+		const int bank = address >> 14;
+		const int bankAddr = address & 0x3fff;
+
+		if (bank == 0)
+			return &CpcEmuState.rom[0][bankAddr];
+		else
+			return &CpcEmuState.ram[bank - 1][bankAddr];
+	}
+	else
+	{
+		const uint8_t memConfig = CpcEmuState.last_mem_config; // last mem config doesn't exist on cpc
+
+		if (address < 0x4000)
+			return &ZXEmuState.rom[(memConfig & (1 << 4)) ? 1 : 0][address];
+		else if (address < 0x8000)
+			return &ZXEmuState.ram[5][address - 0x4000];
+		else if (address < 0xC000)
+			return &ZXEmuState.ram[2][address - 0x8000];
+		else
+			return &ZXEmuState.ram[memConfig & 7][address - 0xC000];
+	}
+#endif
+}
 
 void FCpcEmu::WriteByte(uint16_t address, uint8_t value)
 {
-	MemWriteFunc(CurrentLayer, address, value, &CpcEmuState);
+	mem_wr(&CpcEmuState.mem, address, value);
+
+	//MemWriteFunc(CurrentLayer, address, value, &CpcEmuState);
+}
+
+uint16_t FCpcEmu::GetPC(void) 
+{
+	return z80_pc(&CpcEmuState.cpu);
+} 
+
+uint16_t FCpcEmu::GetSP(void)
+{
+	return z80_sp(&CpcEmuState.cpu);
+}
+
+void* FCpcEmu::GetCPUEmulator(void) const
+{
+	return (void*)&CpcEmuState.cpu;
+}
+
+bool FCpcEmu::IsAddressBreakpointed(uint16_t addr)
+{
+	for (int i = 0; i < UICpc.dbg.dbg.num_breakpoints; i++)
+	{
+		if (UICpc.dbg.dbg.breakpoints[i].addr == addr)
+			return true;
+	}
+
+	return false;
+}
+
+bool FCpcEmu::SetExecBreakpointAtAddress(uint16_t addr, bool bSet)
+{
+	const bool bAlreadySet = IsAddressBreakpointed(addr);
+	if (bAlreadySet == bSet)
+		return false;
+
+	if (bSet)
+	{
+		_ui_dbg_bp_add_exec(&UICpc.dbg, true, addr);
+	}
+	else
+	{
+		const int index = _ui_dbg_bp_find(&UICpc.dbg, UI_DBG_BREAKTYPE_EXEC, addr);
+		/* breakpoint already exists, remove */
+		assert(index >= 0);
+		_ui_dbg_bp_del(&UICpc.dbg, index);
+	}
+
+	return true;
+}
+
+bool FCpcEmu::SetDataBreakpointAtAddress(uint16_t addr, uint16_t dataSize, bool bSet)
+{
+	const bool bAlreadySet = IsAddressBreakpointed(addr);
+	if (bAlreadySet == bSet)
+		return false;
+	const int type = dataSize == 1 ? UI_DBG_BREAKTYPE_BYTE : UI_DBG_BREAKTYPE_WORD;
+
+	if (bSet)
+	{
+		// breakpoint doesn't exist, add a new one 
+		if (UICpc.dbg.dbg.num_breakpoints < UI_DBG_MAX_BREAKPOINTS)
+		{
+			ui_dbg_breakpoint_t* bp = &UICpc.dbg.dbg.breakpoints[UICpc.dbg.dbg.num_breakpoints++];
+			bp->type = type;
+			bp->cond = UI_DBG_BREAKCOND_NONEQUAL;
+			bp->addr = addr;
+			bp->val = type == UI_DBG_BREAKTYPE_BYTE ? ReadByte(addr) : ReadWord(addr);
+			bp->enabled = true;
+		}
+		else
+		{
+			return false;
+		}
+	}
+	else
+	{
+		int index = _ui_dbg_bp_find(&UICpc.dbg, type, addr);
+		assert(index >= 0);
+		_ui_dbg_bp_del(&UICpc.dbg, index);
+	}
+
+	return true;
+}
+
+void FCpcEmu::Break(void)
+{
+	_ui_dbg_break(&UICpc.dbg);
+}
+
+void FCpcEmu::Continue(void) 
+{
+	_ui_dbg_continue(&UICpc.dbg);
+}
+
+void FCpcEmu::StepOver(void)
+{
+	_ui_dbg_step_over(&UICpc.dbg);
+}
+
+void FCpcEmu::StepInto(void)
+{
+	_ui_dbg_step_into(&UICpc.dbg);
+}
+
+void FCpcEmu::StepFrame()
+{
+	_ui_dbg_continue(&UICpc.dbg);
+	bStepToNextFrame = true;
 }
 
 void FCpcEmu::StepScreenWrite()
@@ -372,14 +418,14 @@ int	FCpcEmu::TrapFunction(uint16_t pc, int ticks, uint64_t pins)
 	if (irq)
 	{
 		FCPUFunctionCall callInfo;
-		callInfo.CallAddr = prevPC;
-		callInfo.FunctionAddr = pc;
-		callInfo.ReturnAddr = prevPC;
+		callInfo.CallAddr = state.AddressRefFromPhysicalAddress(pc);
+		callInfo.FunctionAddr = state.AddressRefFromPhysicalAddress(pc);
+		callInfo.ReturnAddr = state.AddressRefFromPhysicalAddress(pc);
 		state.CallStack.push_back(callInfo);
 		//return UI_DBG_BP_BASE_TRAPID + 255;	//hack
 	}
 
-	bool bBreak = RegisterCodeExecuted(state, pc, nextpc);
+	const bool bBreak = RegisterCodeExecuted(state, pc, nextpc);
 	//FCodeInfo* pCodeInfo = state.GetCodeInfoForAddress(pc);
 	//pCodeInfo->FrameLastAccessed = state.CurrentFrameNo;
 	// check for breakpointed code line
@@ -461,14 +507,16 @@ uint64_t FCpcEmu::Z80Tick(int num, uint64_t pins)
 		else if (pins & Z80_WR) 
 		{
 			if (state.bRegisterDataAccesses)
-				RegisterDataWrite(state, pc, addr);
+				RegisterDataWrite(state, pc, addr, value);
+			const FAddressRef addrRef = state.AddressRefFromPhysicalAddress(addr);
+			const FAddressRef pcAddrRef = state.AddressRefFromPhysicalAddress(pc);
+			state.SetLastWriterForAddress(addr, pcAddrRef);
 
-			state.SetLastWriterForAddress(addr, pc);
 
 			// Log screen pixel writes
 			if (addr >= GetScreenAddrStart() && addr <= GetScreenAddrEnd())
 			{
-				FrameScreenPixWrites.push_back({ addr,value, pc });
+				FrameScreenPixWrites.push_back({ addrRef,value, pcAddrRef });
 			}
 			
 			FCodeInfo* pCodeWrittenTo = state.GetCodeInfoForAddress(addr);
@@ -478,13 +526,42 @@ uint64_t FCpcEmu::Z80Tick(int num, uint64_t pins)
 				pCodeWrittenTo->bSelfModifyingCode = true;
 			}
 		}
-		else if (pins & Z80_IORQ)
-		{
-			// todo
-		}
 	}
 
+	// Memory gets remapped here
 	pins =  OldTickCB(num, pins, OldTickUserData);
+
+	if (pins & Z80_IORQ)
+	{
+		// todo
+		// look at _cpc_bankswitch()?
+#if SPECCY	
+		IOAnalysis.IOHandler(pc, pins);
+
+		if (ZXEmuState.type == ZX_TYPE_128)
+		{
+			if (pins & Z80_WR)
+			{
+				// an IO write
+				const uint8_t data = Z80_GET_DATA(pins);
+
+				if ((pins & (Z80_A15 | Z80_A1)) == 0)
+				{
+					if (!ZXEmuState.memory_paging_disabled)
+					{
+						const int ramBank = data & 0x7;
+						const int romBank = (data & (1 << 4)) ? 1 : 0;
+						const int displayRamBank = (data & (1 << 3)) ? 7 : 5;
+
+						SetROMBank(romBank);
+						SetRAMBank(3, ramBank);
+					}
+				}
+			}
+		}
+#endif
+	}
+
 	return pins;
 }
 
@@ -494,70 +571,49 @@ static uint64_t Z80TickThunk(int num, uint64_t pins, void* user_data)
 	return pEmu->Z80Tick(num, pins);
 }
 
-void CheckAddressSpaceItems(const FCodeAnalysisState& state)
+// todo get working for cpc
+// for cpc we probably want something like this
+// slot: 0 = lo, 1 = hi
+// need to be able to page rom in and out 
+/*void FCpcEmu::SetROMBank(int slot, int bankNo)
 {
-	for (int addr = 0; addr < 1 << 16; addr++)
-	{
-		const FDataInfo* pDataInfo = state.GetReadDataInfoForAddress(addr);
-		assert(pDataInfo->Address == addr);
-	}
-}
+}*/
 
 // Bank is ROM bank 0 or 1
 // this is always slot 0
 void FCpcEmu::SetROMBank(int bankNo)
 {
-	if (ROMBank == bankNo)
+	const int16_t bankId = ROMBanks[bankNo];
+	if (CurROMBank == bankId)
 		return;
-
-	const uint16_t firstBankPage = bankNo * kNoSlotPages;
-
-	for (int pageNo = 0; pageNo < kNoSlotPages; pageNo++)
-	{
-		ROMPages[firstBankPage + pageNo].ChangeAddress((pageNo * FCodeAnalysisPage::kPageSize));
-		CodeAnalysis.SetCodeAnalysisRWPage(pageNo, &ROMPages[firstBankPage + pageNo], &ROMPages[firstBankPage + pageNo]);	// Read/Write
-	}
-
-	CodeAnalysis.SetMemoryRemapped();
-#ifdef _DEBUG
-	if (bInitialised)
-		CheckAddressSpaceItems(CodeAnalysis);
-#endif
+	// Unmap old bank
+	CodeAnalysis.UnMapBank(CurROMBank, 0);
+	CodeAnalysis.MapBank(bankId, 0);
+	CurROMBank = bankId;
 }
 
+// todo get working for cpc
+
 // Slot is physical 16K memory region (0-3) 
-// Bank is a 16K Spectrum RAM bank (0-7)
-// todo make cpc specific
+// Bank is a 16K CPC RAM bank (0-7)
 void FCpcEmu::SetRAMBank(int slot, int bankNo)
 {
-	if (RAMBanks[slot] == bankNo)
+	const int16_t bankId = RAMBanks[bankNo];
+	if (CurRAMBank[slot] == bankId)
 		return;
-	RAMBanks[slot] = bankNo;
 
-	const uint16_t firstSlotPage = slot * kNoSlotPages;
-	const uint16_t firstBankPage = bankNo * kNoBankPages;
-	uint16_t slotAddress = firstSlotPage * FCodeAnalysisPage::kPageSize;
+	// Unmap old bank
+	const int startPage = slot * kNoBankPages;
+	CodeAnalysis.UnMapBank(CurRAMBank[slot], startPage);
+	CodeAnalysis.MapBank(bankId, startPage);
 
-	for (int pageNo = 0; pageNo < kNoSlotPages; pageNo++)
-	{
-		const int slotPageNo = firstSlotPage + pageNo;
-		FCodeAnalysisPage& bankPage = RAMPages[firstBankPage + pageNo];
-		bankPage.ChangeAddress(slotAddress);
-		CodeAnalysis.SetCodeAnalysisRWPage(slotPageNo, &bankPage, &bankPage);	// Read/Write
-		slotAddress += FCodeAnalysisPage::kPageSize;
-	}
-
-	CodeAnalysis.SetMemoryRemapped();
-
-#ifdef _DEBUG
-	if (bInitialised)
-		CheckAddressSpaceItems(CodeAnalysis);
-#endif
+	CurRAMBank[slot] = bankId;
 }
 
 bool FCpcEmu::Init(const FCpcConfig& config)
 {
-	SetWindowTitle(kAppTitle.c_str());
+	const std::string memStr = config.Model == ECpcModel::CPC_6128 ? " (128K)" : " (64K)";
+	SetWindowTitle((std::string(kAppTitle) + memStr).c_str());
 	SetWindowIcon("CPCALogo.png");
 
 	// setup pixel buffer
@@ -572,11 +628,18 @@ bool FCpcEmu::Init(const FCpcConfig& config)
 	FGlobalConfig& globalConfig = GetGlobalConfig();
 	SetNumberDisplayMode(globalConfig.NumberDisplayMode);
 	CodeAnalysis.Config.bShowOpcodeValues = globalConfig.bShowOpcodeValues;
-	
+	CodeAnalysis.Config.bShowBanks = config.Model == ECpcModel::CPC_6128;
+#if SPECCY
+	CodeAnalysis.Config.CharacterColourLUT = FZXGraphicsView::GetColourLUT();
+#endif
+
 	// A class that deals with loading games.
 	GameLoader.Init(this);
 	GamesList.Init(&GameLoader);
-	GamesList.EnumerateGames(globalConfig.SnapshotFolder.c_str());
+	if (config.Model == ECpcModel::CPC_6128)
+		GamesList.EnumerateGames(globalConfig.SnapshotFolder128.c_str());
+	else
+		GamesList.EnumerateGames(globalConfig.SnapshotFolder.c_str());
 	
 	// Turn caching on for the game loader. This means that if the same game is loaded more than once
 	// the second time will involve no disk i/o.
@@ -584,7 +647,8 @@ bool FCpcEmu::Init(const FCpcConfig& config)
 	GameLoader.SetCachingEnabled(true);
 
 	//cpc_type_t type = CPC_TYPE_464;
-	cpc_type_t type = CPC_TYPE_6128;
+	//cpc_type_t type = CPC_TYPE_6128;
+	cpc_type_t type = config.Model == ECpcModel::CPC_6128 ? CPC_TYPE_6128 : CPC_TYPE_464;
 	cpc_joystick_type_t joy_type = CPC_JOYSTICK_NONE;
 
 	cpc_desc_t desc;
@@ -671,7 +735,7 @@ bool FCpcEmu::Init(const FCpcConfig& config)
 
 	// Set up code analysis
 	// initialise code analysis pages
-//#if SPECCY
+/*
 
 	// todo look at _ui_cpc_update_memmap
 	// 
@@ -691,28 +755,59 @@ bool FCpcEmu::Init(const FCpcConfig& config)
 		RAMPages[pageNo].Initialise(0);
 		CodeAnalysis.RegisterPage(&RAMPages[pageNo], pageName);
 	}
+	*/
+
+	// todo get this working for cpc
+	// 
+	// create & register ROM banks
+	for (int bankNo = 0; bankNo < kNoROMBanks; bankNo++)
+	{
+		char bankName[32];
+		sprintf(bankName, "ROM %d", bankNo);
+		ROMBanks[bankNo] = CodeAnalysis.CreateBank(bankName, 16, CpcEmuState.rom_os, true); // no idea if this is right or not
+		CodeAnalysis.GetBank(ROMBanks[bankNo])->PrimaryMappedPage = 0;
+	}
+
+	// create & register RAM banks
+	for (int bankNo = 0; bankNo < kNoRAMBanks; bankNo++)
+	{
+		char bankName[32];
+		sprintf(bankName, "RAM %d", bankNo);
+		RAMBanks[bankNo] = CodeAnalysis.CreateBank(bankName, 16, CpcEmuState.ram[bankNo], false);
+		CodeAnalysis.GetBank(RAMBanks[bankNo])->PrimaryMappedPage = 48; // ?
+	}
+
+	// CreateBank(name,size in kb,r/w)
+	// return bank id
 
 	// Setup initial machine memory config
-	//if (config.Model == ESpectrumModel::Spectrum48K)
-	// todo this is most probably wrong for cpc 
-	if (1)
+	if (config.Model == ECpcModel::CPC_464)
 	{
+		CodeAnalysis.GetBank(RAMBanks[0])->PrimaryMappedPage = 0;
+		CodeAnalysis.GetBank(RAMBanks[1])->PrimaryMappedPage = 16;
+		CodeAnalysis.GetBank(RAMBanks[2])->PrimaryMappedPage = 32;
+		CodeAnalysis.GetBank(RAMBanks[3])->PrimaryMappedPage = 48;
+
 		SetROMBank(0);
-		SetRAMBank(1, 0);	// 0x4000 - 0x7fff
-		SetRAMBank(2, 1);	// 0x8000 - 0xBfff
-		SetRAMBank(3, 2);	// 0xc000 - 0xffff
+		SetRAMBank(0, 0);	// 0x0000 - 0x3fff
+		SetRAMBank(1, 1);	// 0x4000 - 0x7fff
+		SetRAMBank(2, 2);	// 0x8000 - 0xBfff
+		SetRAMBank(3, 3);	// 0xc000 - 0xffff
 	}
 	else
 	{
+		CodeAnalysis.GetBank(RAMBanks[0])->PrimaryMappedPage = 0;
+		CodeAnalysis.GetBank(RAMBanks[5])->PrimaryMappedPage = 16;
+		CodeAnalysis.GetBank(RAMBanks[2])->PrimaryMappedPage = 32;
+		CodeAnalysis.GetBank(RAMBanks[0])->PrimaryMappedPage = 48;
+
 		SetROMBank(0);
-		SetRAMBank(1, 5);	// 0x4000 - 0x7fff
+		SetRAMBank(0, 0);	// 0x0000 - 0x3fff
+		SetRAMBank(1, 1);	// 0x4000 - 0x7fff
 		SetRAMBank(2, 2);	// 0x8000 - 0xBfff
-		SetRAMBank(3, 0);	// 0xc000 - 0xffff
+		SetRAMBank(3, 3);	// 0xc000 - 0xffff
 	}
 
-#ifdef _DEBUG
-	CheckAddressSpaceItems(CodeAnalysis);
-#endif
 //#endif
 
 	// load the command line game if none specified then load the last game
@@ -735,7 +830,7 @@ bool FCpcEmu::Init(const FCpcConfig& config)
 		if (config.Model == ESpectrumModel::Spectrum128K)
 			romJsonFName = kRomInfo128JsonFile;
 #endif
-		InitialiseCodeAnalysis(CodeAnalysis, this);
+		CodeAnalysis.Init(this);
 
 #if SPECCY
 		if (FileExists(romJsonFName.c_str()))
@@ -766,11 +861,15 @@ void FCpcEmu::Shutdown()
 
 void FCpcEmu::StartGame(FGameConfig* pGameConfig)
 {
+	// reset systems
 	MemoryAccessHandlers.clear();	// remove old memory handlers
-
 	ResetMemoryStats(MemStats);
+#if SPECCY
+	FrameTraceViewer.Reset();
+#endif
 
-	const std::string windowTitle = kAppTitle + " - " + pGameConfig->Name;
+	const std::string memStr = CpcEmuState.type == CPC_TYPE_6128 ? " (128K)" : " (64K)";
+	const std::string windowTitle = kAppTitle + " - " + pGameConfig->Name + memStr;
 	SetWindowTitle(windowTitle.c_str());
 
 	// start up game
@@ -782,6 +881,7 @@ void FCpcEmu::StartGame(FGameConfig* pGameConfig)
 
 	FGame* pNewGame = new FGame;
 	pNewGame->pConfig = pGameConfig;
+	pGameConfig->Cpc6128Game = CpcEmuState.type == CPC_TYPE_6128;
 #if SPECCY
 	pNewGame->pViewerConfig = pGameConfig->pViewerConfig;
 	assert(pGameConfig->pViewerConfig != nullptr);
@@ -794,13 +894,14 @@ void FCpcEmu::StartGame(FGameConfig* pGameConfig)
 	GenerateSpriteListsFromConfig(GraphicsViewer, pGameConfig);
 #endif
 	// Initialise code analysis
-	InitialiseCodeAnalysis(CodeAnalysis, this);
+	CodeAnalysis.Init(this);
 
 	// Set options from config
 	for (int i = 0; i < FCodeAnalysisState::kNoViewStates; i++)
 	{
 		CodeAnalysis.ViewState[i].Enabled = pGameConfig->ViewConfigs[i].bEnabled;
-		CodeAnalysis.ViewState[i].GoToAddress = pGameConfig->ViewConfigs[i].ViewAddress;
+		CodeAnalysis.ViewState[i].GoToAddress(pGameConfig->ViewConfigs[i].ViewAddress);
+
 	}
 
 	const std::string root = GetGlobalConfig().WorkspaceRoot;
@@ -813,10 +914,13 @@ void FCpcEmu::StartGame(FGameConfig* pGameConfig)
 #endif
 
 	const std::string analysisJsonFName = root + "AnalysisJson/" + pGameConfig->Name + ".json";
+	const std::string analysisStateFName = root + "AnalysisState/" + pGameConfig->Name + ".astate";
+	const std::string saveStateFName = root + "SaveStates/" + pGameConfig->Name + ".state";
+	
 	ImportAnalysisJson(CodeAnalysis, analysisJsonFName.c_str());
+	ImportAnalysisState(CodeAnalysis, analysisStateFName.c_str());
 	
 #if SPECCY
-	const std::string saveStateFName = root + "SaveStates/" + pGameConfig->Name + ".state";
 	LoadGameState(this, saveStateFName.c_str());
 
 	if (FileExists(romJsonFName.c_str()))
@@ -831,7 +935,7 @@ void FCpcEmu::StartGame(FGameConfig* pGameConfig)
 #if SPECCY
 	FormatSpectrumMemory(CodeAnalysis);
 #endif
-	CodeAnalysis.SetCodeAnalysisDirty();
+	CodeAnalysis.SetAddressRangeDirty();
 
 	// Run the cpc for long enough to generate a frame buffer, otherwise the user will be staring at a black screen.
 	// todo: run for exactly 1 video frame. The current technique is crude and can render >1 frame, including partial frames and produce 
@@ -857,7 +961,7 @@ bool FCpcEmu::StartGame(const char* pGameName)
 	{
 		if (pGameConfig->Name == pGameName)
 		{
-			const std::string snapFolder = GetGlobalConfig().SnapshotFolder;
+			const std::string snapFolder = CpcEmuState.type == CPC_TYPE_6128 ? GetGlobalConfig().SnapshotFolder128 : GetGlobalConfig().SnapshotFolder;
 			const std::string gameFile = snapFolder + pGameConfig->SnapshotFile;
 			
 			if (GamesList.LoadGame(gameFile.c_str()))
@@ -887,10 +991,12 @@ void FCpcEmu::SaveCurrentGameData()
 			const std::string configFName = root + "Configs/" + pGameConfig->Name + ".json";
 			const std::string dataFName = root + "GameData/" + pGameConfig->Name + ".bin";
 			const std::string analysisJsonFName = root + "AnalysisJson/" + pGameConfig->Name + ".json";
+			const std::string analysisStateFName = root + "AnalysisState/" + pGameConfig->Name + ".astate";
 			const std::string saveStateFName = root + "SaveStates/" + pGameConfig->Name + ".state";
 			EnsureDirectoryExists(std::string(root + "Configs").c_str());
 			EnsureDirectoryExists(std::string(root + "GameData").c_str());
 			EnsureDirectoryExists(std::string(root + "AnalysisJson").c_str());
+			EnsureDirectoryExists(std::string(root + "AnalysisState").c_str());
 			EnsureDirectoryExists(std::string(root + "SaveStates").c_str());
 
 			// set config values
@@ -900,7 +1006,7 @@ void FCpcEmu::SaveCurrentGameData()
 				FCodeAnalysisViewConfig& viewConfig = pGameConfig->ViewConfigs[i];
 
 				viewConfig.bEnabled = viewState.Enabled;
-				viewConfig.ViewAddress = viewState.GetCursorItem() ? viewState.GetCursorItem()->Address : 0;
+				viewConfig.ViewAddress = viewState.GetCursorItem().IsValid() ? viewState.GetCursorItem().AddressRef : FAddressRef();
 			}
 
 			SaveGameConfigToFile(*pGameConfig, configFName.c_str());
@@ -908,7 +1014,9 @@ void FCpcEmu::SaveCurrentGameData()
 			// The Future
 			SaveGameState(this, saveStateFName.c_str());
 #endif // #if SPECCY
-			ExportGameJson(this, analysisJsonFName.c_str());
+			ExportAnalysisJson(CodeAnalysis, analysisJsonFName.c_str());
+			ExportAnalysisState(CodeAnalysis, analysisStateFName.c_str());
+			//ExportGameJson(this, analysisJsonFName.c_str());
 		}
 	}
 
@@ -949,7 +1057,7 @@ void FCpcEmu::DrawFileMenu()
 			{
 				if (ImGui::MenuItem(pGameConfig->Name.c_str()))
 				{
-					const std::string snapFolder = GetGlobalConfig().SnapshotFolder;
+					const std::string snapFolder = CpcEmuState.type == CPC_TYPE_6128 ? GetGlobalConfig().SnapshotFolder128 : GetGlobalConfig().SnapshotFolder;
 					const std::string gameFile = snapFolder + pGameConfig->SnapshotFile;
 
 					if(GamesList.LoadGame(gameFile.c_str()))
@@ -962,7 +1070,6 @@ void FCpcEmu::DrawFileMenu()
 			ImGui::EndMenu();
 		}
 
-		// todo remove?
 		if (ImGui::MenuItem("Save Game Data"))
 		{
 			SaveCurrentGameData();
@@ -1057,19 +1164,19 @@ void FCpcEmu::DrawOptionsMenu()
 			if (ImGui::MenuItem("Decimal", 0, GetNumberDisplayMode() == ENumberDisplayMode::Decimal))
 			{
 				SetNumberDisplayMode(ENumberDisplayMode::Decimal);
-				CodeAnalysis.SetCodeAnalysisDirty();
+				CodeAnalysis.SetAllBanksDirty();
 				bClearCode = true;
 			}
 			if (ImGui::MenuItem("Hex - FEh", 0, GetNumberDisplayMode() == ENumberDisplayMode::HexAitch))
 			{
 				SetNumberDisplayMode(ENumberDisplayMode::HexAitch);
-				CodeAnalysis.SetCodeAnalysisDirty();
+				CodeAnalysis.SetAllBanksDirty();
 				bClearCode = true;
 			}
 			if (ImGui::MenuItem("Hex - $FE", 0, GetNumberDisplayMode() == ENumberDisplayMode::HexDollar))
 			{
 				SetNumberDisplayMode(ENumberDisplayMode::HexDollar);
-				CodeAnalysis.SetCodeAnalysisDirty();
+				CodeAnalysis.SetAllBanksDirty();
 				bClearCode = true;
 			}
 
@@ -1164,8 +1271,6 @@ void FCpcEmu::DrawDebugMenu()
 	}*/
 }
 
-// This can be overriden in the derived class if the platform code wants to insert it's own menu.
-// This might be OTT?
 void FCpcEmu::DrawMenus()
 {
 	DrawFileMenu();
@@ -1279,7 +1384,7 @@ void FCpcEmu::Tick()
 		if (bStepToNextFrame)
 		{
 			_ui_dbg_break(&UICpc.dbg);
-			CodeAnalyserGoToAddress(CodeAnalysis.GetFocussedViewState(), GetPC());
+			CodeAnalysis.GetFocussedViewState().GoToAddress({ CodeAnalysis.GetBankFromAddress(GetPC()), GetPC() });
 			bStepToNextFrame = false;
 		}
 
@@ -1287,7 +1392,7 @@ void FCpcEmu::Tick()
 		// on debug break send code analyser to address
 		else if (UICpc.dbg.dbg.z80->trap_id >= UI_DBG_STEP_TRAPID)
 		{
-			CodeAnalyserGoToAddress(CodeAnalysis.GetFocussedViewState(), GetPC());
+			CodeAnalysis.GetFocussedViewState().GoToAddress({ CodeAnalysis.GetBankFromAddress(GetPC()), GetPC() });
 		}
 	}
 	
@@ -1352,7 +1457,9 @@ void FCpcEmu::DrawUI()
 
 	if (ImGui::Begin("Call Stack"))
 	{
+#if SPECCY
 		DrawStackInfo(CodeAnalysis);
+#endif
 	}
 	ImGui::End();
 
@@ -1461,6 +1568,36 @@ bool FCpcEmu::DrawDockingView()
 	}
 
 	return bQuit;
+}
+
+void FCpcConfig::ParseCommandline(int argc, char** argv)
+{
+	std::vector<std::string> argList;
+	for (int arg = 0; arg < argc; arg++)
+	{
+		argList.emplace_back(argv[arg]);
+	}
+
+	auto argIt = argList.begin();
+	argIt++;	// skip exe name
+	while (argIt != argList.end())
+	{
+		if (*argIt == std::string("-128"))
+		{
+			Model = ECpcModel::CPC_6128;
+		}
+		else if (*argIt == std::string("-game"))
+		{
+			if (++argIt == argList.end())
+			{
+				LOGERROR("-game : No game specified");
+				break;
+			}
+			SpecificGame = *++argIt;
+		}
+
+		++argIt;
+	}
 }
 
 // https://gist.github.com/neuro-sys/eeb7a323b27a9d8ad891b41144916946#registers

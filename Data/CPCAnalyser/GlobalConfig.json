@@ -1,0 +1,9 @@
+{
+    "EnableAudio": false,
+    "LastGame": "",
+    "NumberMode": 2,
+    "ShowOpcodeValues": false,
+    "SnapshotFolder": "./Games/",
+    "SnapshotFolder128": "./Games128/",
+    "WorkspaceRoot": "./"
+}

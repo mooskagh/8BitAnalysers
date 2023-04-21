@@ -131,6 +131,8 @@ void FCpcViewer::Draw()
 		}
 	}
 
+	// todo highlight hovered address in code analyser view
+
 	if (ImGui::IsItemHovered())
 	{
 		ImGuiIO& io = ImGui::GetIO();
@@ -196,7 +198,7 @@ void FCpcViewer::Draw()
 	}
 
 	ImGui::SliderFloat("Speed Scale", &pCpcEmu->ExecSpeedScale, 0.0f, 2.0f);
-	//ImGui::SameLine();
+	ImGui::SameLine();
 	if (ImGui::Button("Reset"))
 		pCpcEmu->ExecSpeedScale = 1.0f;
 	ImGui::Text("Application average %.3f ms/frame (%.1f FPS)", 1000.0f / ImGui::GetIO().Framerate, ImGui::GetIO().Framerate);

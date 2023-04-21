@@ -62,7 +62,8 @@ enum class ECpcModel
 
 struct FCpcConfig
 {
-	ECpcModel Model;
+	void ParseCommandline(int argc, char** argv);
+	ECpcModel Model = ECpcModel::CPC_464;
 	std::string	SpecificGame;
 };
 
@@ -117,18 +118,18 @@ public:
 	uint16_t	GetPC(void) override;
 	uint16_t	GetSP(void) override;
 	bool		IsAddressBreakpointed(uint16_t addr) override;
-	bool		ToggleExecBreakpointAtAddress(uint16_t addr) override;
-	bool		ToggleDataBreakpointAtAddress(uint16_t addr, uint16_t dataSize) override;
+	bool		SetExecBreakpointAtAddress(uint16_t addr, bool bSet) override;
+	bool		SetDataBreakpointAtAddress(uint16_t addr, uint16_t dataSize, bool bSet) override;
 	void		Break(void) override;
 	void		Continue(void) override;
 	void		StepOver(void) override;
 	void		StepInto(void) override;
 	void		StepFrame(void) override;
 	void		StepScreenWrite(void) override;
-	void		GraphicsViewerSetView(uint16_t address, int charWidth) override { /* todo */ }
+	void		GraphicsViewerSetView(FAddressRef address, int charWidth) override {}
 	bool		ShouldExecThisFrame(void) const override;
 	bool		IsStopped(void) const override;
-	void*		GetCPUEmulator(void) override;
+	void*		GetCPUEmulator(void) const override;
 	//ICPUInterface End
 
 	void SetROMBank(int bankNo);
@@ -142,7 +143,8 @@ public:
 
 	// Emulator 
 	cpc_t			CpcEmuState;		// Chips CPC State
-	int				CurrentLayer = 0;	// layer ??
+	uint8_t*		MappedInMemory = nullptr;
+	//int			CurrentLayer = 0;	// layer ??
 
 	bool			ExecThisFrame = true; // Whether the emulator should execute this frame (controlled by UI)
 	float			ExecSpeedScale = 1.0f;
@@ -154,18 +156,22 @@ public:
 	// Viewers
 	FCpcViewer				CpcViewer;
 	//FFrameTraceViewer		FrameTraceViewer;
-	FCodeAnalysisState		CodeAnalysis;
 	FGraphicsViewerState	GraphicsViewer;
+	FCodeAnalysisState		CodeAnalysis;
+	//FIOAnalysis				IOAnalysis;
 
-	// Code analysis pages - to cover 464 & 6128 
-	static const int kNoBankPages = 16;	// no of pages per physical address slot (16k)
-	static const int kNoSlotPages = 16;	// no of pages per physical address slot (16k)
-	static const int kNoROMPages = 16 + 16;	// 48K ROM & 128K ROM
-	static const int kNoRAMPages = 128;
-	FCodeAnalysisPage	ROMPages[kNoROMPages];
-	FCodeAnalysisPage	RAMPages[kNoRAMPages];
-	int					ROMBank = -1;
-	int					RAMBanks[4] = { -1,-1,-1,-1 };
+	// todo these are probably wrong for cpc
+	static const int	kNoBankPages = 16;	// no of pages per physical address slot (16k)
+	static const int	kNoRAMPages = 128;
+	static const int	kNoROMBanks = 2; 
+	static const int	kNoRAMBanks = 8;
+
+	int16_t				ROMBanks[kNoROMBanks];
+	int16_t				RAMBanks[kNoRAMBanks];
+	//FCodeAnalysisPage	ROMPages[kNoROMPages];
+	//FCodeAnalysisPage	RAMPages[kNoRAMPages];
+	int16_t				CurROMBank = -1;
+	int16_t				CurRAMBank[4] = { -1,-1,-1,-1 };
 
 	// Memory handling
 	std::string				SelectedMemoryHandler;

@@ -36,20 +36,21 @@ static const uint32_t g_kColourLUT[8] =
 	0xFFFFFFFF,     // 7 - white
 };
 
-uint16_t GetAddressFromPositionInView(FGraphicsViewerState &state, int x,int y)
+uint16_t GetAddressOffsetFromPositionInView(const FGraphicsViewerState& viewerState, int x, int y)
 {
+	const FCodeAnalysisState& state = viewerState.pEmu->CodeAnalysis;
 	const int kHorizontalDispCharCount = kGraphicsViewerWidth / 8;
-
-	const int addrInput = state.Address;
-	const int xCount = kHorizontalDispCharCount / state.XSize;
-	const int xSize = xCount * state.XSize;
+	const FCodeAnalysisBank* pBank = state.GetBank(viewerState.Bank);
+	const uint16_t addrInput = viewerState.AddressOffset;
+	const int xCount = kHorizontalDispCharCount / viewerState.XSize;
+	const int xSize = xCount * viewerState.XSize;
 	const int xp = std::max(std::min(xSize, x / 8), 0);
 	const int yp = std::max(std::min(kGraphicsViewerHeight, y), 0);
-	const int column = xp / state.XSize;
-	const int columnSize = kGraphicsViewerHeight * state.XSize;
+	const int column = xp / viewerState.XSize;
+	const int columnSize = kGraphicsViewerHeight * viewerState.XSize;
 
 	ImGui::Text("xp: %d, yp: %d, column: %d", xp, yp, column);
-	return (addrInput + xp) + (column * columnSize) + (y * state.XSize);
+	return ((addrInput + xp) + (column * columnSize) + (y * viewerState.XSize)) % viewerState.MemorySize;
 }
 
 uint8_t GetHeatmapColourForMemoryAddress(FCodeAnalysisState &state, uint16_t addr, int frameThreshold)
@@ -106,6 +107,12 @@ void DrawMemoryAsGraphicsColumn(FGraphicsViewerState &state,uint16_t startAddr, 
 // Viewer to view cpc graphics
 void DrawGraphicsViewer(FGraphicsViewerState &state)
 {
+	if (ImGui::Begin("Graphics View"))
+	{
+		ImGui::End();
+	}
+// todo get this working
+#if 0
 	FCpcGraphicsView *pGraphicsView = state.pGraphicsView;	
 
 	int byteOff = 0;
@@ -387,6 +394,6 @@ void DrawGraphicsViewer(FGraphicsViewerState &state)
 	}
 
 	
-	ImGui::End();
+#endif
 }
 

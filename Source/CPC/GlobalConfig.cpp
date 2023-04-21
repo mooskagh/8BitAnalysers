@@ -40,6 +40,8 @@ bool LoadGlobalConfig(const char* fileName)
 		config.WorkspaceRoot = jsonConfigFile["WorkspaceRoot"];
 	if (jsonConfigFile.contains("SnapshotFolder"))
 		config.SnapshotFolder = jsonConfigFile["SnapshotFolder"];
+	if (jsonConfigFile.contains("SnapshotFolder128"))
+		config.SnapshotFolder128 = jsonConfigFile["SnapshotFolder128"];
 	//if (jsonConfigFile.contains("PokesFolder"))
 	//	config.PokesFolder = jsonConfigFile["PokesFolder"];
 	
@@ -47,6 +49,8 @@ bool LoadGlobalConfig(const char* fileName)
 		config.WorkspaceRoot += "/";
 	if (config.SnapshotFolder.back() != '/')
 		config.SnapshotFolder += "/";
+	if (config.SnapshotFolder128.back() != '/')
+		config.SnapshotFolder128 += "/";
 	//if (config.PokesFolder.back() != '/')
 	//	config.PokesFolder += "/";
 	
@@ -65,6 +69,8 @@ bool SaveGlobalConfig(const char* fileName)
 	jsonConfigFile["NumberMode"] = (int)config.NumberDisplayMode;
 	jsonConfigFile["WorkspaceRoot"] = config.WorkspaceRoot;
 	jsonConfigFile["SnapshotFolder"] = config.SnapshotFolder;
+	jsonConfigFile["SnapshotFolder128"] = config.SnapshotFolder128;
+
 	//jsonConfigFile["PokesFolder"] = config.PokesFolder;
 	
 	std::ofstream outFileStream(fileName);

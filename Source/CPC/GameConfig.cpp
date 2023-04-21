@@ -50,8 +50,9 @@ bool SaveGameConfigToFile(const FGameConfig &config, const char *fname)
 	jsonConfigFile["Name"] = config.Name;
 
 	jsonConfigFile["SnapshotFile"] = config.SnapshotFile;
-#if SPECCY
+	jsonConfigFile["128KGame"] = config.Cpc6128Game;
 
+#if SPECCY
 	for (const auto&sprConfigIt : config.SpriteConfigs)
 	{
 		json spriteConfig;
@@ -82,7 +83,8 @@ bool SaveGameConfigToFile(const FGameConfig &config, const char *fname)
 		const FCodeAnalysisViewConfig& viewConfig = config.ViewConfigs[i];
 		json viewConfigJson;
 		viewConfigJson["Enabled"] = viewConfig.bEnabled;
-		viewConfigJson["ViewAddress"] = viewConfig.ViewAddress;
+		viewConfigJson["ViewAddress"] = viewConfig.ViewAddress.Address;
+		viewConfigJson["ViewAddressBank"] = viewConfig.ViewAddress.BankId;
 
 		optionsJson["ViewConfigs"].push_back(viewConfigJson);
 	}
@@ -100,7 +102,7 @@ bool SaveGameConfigToFile(const FGameConfig &config, const char *fname)
 }
 
 
-bool LoadGameConfigFromFile(FGameConfig &config, const char *fname)
+bool LoadGameConfigFromFile(const FCodeAnalysisState& state, FGameConfig& config, const char* fname)
 {
 	std::ifstream inFileStream(fname);
 	if (inFileStream.is_open() == false)
@@ -112,6 +114,7 @@ bool LoadGameConfigFromFile(FGameConfig &config, const char *fname)
 	inFileStream.close();
 
 	config.Name = jsonConfigFile["Name"].get<std::string>();
+	config.Cpc6128Game = jsonConfigFile["128KGame"];
 
 	if (jsonConfigFile["SnapshotFile"].is_null() == false)
 	{
@@ -153,7 +156,11 @@ bool LoadGameConfigFromFile(FGameConfig &config, const char *fname)
 				FCodeAnalysisViewConfig& viewConfig = config.ViewConfigs[i];
 				const json& viewConfigJson = optionsJson["ViewConfigs"][i];
 				viewConfig.bEnabled = viewConfigJson["Enabled"];
-				viewConfig.ViewAddress = viewConfigJson["ViewAddress"];
+				viewConfig.ViewAddress.Address = viewConfigJson["ViewAddress"];
+				if (viewConfigJson.contains("ViewAddressBank"))
+					viewConfig.ViewAddress.BankId = viewConfigJson["ViewAddressBank"];
+				else
+					viewConfig.ViewAddress.BankId = -1;
 			}
 		}
 	}
@@ -176,10 +183,11 @@ bool LoadGameConfigs(FCpcEmu *pEmu)
 		const std::string &fn = configDir + file.FileName;
 		if ((fn.substr(fn.find_last_of(".") + 1) == "json"))
 		{
-			FGameConfig *pNewConfig = new FGameConfig;
-			if (LoadGameConfigFromFile(*pNewConfig, fn.c_str()))
+			FGameConfig* pNewConfig = new FGameConfig;
+			if (LoadGameConfigFromFile(pEmu->CodeAnalysis, *pNewConfig, fn.c_str()))
 			{
-				AddGameConfig(pNewConfig);
+				if (pNewConfig->Cpc6128Game == (pEmu->CpcEmuState.type == CPC_TYPE_6128))
+					AddGameConfig(pNewConfig);
 			}
 			else
 			{

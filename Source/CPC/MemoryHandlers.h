@@ -1,8 +1,11 @@
 #pragma once
+
+#include <CodeAnalyser/CodeAnaysisPage.h> 
+
 #include <cstdint>
 #include <vector>
-#include <map>
 #include <string>
+
 
 class FCpcEmu;
 struct FGame;
@@ -55,8 +58,7 @@ struct FMemoryAccessHandler
 
 	// stats
 	int						TotalCount = 0;
-	std::map<uint16_t, int>	CallerCounts;
-	std::map<uint16_t, int>	AddressCounts;
+	FItemReferenceTracker	Callers;
 };
 
 

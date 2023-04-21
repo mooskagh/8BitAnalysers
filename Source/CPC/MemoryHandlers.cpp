@@ -11,6 +11,7 @@ int MemoryHandlerTrapFunction(uint16_t pc, int ticks, uint64_t pins, FCpcEmu* pE
 	const bool bWrite = (pins & Z80_CTRL_MASK) == (Z80_MREQ | Z80_WR);
 	
 	FCodeInfo* pCodeInfo = pEmu->CodeAnalysis.GetCodeInfoForAddress(pc);
+	const FAddressRef PCaddrRef = pEmu->CodeAnalysis.AddressRefFromPhysicalAddress(pc);
 
 	// increment counters
 	//pEmu->MemStats.ExecCount[pc]++;
@@ -53,8 +54,7 @@ int MemoryHandlerTrapFunction(uint16_t pc, int ticks, uint64_t pins, FCpcEmu* pE
 		{
 			// update handler stats
 			handler.TotalCount++;
-			handler.CallerCounts[pc]++;
-			handler.AddressCounts[addr]++;
+			handler.Callers.RegisterAccess(PCaddrRef);
 #if SPECCY
 			if (handler.pHandlerFunction != nullptr)
 				handler.pHandlerFunction(handler, pEmu->pActiveGame, pc, pins);
@@ -171,19 +171,19 @@ void DrawMemoryHandlers(FCpcEmu* pCpcEmu)
 		ImGui::SameLine();
 		DrawAddressLabel(pCpcEmu->CodeAnalysis, viewState, pSelectedHandler->MemStart);
 
-		ImGui::Text("End: %s",NumStr(pSelectedHandler->MemEnd));
+		ImGui::Text("End: %s", NumStr(pSelectedHandler->MemEnd));
 		ImGui::SameLine();
 		DrawAddressLabel(pCpcEmu->CodeAnalysis, viewState, pSelectedHandler->MemEnd);
 
 		ImGui::Text("Total Accesses %d", pSelectedHandler->TotalCount);
 
 		ImGui::Text("Callers");
-		for (const auto &accessPC : pSelectedHandler->CallerCounts)
+		for (const auto& accessPC : pSelectedHandler->Callers.GetReferences())
 		{
-			ImGui::PushID(accessPC.first);
-			DrawCodeAddress(pCpcEmu->CodeAnalysis, viewState, accessPC.first);
-			ImGui::SameLine();
-			ImGui::Text(" - %d accesses",accessPC.second);
+			ImGui::PushID(accessPC.Val);
+			DrawCodeAddress(pCpcEmu->CodeAnalysis, viewState, accessPC);
+			//ImGui::SameLine();
+			//ImGui::Text(" - %d accesses",accessPC.second);
 			ImGui::PopID();
 		}
 	}
