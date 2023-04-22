@@ -170,6 +170,8 @@ public:
 	int16_t				RAMBanks[kNoRAMBanks];
 	//FCodeAnalysisPage	ROMPages[kNoROMPages];
 	//FCodeAnalysisPage	RAMPages[kNoRAMPages];
+	
+	// sam. think we need CurLoROMBank and CurHiROMBank here
 	int16_t				CurROMBank = -1;
 	int16_t				CurRAMBank[4] = { -1,-1,-1,-1 };
 
@@ -181,7 +183,7 @@ public:
 	FMemoryStats	MemStats;
 
 	unsigned char* FrameBuffer;	// pixel buffer to store emu output
-	ImTextureID		Texture;		// texture 
+	ImTextureID		Texture;	// texture 
 
 	static const int kPCHistorySize = 32;
 	uint16_t PCHistory[kPCHistorySize];

@@ -191,7 +191,7 @@ const uint8_t* FCpcEmu::GetMemPtr(uint16_t address) const
 
 	return &CpcEmuState.ram[bank][bankAddr];
 
-	// todo figure this out
+	// sam todo figure this out
 #if SPECCY
 	if (CpcEmuState.type == CPC_TYPE_464)
 	{
@@ -533,7 +533,7 @@ uint64_t FCpcEmu::Z80Tick(int num, uint64_t pins)
 
 	if (pins & Z80_IORQ)
 	{
-		// todo
+		// sam todo
 		// look at _cpc_bankswitch()?
 #if SPECCY	
 		IOAnalysis.IOHandler(pc, pins);
@@ -571,7 +571,7 @@ static uint64_t Z80TickThunk(int num, uint64_t pins, void* user_data)
 	return pEmu->Z80Tick(num, pins);
 }
 
-// todo get working for cpc
+// sam todo get working for cpc
 // for cpc we probably want something like this
 // slot: 0 = lo, 1 = hi
 // need to be able to page rom in and out 
@@ -592,7 +592,7 @@ void FCpcEmu::SetROMBank(int bankNo)
 	CurROMBank = bankId;
 }
 
-// todo get working for cpc
+// sam todo get working for cpc
 
 // Slot is physical 16K memory region (0-3) 
 // Bank is a 16K CPC RAM bank (0-7)
@@ -737,7 +737,7 @@ bool FCpcEmu::Init(const FCpcConfig& config)
 	// initialise code analysis pages
 /*
 
-	// todo look at _ui_cpc_update_memmap
+	// sam todo look at _ui_cpc_update_memmap
 	// 
 	// ROM
 	for (int pageNo = 0; pageNo < kNoROMPages; pageNo++)
@@ -757,7 +757,7 @@ bool FCpcEmu::Init(const FCpcConfig& config)
 	}
 	*/
 
-	// todo get this working for cpc
+	// sam todo get this working for cpc
 	// 
 	// create & register ROM banks
 	for (int bankNo = 0; bankNo < kNoROMBanks; bankNo++)
@@ -797,9 +797,9 @@ bool FCpcEmu::Init(const FCpcConfig& config)
 	else
 	{
 		CodeAnalysis.GetBank(RAMBanks[0])->PrimaryMappedPage = 0;
-		CodeAnalysis.GetBank(RAMBanks[5])->PrimaryMappedPage = 16;
+		CodeAnalysis.GetBank(RAMBanks[1])->PrimaryMappedPage = 16;
 		CodeAnalysis.GetBank(RAMBanks[2])->PrimaryMappedPage = 32;
-		CodeAnalysis.GetBank(RAMBanks[0])->PrimaryMappedPage = 48;
+		CodeAnalysis.GetBank(RAMBanks[3])->PrimaryMappedPage = 48;
 
 		SetROMBank(0);
 		SetRAMBank(0, 0);	// 0x0000 - 0x3fff
@@ -938,7 +938,7 @@ void FCpcEmu::StartGame(FGameConfig* pGameConfig)
 	CodeAnalysis.SetAddressRangeDirty();
 
 	// Run the cpc for long enough to generate a frame buffer, otherwise the user will be staring at a black screen.
-	// todo: run for exactly 1 video frame. The current technique is crude and can render >1 frame, including partial frames and produce 
+	// sam todo: run for exactly 1 video frame. The current technique is crude and can render >1 frame, including partial frames and produce 
 	// a glitch when continuing execution.
 	// todo mute audio so we don't hear a frame of audio
 	cpc_exec(&CpcEmuState, 48000);
@@ -1419,7 +1419,7 @@ void FCpcEmu::DrawUI()
 
 	if (pCPCUI->memmap.open)
 	{
-		// todo work out why SpectrumEmu.cpp has it's own version of UpdateMemmap()
+		// sam todo work out why SpectrumEmu.cpp has it's own version of UpdateMemmap()
 		// why didn't Mark call _ui_zx_update_memmap()?
 		//UpdateMemmap(pCPCUI);
 	}
@@ -1624,7 +1624,7 @@ uint16_t FCpcEmu::GetScreenMemSize() const
 
 bool FCpcEmu::GetScreenMemoryAddress(int x, int y, uint16_t& addr) const
 {
-	// todo. return false if out of range
+	// sam todo. return false if out of range
 	//if (x < 0 || x>255 || y < 0 || y> 191)
 	//	return false;
 

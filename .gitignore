@@ -54,6 +54,9 @@
 /VSProject/compileData.scor.incl
 /VSProject/compileData.scor.t0000
 /Data/SpectrumAnalyser/GlobalConfig.json
+/Data/CPCAnalyser/snaps
+/Data/CPCAnalyser/Games
+/Data/CPCAnalyser/Games128
 /Source/ZXSpectrum/build
 /Source/ZXSpectrum/linuxbuild
 /glfw

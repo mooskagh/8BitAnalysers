@@ -1,6 +1,6 @@
 {
     "EnableAudio": false,
-    "LastGame": "",
+    "LastGame": "starwars",
     "NumberMode": 2,
     "ShowOpcodeValues": false,
     "SnapshotFolder": "./Games/",
