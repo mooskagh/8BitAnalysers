@@ -125,18 +125,6 @@ void ui_util_input_u8_dec(const char* label, uint8_t& val) {
     ImGui::PopItemWidth();
 }
 
-
-// Draw register value.
-// Change text colour if register's value has been modified from the default value.
-void DrawRegValue(uint8_t& reg, const char* text, uint8_t default_val)
-{
-    bool bModified = false;
-    bModified = reg != default_val;
-    if (bModified) ImGui::PushStyleColor(ImGuiCol_Text, IM_COL32(255,255,0,255));
-    ui_util_input_u8_dec(text, reg); ImGui::NextColumn();
-    if (bModified) ImGui::PopStyleColor();
-}
-
 static void _ui_mc6845_draw_state(ui_mc6845_t* win) {
     CHIPS_ASSERT(win && win->mc6845);
     mc6845_t* mc = win->mc6845;
@@ -150,27 +138,28 @@ static void _ui_mc6845_draw_state(ui_mc6845_t* win) {
     ImGui::Separator();
 
     ImGui::Columns(2, "##regs", false);
-    ImGui::SetColumnWidth(0, 160);
-    ImGui::SetColumnWidth(1, 160);
-    
-    DrawRegValue(mc->h_total, "R0 HTotal (63)", 63);
-    DrawRegValue(mc->h_displayed, "R1 HDisp (40)", 40);
-    DrawRegValue(mc->h_sync_pos, "R2 HSyncPos (46)", 46);
-    DrawRegValue(mc->sync_widths, "R3 SyncWidth (142)", 142);
-    DrawRegValue(mc->v_total, "R4 VTotal (38)", 38);
-    DrawRegValue(mc->v_total_adjust, "R5 VTotalAdj (0)", 0);
-    DrawRegValue(mc->v_displayed, "R6 VDisp (25)", 25);
-    DrawRegValue(mc->v_sync_pos, "R7 VSyncPos (30)", 30);
-    DrawRegValue(mc->interlace_mode, "R8 Interl (0)", 0);
-    DrawRegValue(mc->max_scanline_addr, "R9 MaxScanl (7)", 7);
-    DrawRegValue(mc->cursor_start, "R10 CursStart (0)", 0);
-    DrawRegValue(mc->cursor_end, "R11 CursEnd (0)", 0);
-    DrawRegValue(mc->start_addr_hi, "R12 AddrHi (30)", 30);
-    DrawRegValue(mc->start_addr_lo, "R13 AddrLo (0)", 0);
-    DrawRegValue(mc->cursor_hi, "R14 CursHi (0)", 0);
-    DrawRegValue(mc->cursor_lo, "R15 CursLo (0)", 0);
-    DrawRegValue(mc->lightpen_hi, "R16 LPenHi (0)", 0);
-    DrawRegValue(mc->lightpen_lo, "R17 LPenLo (0)", 0);
+
+    ImGui::SetColumnWidth(0, 124);
+    ImGui::SetColumnWidth(1, 124);
+    mc->h_total = ui_util_input_u8("R0 HTotal", mc->h_total); ImGui::NextColumn();
+    mc->h_displayed = ui_util_input_u8("R1 HDisp", mc->h_displayed); ImGui::NextColumn();
+    mc->h_sync_pos = ui_util_input_u8("R2 HSyncPos", mc->h_sync_pos); ImGui::NextColumn();
+    mc->sync_widths = ui_util_input_u8("R3 SyncWidth", mc->sync_widths); ImGui::NextColumn();
+    mc->v_total = ui_util_input_u8("R4 VTotal", mc->v_total); ImGui::NextColumn();
+    mc->v_total_adjust = ui_util_input_u8("R5 VTotalAdj", mc->v_total_adjust); ImGui::NextColumn();
+    mc->v_displayed = ui_util_input_u8("R6 VDisp", mc->v_displayed); ImGui::NextColumn();
+    mc->v_sync_pos = ui_util_input_u8("R7 VSyncPos", mc->v_sync_pos); ImGui::NextColumn();
+    mc->interlace_mode = ui_util_input_u8("R8 Interl", mc->interlace_mode); ImGui::NextColumn();
+    mc->max_scanline_addr = ui_util_input_u8("R9 MaxScanl", mc->max_scanline_addr); ImGui::NextColumn();
+    mc->cursor_start = ui_util_input_u8("R10 CursStart", mc->cursor_start); ImGui::NextColumn();
+    mc->cursor_end = ui_util_input_u8("R11 CursEnd", mc->cursor_end); ImGui::NextColumn();
+    mc->start_addr_hi = ui_util_input_u8("R12 AddrHi", mc->start_addr_hi); ImGui::NextColumn();
+    mc->start_addr_lo = ui_util_input_u8("R13 AddrLo", mc->start_addr_lo); ImGui::NextColumn();
+    mc->cursor_hi = ui_util_input_u8("R14 CursHi", mc->cursor_hi); ImGui::NextColumn();
+    mc->cursor_lo = ui_util_input_u8("R15 CursLo", mc->cursor_lo); ImGui::NextColumn();
+    mc->lightpen_hi = ui_util_input_u8("R16 LPenHi", mc->lightpen_hi); ImGui::NextColumn();
+    mc->lightpen_lo = ui_util_input_u8("R17 LPenLo", mc->lightpen_lo); ImGui::NextColumn();
+
     ImGui::Columns();
     ImGui::Separator();
     ImGui::Text("Memory Addr: %04X  Row Start: %04X", mc->ma, mc->ma_row_start);

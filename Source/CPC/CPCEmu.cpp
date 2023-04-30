@@ -26,6 +26,7 @@ void DasmOutputD8(int8_t val, z80dasm_output_t out_cb, void* user_data);
 
 #include "App.h"
 #include "Viewers/BreakpointViewer.h"
+#include "Viewers/CRTCViewer.h"
 
 #include <sokol_audio.h>
 #include "cpc-roms.h"
@@ -488,7 +489,7 @@ uint64_t FCpcEmu::Z80Tick(int num, uint64_t pins)
 	const uint16_t pc = cpuState.PC;
 
 	/* memory and IO requests */
-	if (pins & Z80_MREQ) 
+	if (pins & Z80_MREQ)
 	{
 		const uint16_t addr = Z80_GET_ADDR(pins);
 		const uint8_t value = Z80_GET_DATA(pins);
@@ -533,8 +534,92 @@ uint64_t FCpcEmu::Z80Tick(int num, uint64_t pins)
 
 	if (pins & Z80_IORQ)
 	{
-		// sam todo
-		// look at _cpc_bankswitch()?
+		if (pins & (Z80_RD | Z80_WR))
+		{
+			if ((pins & (AM40010_A14 | AM40010_A15)) == AM40010_A14)
+			{
+				const uint8_t data = _AM40010_GET_DATA(pins);
+
+				/* data bits 6 and 7 select the register type */
+				switch (data & ((1 << 7) | (1 << 6)))
+				{
+					/* update the config register:
+						- bits 0 and 1 select the video mode (updated at next HSYNC):
+							00: 160x200 @ 16 colors
+							01: 320x200 @ 4 colors
+							10: 620x200 @ 2 colors
+							11: 160x200 @ 2 colors (undocumented, currently not supported)
+						- bit 2: LROMEN (lower ROM enable)
+						- bit 3: HROMEN (upper ROM enable)
+						- bit 4: IRQ_RESET (not a flip-flop, only a one-shot signal)
+					*/
+					// sam todo
+					/*case (1 << 7):
+					{
+						uint8_t romen_dirty = (ga->regs.config ^ data) & (AM40010_CONFIG_LROMEN | AM40010_CONFIG_HROMEN);
+						ga->regs.config = data & 0x1F;
+						if (0 != romen_dirty) {
+							ga->bankswitch_cb(ga->ram_config, ga->regs.config, ga->rom_select, ga->user_data);
+						}
+					}
+					break;*/
+
+					/* RAM bank switching (6128 only) */
+					case (1 << 6) | (1 << 7) :
+					{
+						int bankPresetIndex;
+						if (AM40010_CPC_TYPE_6128 == CpcEmuState.type)
+						{
+							am40010_t& ga = CpcEmuState.ga;
+							// sam need to check if dirty?
+							bankPresetIndex = ga.ram_config & 7;
+
+							const int slot0BankIndex = _cpc_ram_config[bankPresetIndex][0];
+							const int slot1BankIndex = _cpc_ram_config[bankPresetIndex][1];
+							const int slot2BankIndex = _cpc_ram_config[bankPresetIndex][2];
+							const int slot3BankIndex = _cpc_ram_config[bankPresetIndex][3];
+
+							SetRAMBank(0, slot0BankIndex);
+							SetRAMBank(1, slot1BankIndex);
+							SetRAMBank(2, slot2BankIndex);
+							SetRAMBank(3, slot3BankIndex);
+
+							// sam todo: only set dirty banks that have changed?
+							CodeAnalysis.SetAllBanksDirty();
+						}
+						break;
+					}
+				}
+			}
+				
+#if 0
+				/* 0x0000 .. 0x3FFF */
+				if (rom_enable & AM40010_CONFIG_LROMEN) {
+					/* read/write RAM */
+					mem_map_ram(&sys->mem, 0, 0x0000, 0x4000, sys->ram[i0]);
+				}
+				else {
+					/* RAM-behind-ROM */
+					mem_map_rw(&sys->mem, 0, 0x0000, 0x4000, rom0_ptr, sys->ram[i0]);
+				}
+				/* 0x4000 .. 0x7FFF */
+				mem_map_ram(&sys->mem, 0, 0x4000, 0x4000, sys->ram[i1]);
+				/* 0x8000 .. 0xBFFF */
+				mem_map_ram(&sys->mem, 0, 0x8000, 0x4000, sys->ram[i2]);
+				/* 0xC000 .. 0xFFFF */
+				if (rom_enable & AM40010_CONFIG_HROMEN) {
+					/* read/write RAM */
+					mem_map_ram(&sys->mem, 0, 0xC000, 0x4000, sys->ram[i3]);
+				}
+				else {
+					/* RAM-behind-ROM */
+					mem_map_rw(&sys->mem, 0, 0xC000, 0x4000, rom1_ptr, sys->ram[i3]);
+				}
+			}
+#endif		
+
+		}	
+
 #if SPECCY	
 		IOAnalysis.IOHandler(pc, pins);
 
@@ -592,8 +677,6 @@ void FCpcEmu::SetROMBank(int bankNo)
 	CurROMBank = bankId;
 }
 
-// sam todo get working for cpc
-
 // Slot is physical 16K memory region (0-3) 
 // Bank is a 16K CPC RAM bank (0-7)
 void FCpcEmu::SetRAMBank(int slot, int bankNo)
@@ -606,6 +689,8 @@ void FCpcEmu::SetRAMBank(int slot, int bankNo)
 	const int startPage = slot * kNoBankPages;
 	CodeAnalysis.UnMapBank(CurRAMBank[slot], startPage);
 	CodeAnalysis.MapBank(bankId, startPage);
+
+	CodeAnalysis.GetBank(RAMBanks[bankNo])->PrimaryMappedPage = slot * 16;
 
 	CurRAMBank[slot] = bankId;
 }
@@ -713,6 +798,7 @@ bool FCpcEmu::Init(const FCpcConfig& config)
 
 	// This is where we add the viewers we want
 	Viewers.push_back(new FBreakpointViewer(this));
+	Viewers.push_back(new FCrtcViewer(this));
 	//Viewers.push_back(new FOverviewViewer(this));
 
 	// Initialise Viewers
@@ -735,28 +821,10 @@ bool FCpcEmu::Init(const FCpcConfig& config)
 
 	// Set up code analysis
 	// initialise code analysis pages
-/*
+
 
 	// sam todo look at _ui_cpc_update_memmap
-	// 
-	// ROM
-	for (int pageNo = 0; pageNo < kNoROMPages; pageNo++)
-	{
-		char pageName[32];
-		sprintf(pageName, "ROM:%d", pageNo);
-		ROMPages[pageNo].Initialise(0);
-		CodeAnalysis.RegisterPage(&ROMPages[pageNo], pageName);
-	}
-	// RAM
-	for (int pageNo = 0; pageNo < kNoRAMPages; pageNo++)
-	{
-		char pageName[32];
-		sprintf(pageName, "RAM:%d", pageNo);
-		RAMPages[pageNo].Initialise(0);
-		CodeAnalysis.RegisterPage(&RAMPages[pageNo], pageName);
-	}
-	*/
-
+	
 	// sam todo get this working for cpc
 	// 
 	// create & register ROM banks
@@ -1146,7 +1214,6 @@ void FCpcEmu::DrawHardwareMenu()
 		ImGui::MenuItem("Keyboard Matrix", 0, &UICpc.kbd.open);
 		ImGui::MenuItem("Audio Output", 0, &UICpc.audio.open);
 		ImGui::MenuItem("Z80 CPU", 0, &UICpc.cpu.open);
-		ImGui::MenuItem("MC6845 (CRTC)", 0, &UICpc.vdc.open);
 		ImGui::MenuItem("AM40010 (Gate Array)", 0, &UICpc.ga.open);
 		ImGui::EndMenu();
 	}
@@ -1420,7 +1487,7 @@ void FCpcEmu::DrawUI()
 	if (pCPCUI->memmap.open)
 	{
 		// sam todo work out why SpectrumEmu.cpp has it's own version of UpdateMemmap()
-		// why didn't Mark call _ui_zx_update_memmap()?
+		// why doesn't it call _ui_zx_update_memmap()?
 		//UpdateMemmap(pCPCUI);
 	}
 
@@ -1436,8 +1503,7 @@ void FCpcEmu::DrawUI()
 	ui_kbd_draw(&pCPCUI->kbd);
 	ui_memmap_draw(&pCPCUI->memmap);
 	ui_am40010_draw(&pCPCUI->ga);
-	ui_mc6845_draw(&pCPCUI->vdc);
-
+	
 	// Draw registered viewers
 	for (auto Viewer : Viewers)
 	{

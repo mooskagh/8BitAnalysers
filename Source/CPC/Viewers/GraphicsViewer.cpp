@@ -109,8 +109,8 @@ void DrawGraphicsViewer(FGraphicsViewerState &state)
 {
 	if (ImGui::Begin("Graphics View"))
 	{
-		ImGui::End();
 	}
+	ImGui::End();
 // todo get this working
 #if 0
 	FCpcGraphicsView *pGraphicsView = state.pGraphicsView;	
