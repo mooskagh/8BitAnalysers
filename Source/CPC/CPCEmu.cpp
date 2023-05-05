@@ -543,26 +543,34 @@ uint64_t FCpcEmu::Z80Tick(int num, uint64_t pins)
 				/* data bits 6 and 7 select the register type */
 				switch (data & ((1 << 7) | (1 << 6)))
 				{
-					/* update the config register:
-						- bits 0 and 1 select the video mode (updated at next HSYNC):
-							00: 160x200 @ 16 colors
-							01: 320x200 @ 4 colors
-							10: 620x200 @ 2 colors
-							11: 160x200 @ 2 colors (undocumented, currently not supported)
-						- bit 2: LROMEN (lower ROM enable)
-						- bit 3: HROMEN (upper ROM enable)
-						- bit 4: IRQ_RESET (not a flip-flop, only a one-shot signal)
-					*/
-					// sam todo
-					/*case (1 << 7):
+					case (1 << 7):
 					{
-						uint8_t romen_dirty = (ga->regs.config ^ data) & (AM40010_CONFIG_LROMEN | AM40010_CONFIG_HROMEN);
-						ga->regs.config = data & 0x1F;
-						if (0 != romen_dirty) {
-							ga->bankswitch_cb(ga->ram_config, ga->regs.config, ga->rom_select, ga->user_data);
+						am40010_registers_t& regs = CpcEmuState.ga.regs;
+						if (regs.config & AM40010_CONFIG_LROMEN)
+						{
+							// disable low rom
+							SetROMBankLo(-1);
 						}
+						else
+						{
+							// enable low rom
+							SetROMBankLo(ROM_OS);
+						}
+
+						if (regs.config & AM40010_CONFIG_HROMEN)
+						{
+							// disable high rom
+							SetROMBankHi(-1);
+						}
+						else
+						{
+							// enable high rom
+							SetROMBankHi(CpcEmuState.ga.rom_select == 7 ? ROM_AMSDOS : ROM_BASIC);
+						}
+						// sam is this right?
+						CodeAnalysis.SetAllBanksDirty();
 					}
-					break;*/
+					break;
 
 					/* RAM bank switching (6128 only) */
 					case (1 << 6) | (1 << 7) :
@@ -570,22 +578,9 @@ uint64_t FCpcEmu::Z80Tick(int num, uint64_t pins)
 						int bankPresetIndex;
 						if (AM40010_CPC_TYPE_6128 == CpcEmuState.type)
 						{
-							am40010_t& ga = CpcEmuState.ga;
-							// sam need to check if dirty?
-							bankPresetIndex = ga.ram_config & 7;
-
-							const int slot0BankIndex = _cpc_ram_config[bankPresetIndex][0];
-							const int slot1BankIndex = _cpc_ram_config[bankPresetIndex][1];
-							const int slot2BankIndex = _cpc_ram_config[bankPresetIndex][2];
-							const int slot3BankIndex = _cpc_ram_config[bankPresetIndex][3];
-
-							SetRAMBank(0, slot0BankIndex);
-							SetRAMBank(1, slot1BankIndex);
-							SetRAMBank(2, slot2BankIndex);
-							SetRAMBank(3, slot3BankIndex);
-
-							// sam todo: only set dirty banks that have changed?
-							CodeAnalysis.SetAllBanksDirty();
+							// sam todo. only set ram banks if dirty?
+							bankPresetIndex = CpcEmuState.ga.ram_config & 7;
+							SetRAMBanks(bankPresetIndex);
 						}
 						break;
 					}
@@ -656,25 +651,43 @@ static uint64_t Z80TickThunk(int num, uint64_t pins, void* user_data)
 	return pEmu->Z80Tick(num, pins);
 }
 
-// sam todo get working for cpc
-// for cpc we probably want something like this
-// slot: 0 = lo, 1 = hi
-// need to be able to page rom in and out 
-/*void FCpcEmu::SetROMBank(int slot, int bankNo)
+// Set the low rom bank (0x0000 - 0x4000).
+// This is the OS ROM.
+void FCpcEmu::SetROMBankLo(int bankNo)
 {
-}*/
-
-// Bank is ROM bank 0 or 1
-// this is always slot 0
-void FCpcEmu::SetROMBank(int bankNo)
-{
-	const int16_t bankId = ROMBanks[bankNo];
-	if (CurROMBank == bankId)
+	const int16_t bankId = bankNo == -1 ? -1 : ROMBanks[bankNo];
+	if (CurROMBankLo == bankId)
 		return;
+
+	LOGDEBUG("%s OS ROM", bankNo == -1 ? "Disable" : "Enable");
+ 
+// sam. currently disabled until separate banks for read and write are supported
+#if 0
 	// Unmap old bank
-	CodeAnalysis.UnMapBank(CurROMBank, 0);
+	CodeAnalysis.UnMapBank(CurROMBankLo, 0);
+	if (bankNo != -1)
+		CodeAnalysis.MapBank(bankId, 0);
+#endif
+	CurROMBankLo = bankId;
+}
+
+// Set the high rom bank (0xc000 - 0xffff).
+// This can either be the AMSDOS or the BASIC ROM
+void FCpcEmu::SetROMBankHi(int bankNo)
+{
+	const int16_t bankId = bankNo == -1 ? -1 : ROMBanks[bankNo];
+	if (CurROMBankHi == bankId)
+		return;
+
+	LOGDEBUG("%s %s ROM", bankNo == -1 ? "Disable" : "Enable", bankNo == ROM_AMSDOS ? "AMSDOS" : "BASIC");
+
+// sam. currently disabled until separate banks for read and write are supported
+#if 0
+	// Unmap old bank
+	CodeAnalysis.UnMapBank(CurROMBankHi, 0);
 	CodeAnalysis.MapBank(bankId, 0);
-	CurROMBank = bankId;
+#endif
+	CurROMBankHi = bankId;
 }
 
 // Slot is physical 16K memory region (0-3) 
@@ -693,6 +706,22 @@ void FCpcEmu::SetRAMBank(int slot, int bankNo)
 	CodeAnalysis.GetBank(RAMBanks[bankNo])->PrimaryMappedPage = slot * 16;
 
 	CurRAMBank[slot] = bankId;
+}
+
+void FCpcEmu::SetRAMBanks(int bankPresetIndex)
+{
+	const int slot0BankIndex = _cpc_ram_config[bankPresetIndex][0];
+	const int slot1BankIndex = _cpc_ram_config[bankPresetIndex][1];
+	const int slot2BankIndex = _cpc_ram_config[bankPresetIndex][2];
+	const int slot3BankIndex = _cpc_ram_config[bankPresetIndex][3];
+
+	SetRAMBank(0, slot0BankIndex);
+	SetRAMBank(1, slot1BankIndex);
+	SetRAMBank(2, slot2BankIndex);
+	SetRAMBank(3, slot3BankIndex);
+
+	// sam todo: only set dirty banks that have changed?
+	CodeAnalysis.SetAllBanksDirty();
 }
 
 bool FCpcEmu::Init(const FCpcConfig& config)
@@ -822,19 +851,17 @@ bool FCpcEmu::Init(const FCpcConfig& config)
 	// Set up code analysis
 	// initialise code analysis pages
 
+	// Low ROM 0x0000 - 0x3fff
+	ROMBanks[ROM_OS] = CodeAnalysis.CreateBank("ROM OS", 16, CpcEmuState.rom_os, true);
+	CodeAnalysis.GetBank(ROMBanks[ROM_OS])->PrimaryMappedPage = 0;
 
-	// sam todo look at _ui_cpc_update_memmap
-	
-	// sam todo get this working for cpc
-	// 
-	// create & register ROM banks
-	for (int bankNo = 0; bankNo < kNoROMBanks; bankNo++)
-	{
-		char bankName[32];
-		sprintf(bankName, "ROM %d", bankNo);
-		ROMBanks[bankNo] = CodeAnalysis.CreateBank(bankName, 16, CpcEmuState.rom_os, true); // no idea if this is right or not
-		CodeAnalysis.GetBank(ROMBanks[bankNo])->PrimaryMappedPage = 0;
-	}
+	// High ROM AMSDOS 0xc000 - 0xffff
+	ROMBanks[ROM_AMSDOS] = CodeAnalysis.CreateBank("ROM AMSDOS", 16, CpcEmuState.rom_amsdos, true);
+	CodeAnalysis.GetBank(ROMBanks[ROM_AMSDOS])->PrimaryMappedPage = 48;
+
+	// High ROM BASIC 0xc000 - 0xffff
+	ROMBanks[ROM_BASIC] = CodeAnalysis.CreateBank("ROM BASIC", 16, CpcEmuState.rom_basic, true);
+	CodeAnalysis.GetBank(ROMBanks[ROM_BASIC])->PrimaryMappedPage = 48;
 
 	// create & register RAM banks
 	for (int bankNo = 0; bankNo < kNoRAMBanks; bankNo++)
@@ -842,7 +869,6 @@ bool FCpcEmu::Init(const FCpcConfig& config)
 		char bankName[32];
 		sprintf(bankName, "RAM %d", bankNo);
 		RAMBanks[bankNo] = CodeAnalysis.CreateBank(bankName, 16, CpcEmuState.ram[bankNo], false);
-		CodeAnalysis.GetBank(RAMBanks[bankNo])->PrimaryMappedPage = 48; // ?
 	}
 
 	// CreateBank(name,size in kb,r/w)
@@ -856,7 +882,6 @@ bool FCpcEmu::Init(const FCpcConfig& config)
 		CodeAnalysis.GetBank(RAMBanks[2])->PrimaryMappedPage = 32;
 		CodeAnalysis.GetBank(RAMBanks[3])->PrimaryMappedPage = 48;
 
-		SetROMBank(0);
 		SetRAMBank(0, 0);	// 0x0000 - 0x3fff
 		SetRAMBank(1, 1);	// 0x4000 - 0x7fff
 		SetRAMBank(2, 2);	// 0x8000 - 0xBfff
@@ -869,14 +894,11 @@ bool FCpcEmu::Init(const FCpcConfig& config)
 		CodeAnalysis.GetBank(RAMBanks[2])->PrimaryMappedPage = 32;
 		CodeAnalysis.GetBank(RAMBanks[3])->PrimaryMappedPage = 48;
 
-		SetROMBank(0);
 		SetRAMBank(0, 0);	// 0x0000 - 0x3fff
 		SetRAMBank(1, 1);	// 0x4000 - 0x7fff
 		SetRAMBank(2, 2);	// 0x8000 - 0xBfff
 		SetRAMBank(3, 3);	// 0xc000 - 0xffff
 	}
-
-//#endif
 
 	// load the command line game if none specified then load the last game
 	bool bLoadedGame = false;
@@ -973,7 +995,6 @@ void FCpcEmu::StartGame(FGameConfig* pGameConfig)
 	}
 
 	const std::string root = GetGlobalConfig().WorkspaceRoot;
-	const std::string dataFName = root + "GameData/" + pGameConfig->Name + ".bin";
 #if SPECCY
 	std::string romJsonFName = kRomInfo48JsonFile;
 
@@ -1019,7 +1040,7 @@ void FCpcEmu::StartGame(FGameConfig* pGameConfig)
 	GamesList.LoadGame(gameFile.c_str());
 
 	// Start in break mode so the memory will be in it's initial state. 
-	// Otherwise, if we export an asm file once the game is running the memory could be in an arbitrary state.
+	// Otherwise, if we export an asm file once the game is running the memory will be in an arbitrary state.
 	Break();
 }
 

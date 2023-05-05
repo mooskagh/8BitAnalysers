@@ -30,7 +30,15 @@ bool LoadSNAFileCached(FCpcEmu* pEmu, const char* fName, uint8_t*& pData , size_
 }
 
 bool LoadSNAFromMemory(FCpcEmu * pEmu, const uint8_t * pData, size_t dataSize)
-{
-	return cpc_quickload(&pEmu->CpcEmuState, pData, static_cast<int>(dataSize));
+{	
+	bool bResult = cpc_quickload(&pEmu->CpcEmuState, pData, static_cast<int>(dataSize));
+	if (bResult == true)
+	{
+		if (pEmu->CpcEmuState.type == CPC_TYPE_6128)
+		{
+			pEmu->SetRAMBanks(pEmu->CpcEmuState.ga.ram_config & 7);
+		}
+	}
+	return bResult;
 }
 

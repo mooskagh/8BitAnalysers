@@ -60,6 +60,13 @@ enum class ECpcModel
 	CPC_KCKompact,
 };
 
+enum EROMBank
+{
+	ROM_OS = 0,
+	ROM_AMSDOS,
+	ROM_BASIC,
+};
+
 struct FCpcConfig
 {
 	void ParseCommandline(int argc, char** argv);
@@ -132,8 +139,11 @@ public:
 	void*		GetCPUEmulator(void) const override;
 	//ICPUInterface End
 
-	void SetROMBank(int bankNo);
+	//void SetROMBank(int bankNo);
+	void SetROMBankLo(int bankNo);
+	void SetROMBankHi(int bankNo);
 	void SetRAMBank(int slot, int bankNo);
+	void SetRAMBanks(int bankPresetIndex);
 
 	// util functions related to the screen. put in a different file?
 	uint16_t GetScreenAddrStart() const;
@@ -160,10 +170,9 @@ public:
 	FCodeAnalysisState		CodeAnalysis;
 	//FIOAnalysis				IOAnalysis;
 
-	// todo these are probably wrong for cpc
 	static const int	kNoBankPages = 16;	// no of pages per physical address slot (16k)
 	static const int	kNoRAMPages = 128;
-	static const int	kNoROMBanks = 2; 
+	static const int	kNoROMBanks = 3;
 	static const int	kNoRAMBanks = 8;
 
 	int16_t				ROMBanks[kNoROMBanks];
@@ -171,8 +180,8 @@ public:
 	//FCodeAnalysisPage	ROMPages[kNoROMPages];
 	//FCodeAnalysisPage	RAMPages[kNoRAMPages];
 	
-	// sam. think we need CurLoROMBank and CurHiROMBank here
-	int16_t				CurROMBank = -1;
+	int16_t				CurROMBankLo = -1;
+	int16_t				CurROMBankHi = -1;
 	int16_t				CurRAMBank[4] = { -1,-1,-1,-1 };
 
 	// Memory handling
@@ -194,7 +203,7 @@ public:
 
 	const FGamesList& GetGamesList() const { return GamesList;  }
 
-	// put this somewhere else
+	// sam put this somewhere else
 	int ScreenModePerScanline[AM40010_DISPLAY_HEIGHT] = {-1 };
 	int LastScanline = -1;
 private:
