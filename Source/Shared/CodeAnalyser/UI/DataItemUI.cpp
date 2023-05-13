@@ -653,7 +653,8 @@ void DrawDataDetails(FCodeAnalysisState& state, FCodeAnalysisViewState& viewStat
 			else
 				textString += ch;
 		}
-		ImGui::Text("%s", textString.c_str());
+		ImGui::TextWrapped("%s", textString.c_str());
+
 		int length = pDataInfo->ByteSize;
 		if (ImGui::InputInt("Length", &length))
 		{
