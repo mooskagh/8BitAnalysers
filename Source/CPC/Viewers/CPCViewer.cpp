@@ -202,6 +202,8 @@ void FCpcViewer::Draw()
 	if (ImGui::Button("Reset"))
 		pCpcEmu->ExecSpeedScale = 1.0f;
 	ImGui::Text("Application average %.3f ms/frame (%.1f FPS)", 1000.0f / ImGui::GetIO().Framerate, ImGui::GetIO().Framerate);
+
+	bWindowFocused = ImGui::IsWindowFocused();
 }
 
 int CpcKeyFromImGuiKey(ImGuiKey key)
@@ -344,9 +346,12 @@ void FCpcViewer::Tick(void)
 	{
 		if (ImGui::IsKeyPressed(key,false))
 		{ 
-			int cpcKey = CpcKeyFromImGuiKey(key);
-			if (cpcKey != 0)
-				cpc_key_down(&pCpcEmu->CpcEmuState, cpcKey);
+			if (bWindowFocused)
+			{
+				int cpcKey = CpcKeyFromImGuiKey(key);
+				if (cpcKey != 0)
+					cpc_key_down(&pCpcEmu->CpcEmuState, cpcKey);
+			}
 		}
 		else if (ImGui::IsKeyReleased(key))
 		{

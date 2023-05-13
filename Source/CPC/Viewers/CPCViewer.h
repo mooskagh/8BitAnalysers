@@ -19,6 +19,7 @@ public:
 private:
 	FCpcEmu* pCpcEmu = nullptr;
 
+	bool	bWindowFocused = false;
 	// screen inspector
 	/*bool		bScreenCharSelected = false;
 	uint16_t	SelectPixAddr = 0;
@@ -28,6 +29,5 @@ private:
 	bool		CharDataFound = false;
 	uint16_t	FoundCharDataAddress = 0;
 	uint8_t		CharData[8] = {0};
-	bool		bCharSearchWrap = true;
-	bool		bWindowFocused = false;*/
+	bool		bCharSearchWrap = true;*/
 };
