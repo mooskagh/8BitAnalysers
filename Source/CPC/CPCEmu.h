@@ -47,6 +47,7 @@
 #include "Viewers/CPCViewer.h"
 #include "Viewers/GraphicsViewer.h"
 #include "MemoryHandlers.h"
+#include "IOAnalysis.h"
 
 struct FGameViewerData;
 struct FGameConfig;
@@ -99,6 +100,7 @@ public:
 	uint64_t Z80Tick(int num, uint64_t pins);
 
 	void	Tick();
+	void	DrawMemoryTools();
 	void	DrawUI();
 	bool	DrawDockingView();
 
@@ -168,7 +170,7 @@ public:
 	//FFrameTraceViewer		FrameTraceViewer;
 	FGraphicsViewerState	GraphicsViewer;
 	FCodeAnalysisState		CodeAnalysis;
-	//FIOAnalysis				IOAnalysis;
+	FIOAnalysis				IOAnalysis;
 
 	static const int	kNoBankPages = 16;	// no of pages per physical address slot (16k)
 	static const int	kNoRAMPages = 128;

@@ -58,7 +58,7 @@ void FCpcViewer::Draw()
 	static bool bShowScreenmodeChanges = false;
 	ImGui::Checkbox("Show screenmode changes", &bShowScreenmodeChanges);
 #ifndef NDEBUG
-	static bool bClickWritesToScreen = true;
+	static bool bClickWritesToScreen = false;
 	ImGui::Checkbox("Write to screen on click", &bClickWritesToScreen);
 #endif
 

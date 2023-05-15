@@ -173,13 +173,12 @@ void MemWriteFunc(int layer, uint16_t addr, uint8_t data, void* user_data)
 }
 #endif
 
-
 uint8_t	FCpcEmu::ReadByte(uint16_t address) const
 {
 	return mem_rd(const_cast<mem_t*>(&CpcEmuState.mem), address);
 	//return MemReadFunc(CurrentLayer, address, const_cast<cpc_t *>(&CpcEmuState));
-
 }
+
 uint16_t FCpcEmu::ReadWord(uint16_t address) const 
 {
 	return ReadByte(address) | (ReadByte(address + 1) << 8);
@@ -534,6 +533,8 @@ uint64_t FCpcEmu::Z80Tick(int num, uint64_t pins)
 
 	if (pins & Z80_IORQ)
 	{
+		IOAnalysis.IOHandler(pc, pins);
+
 		if (pins & (Z80_RD | Z80_WR))
 		{
 			if ((pins & (AM40010_A14 | AM40010_A15)) == AM40010_A14)
@@ -614,32 +615,6 @@ uint64_t FCpcEmu::Z80Tick(int num, uint64_t pins)
 #endif		
 
 		}	
-
-#if SPECCY	
-		IOAnalysis.IOHandler(pc, pins);
-
-		if (ZXEmuState.type == ZX_TYPE_128)
-		{
-			if (pins & Z80_WR)
-			{
-				// an IO write
-				const uint8_t data = Z80_GET_DATA(pins);
-
-				if ((pins & (Z80_A15 | Z80_A1)) == 0)
-				{
-					if (!ZXEmuState.memory_paging_disabled)
-					{
-						const int ramBank = data & 0x7;
-						const int romBank = (data & (1 << 4)) ? 1 : 0;
-						const int displayRamBank = (data & (1 << 3)) ? 7 : 5;
-
-						SetROMBank(romBank);
-						SetRAMBank(3, ramBank);
-					}
-				}
-			}
-		}
-#endif
 	}
 
 	return pins;
@@ -659,7 +634,7 @@ void FCpcEmu::SetROMBankLo(int bankNo)
 	if (CurROMBankLo == bankId)
 		return;
 
-	LOGDEBUG("%s OS ROM", bankNo == -1 ? "Disable" : "Enable");
+	//LOGDEBUG("%s OS ROM", bankNo == -1 ? "Disable" : "Enable");
  
 // sam. currently disabled until separate banks for read and write are supported
 #if 0
@@ -679,7 +654,7 @@ void FCpcEmu::SetROMBankHi(int bankNo)
 	if (CurROMBankHi == bankId)
 		return;
 
-	LOGDEBUG("%s %s ROM", bankNo == -1 ? "Disable" : "Enable", bankNo == ROM_AMSDOS ? "AMSDOS" : "BASIC");
+	//LOGDEBUG("%s %s ROM", bankNo == -1 ? "Disable" : "Enable", bankNo == ROM_AMSDOS ? "AMSDOS" : "BASIC");
 
 // sam. currently disabled until separate banks for read and write are supported
 #if 0
@@ -841,9 +816,8 @@ bool FCpcEmu::Init(const FCpcConfig& config)
 
 	GraphicsViewer.pEmu = this;
 	InitGraphicsViewer(GraphicsViewer);
-
+	IOAnalysis.Init(this);
 	CpcViewer.Init(this);
-
 	CodeAnalysis.ViewState[0].Enabled = true;	// always have first view enabled
 
 	LoadGameConfigs(this);
@@ -1026,6 +1000,7 @@ void FCpcEmu::StartGame(FGameConfig* pGameConfig)
 #endif
 	CodeAnalysis.SetAddressRangeDirty();
 
+#ifdef RUN_AHEAD_TO_GENERATE_SCREEN
 	// Run the cpc for long enough to generate a frame buffer, otherwise the user will be staring at a black screen.
 	// sam todo: run for exactly 1 video frame. The current technique is crude and can render >1 frame, including partial frames and produce 
 	// a glitch when continuing execution.
@@ -1038,6 +1013,7 @@ void FCpcEmu::StartGame(FGameConfig* pGameConfig)
 	const std::string snapFolder = GetGlobalConfig().SnapshotFolder;
 	const std::string gameFile = snapFolder + pGameConfig->SnapshotFile;
 	GamesList.LoadGame(gameFile.c_str());
+#endif
 
 	// Start in break mode so the memory will be in it's initial state. 
 	// Otherwise, if we export an asm file once the game is running the memory will be in an arbitrary state.
@@ -1490,6 +1466,45 @@ void FCpcEmu::Tick()
 	DrawDockingView();
 }
 
+void FCpcEmu::DrawMemoryTools()
+{
+	if (ImGui::Begin("Memory Tools") == false)
+	{
+		ImGui::End();
+		return;
+	}
+	if (ImGui::BeginTabBar("MemoryToolsTabBar"))
+	{
+#if SPECCY
+		if (ImGui::BeginTabItem("Memory Handlers"))
+		{
+			DrawMemoryHandlers(this);
+			ImGui::EndTabItem();
+		}
+
+		if (ImGui::BeginTabItem("Memory Analysis"))
+		{
+			DrawMemoryAnalysis(this);
+			ImGui::EndTabItem();
+		}
+		if (ImGui::BeginTabItem("Memory Diff"))
+		{
+			DrawMemoryDiffUI(this);
+			ImGui::EndTabItem();
+		}
+#endif
+		if (ImGui::BeginTabItem("IO Analysis"))
+		{
+			IOAnalysis.DrawUI();
+			ImGui::EndTabItem();
+		}
+
+		ImGui::EndTabBar();
+	}
+
+	ImGui::End();
+}
+
 void FCpcEmu::DrawUI()
 {
 	ui_cpc_t* pCPCUI = &UICpc;
@@ -1544,9 +1559,7 @@ void FCpcEmu::DrawUI()
 
 	if (ImGui::Begin("Call Stack"))
 	{
-#if SPECCY
 		DrawStackInfo(CodeAnalysis);
-#endif
 	}
 	ImGui::End();
 
@@ -1574,6 +1587,7 @@ void FCpcEmu::DrawUI()
 	ImGui::End();*/
 
 	DrawGraphicsViewer(GraphicsViewer);
+	DrawMemoryTools();
 
 	// Code analysis views
 	for (int codeAnalysisNo = 0; codeAnalysisNo < FCodeAnalysisState::kNoViewStates; codeAnalysisNo++)
