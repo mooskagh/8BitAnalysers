@@ -31,10 +31,93 @@ void FIOAnalysis::Init(FCpcEmu* pEmu)
 // sam get rid of this hack
 #define _AM40010_GET_DATA(p) ((uint8_t)((p&0xFF0000ULL)>>16))
 
+CpcIODevice FIOAnalysis::HandlePPIRead(uint64_t pins)
+{
+  if ((pins & (I8255_A0 | I8255_A1)) == 0)
+  {
+	 i8255_t& ppi = pCpcEmu->CpcEmuState.ppi;
+	 if ((ppi.control & I8255_CTRL_A) == I8255_CTRL_A_OUTPUT)
+	 {
+	 }
+	 else
+	 {
+		uint64_t ay_pins = 0;
+		uint8_t ay_ctrl = ppi.output[I8255_PORT_C];
+		if (ay_ctrl & (1 << 7)) ay_pins |= AY38910_BDIR;
+		if (ay_ctrl & (1 << 6)) ay_pins |= AY38910_BC1;
+
+		const ay38910_t* ay = &pCpcEmu->CpcEmuState.psg;
+
+		if (ay_pins & (AY38910_BDIR | AY38910_BC1))
+		{
+		  if (ay_pins & AY38910_BDIR)
+		  {
+		  }
+		  else
+		  {
+			 if (ay->addr < AY38910_NUM_REGISTERS)
+			 {
+				if (ay->addr == AY38910_REG_IO_PORT_A)
+				{
+				  if ((ay->enable & (1 << 6)) == 0)
+				  {
+					 if (ay->in_cb)
+					 {
+						return CpcIODevice::Keyboard;
+					 }
+				  }
+				}
+			 }
+		  }
+		}
+	 }
+  }
+  return CpcIODevice::None;
+}
+
+CpcIODevice FIOAnalysis::HandlePPIWrite(uint64_t pins)
+{
+  if ((pins & (I8255_A0 | I8255_A1)) == I8255_A1)
+  {
+	 const uint8_t ay_ctrl = pCpcEmu->CpcEmuState.ppi.output[I8255_PORT_C] & ((1 << 7) | (1 << 6));
+	 if (ay_ctrl)
+	 {
+		uint64_t ay_pins = 0;
+		if (ay_ctrl & (1 << 7)) { ay_pins |= AY38910_BDIR; }
+		if (ay_ctrl & (1 << 6)) { ay_pins |= AY38910_BC1; }
+		if (ay_pins & (AY38910_BDIR | AY38910_BC1))
+		{
+		  const ay38910_t* ay = &pCpcEmu->CpcEmuState.psg;
+		  if (ay_pins & AY38910_BDIR)
+		  {
+		  }
+		  else
+		  {
+			 if (ay->addr < AY38910_NUM_REGISTERS)
+			 {
+				if (ay->addr == AY38910_REG_IO_PORT_A)
+				{
+				  if ((ay->enable & (1 << 6)) == 0)
+				  {
+					 if (ay->in_cb)
+					 {
+						return CpcIODevice::Keyboard;
+					 }
+				  }
+				}
+			 }
+		  }
+		}
+	 }
+  }
+  return CpcIODevice::None;
+}
+
 void FIOAnalysis::IOHandler(uint16_t pc, uint64_t pins)
 {
 	 const FAddressRef PCaddrRef = pCpcEmu->CodeAnalysis.AddressRefFromPhysicalAddress(pc);
 
+	 CpcIODevice readDevice = CpcIODevice::None;
 	 CpcIODevice writeDevice = CpcIODevice::None;
 
 	 if ((pins & Z80_IORQ) && (pins & (Z80_RD | Z80_WR))) 
@@ -47,163 +130,15 @@ void FIOAnalysis::IOHandler(uint16_t pc, uint64_t pins)
 			 if (pins & Z80_RD) { ppi_pins |= I8255_RD; }
 			 if (pins & Z80_WR) { ppi_pins |= I8255_WR; }
 
-			 //pins = i8255_iorq(&sys->ppi, ppi_pins) & Z80_PIN_MASK;
 			 if (ppi_pins & I8255_CS)
 			 {
-				 //const uint8_t data = _i8255_read(ppi, pins);
 				 if (ppi_pins & I8255_RD)
 				 {
-					 switch (ppi_pins & (I8255_A0 | I8255_A1))
-					 {
-					 case 0: /* read from port A */
-					 {
-						 //data = _i8255_in_a(ppi);
-						 i8255_t & ppi = pCpcEmu->CpcEmuState.ppi;
-						 if ((ppi.control & I8255_CTRL_A) == I8255_CTRL_A_OUTPUT)
-						 {
-							 //data = ppi->output[I8255_PORT_A];
-						 }
-						 else
-						 {
-							 //data = ppi->in_cb(I8255_PORT_A, ppi->user_data);
-
-							 uint64_t ay_pins = 0;
-							 uint8_t ay_ctrl = ppi.output[I8255_PORT_C];
-							 if (ay_ctrl & (1 << 7)) ay_pins |= AY38910_BDIR;
-							 if (ay_ctrl & (1 << 6)) ay_pins |= AY38910_BC1;
-							 //uint8_t ay_data = sys->ppi.output[I8255_PORT_A];
-							 //AY38910_SET_DATA(ay_pins, ay_data);
-							 //ay_pins = ay38910_iorq(&sys->psg, ay_pins);*/
-
-							 const ay38910_t* ay = &pCpcEmu->CpcEmuState.psg;
-
-							 if (ay_pins & (AY38910_BDIR | AY38910_BC1))
-							 {
-								 if (ay_pins & AY38910_BDIR)
-								 {
-								 }
-								 else
-								 {
-									 if (ay->addr < AY38910_NUM_REGISTERS)
-									 {
-										 if (ay->addr == AY38910_REG_IO_PORT_A)
-										 {
-											 if ((ay->enable & (1 << 6)) == 0)
-											 {
-												 if (ay->in_cb)
-												 {
-													 // here
-													 writeDevice = CpcIODevice::Keyboard;
-													 //ay->port_a = ay->in_cb(AY38910_PORT_A, ay->user_data);
-												 }
-												 else
-												 {
-													 //ay->port_a = 0xFF;
-												 }
-											 }
-										 }
-										 else if (ay->addr == AY38910_REG_IO_PORT_B)
-										 {
-										 }
-									 }
-								 }
-							 }
-						 }
-
-						 break;
-					 }
-					 case I8255_A0: /* read from port B */
-						 //data = _i8255_in_b(ppi);
-						 break;
-					 case I8255_A1: /* read from port C */
-						 //data = _i8255_in_c(ppi);
-						 break;
-					 case (I8255_A0 | I8255_A1): /* read control word */
-						 //data = ppi->control;
-						 break;
-					 }
-
-					 /* read from PPI */
-					 /*const uint8_t data = _i8255_read(ppi, ppi_pins);
-					 I8255_SET_DATA(pins, data);*/
+					readDevice = HandlePPIRead(ppi_pins);
 				 }
 				 else if (ppi_pins & I8255_WR)
 				 {
-					 /* write to PPI */
-					 const uint8_t data = I8255_GET_DATA(ppi_pins);
-					 //pins = _i8255_write(ppi, pins, data);
-					 switch (ppi_pins & (I8255_A0 | I8255_A1))
-					 {
-						 case 0: /* write to port A */
-							 /*if ((ppi->control & I8255_CTRL_A) == I8255_CTRL_A_OUTPUT) 
-							 {
-								 pins = _i8255_out_a(ppi, pins, data);
-							 }*/
-							 break;
-						 case I8255_A0: /* write to port B */
-							 /*if ((ppi->control & I8255_CTRL_B) == I8255_CTRL_B_OUTPUT) 
-							 {
-								 pins = _i8255_out_b(ppi, pins, data);
-							 }*/
-							 break;
-						 case I8255_A1: /* write to port C */
-							 //ppi->output[I8255_PORT_C] = data;
-							 //pins = _i8255_out_c(ppi, pins);
-							 
-							 const uint8_t ay_ctrl = pCpcEmu->CpcEmuState.ppi.output[I8255_PORT_C] & ((1 << 7) | (1 << 6));
-							 if (ay_ctrl) 
-							 {
-								 uint64_t ay_pins = 0;
-								 if (ay_ctrl & (1 << 7)) { ay_pins |= AY38910_BDIR; }
-								 if (ay_ctrl & (1 << 6)) { ay_pins |= AY38910_BC1; }
-								 //const uint8_t ay_data = sys->ppi.output[I8255_PORT_A];
-								 //AY38910_SET_DATA(ay_pins, ay_data);
-								 //ay38910_iorq(&sys->psg, ay_pins);
-								 if (ay_pins & (AY38910_BDIR | AY38910_BC1))
-								 {
-									 const ay38910_t* ay = &pCpcEmu->CpcEmuState.psg;
-									 if (ay_pins & AY38910_BDIR)
-									 {
-
-									 }
-									 else
-									 {
-										 if (ay->addr < AY38910_NUM_REGISTERS)
-										 {
-											 if (ay->addr == AY38910_REG_IO_PORT_A)
-											 {
-												 if ((ay->enable & (1 << 6)) == 0)
-												 {
-													 if (ay->in_cb)
-													 {
-														 writeDevice = CpcIODevice::Keyboard;
-
-														 //>>> ay->port_a = ay->in_cb(AY38910_PORT_A, ay->user_data);
-													 }
-													 else
-													 {
-														 //ay->port_a = 0xFF;
-													 }
-												 }
-											 }
-											 else if (ay->addr == AY38910_REG_IO_PORT_B)
-											 {
-												 /*if ((ay->enable & (1 << 7)) == 0)
-												 {
-													 if (ay->in_cb) {
-														 ay->port_b = ay->in_cb(AY38910_PORT_B, ay->user_data);
-													 }
-													 else {
-														 ay->port_b = 0xFF;
-													 }
-												 }*/
-											 }
-										 }
-									 }
-								 }
-							 }
-							 break;
-					 }
+					writeDevice = HandlePPIWrite(ppi_pins);
 				 }
 			 }
 		 }
@@ -215,6 +150,14 @@ void FIOAnalysis::IOHandler(uint16_t pc, uint64_t pins)
 		 ioDevice.Callers.RegisterAccess(PCaddrRef);
 		 ioDevice.WriteCount++;
 		 ioDevice.FrameReadCount++;
+	 }
+
+	 if (readDevice != CpcIODevice::None)
+	 {
+		FIOAccess& ioDevice = IODeviceAcceses[(int)readDevice];
+		ioDevice.Callers.RegisterAccess(PCaddrRef);
+		ioDevice.ReadCount++;
+		ioDevice.FrameReadCount++;
 	 }
 }
 

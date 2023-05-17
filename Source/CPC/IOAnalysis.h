@@ -43,8 +43,11 @@ public:
 	void	DrawUI();
 
 private:
-	FCpcEmu*			pCpcEmu = nullptr;
-	FIOAccess			IODeviceAcceses[(int)CpcIODevice::Count];
-	uint8_t				LastFE = 0;
-	CpcIODevice			SelectedDevice = CpcIODevice::None;
+  CpcIODevice	HandlePPIWrite(uint64_t pins);
+  CpcIODevice	HandlePPIRead(uint64_t pins);
+
+	FCpcEmu*		pCpcEmu = nullptr;
+	FIOAccess	IODeviceAcceses[(int)CpcIODevice::Count];
+	uint8_t		LastFE = 0;
+	CpcIODevice	SelectedDevice = CpcIODevice::None;
 };
