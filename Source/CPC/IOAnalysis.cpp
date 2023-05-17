@@ -50,8 +50,79 @@ void FIOAnalysis::IOHandler(uint16_t pc, uint64_t pins)
 			 //pins = i8255_iorq(&sys->ppi, ppi_pins) & Z80_PIN_MASK;
 			 if (ppi_pins & I8255_CS)
 			 {
+				 //const uint8_t data = _i8255_read(ppi, pins);
 				 if (ppi_pins & I8255_RD)
 				 {
+					 switch (ppi_pins & (I8255_A0 | I8255_A1))
+					 {
+					 case 0: /* read from port A */
+					 {
+						 //data = _i8255_in_a(ppi);
+						 i8255_t & ppi = pCpcEmu->CpcEmuState.ppi;
+						 if ((ppi.control & I8255_CTRL_A) == I8255_CTRL_A_OUTPUT)
+						 {
+							 //data = ppi->output[I8255_PORT_A];
+						 }
+						 else
+						 {
+							 //data = ppi->in_cb(I8255_PORT_A, ppi->user_data);
+
+							 uint64_t ay_pins = 0;
+							 uint8_t ay_ctrl = ppi.output[I8255_PORT_C];
+							 if (ay_ctrl & (1 << 7)) ay_pins |= AY38910_BDIR;
+							 if (ay_ctrl & (1 << 6)) ay_pins |= AY38910_BC1;
+							 //uint8_t ay_data = sys->ppi.output[I8255_PORT_A];
+							 //AY38910_SET_DATA(ay_pins, ay_data);
+							 //ay_pins = ay38910_iorq(&sys->psg, ay_pins);*/
+
+							 const ay38910_t* ay = &pCpcEmu->CpcEmuState.psg;
+
+							 if (ay_pins & (AY38910_BDIR | AY38910_BC1))
+							 {
+								 if (ay_pins & AY38910_BDIR)
+								 {
+								 }
+								 else
+								 {
+									 if (ay->addr < AY38910_NUM_REGISTERS)
+									 {
+										 if (ay->addr == AY38910_REG_IO_PORT_A)
+										 {
+											 if ((ay->enable & (1 << 6)) == 0)
+											 {
+												 if (ay->in_cb)
+												 {
+													 // here
+													 writeDevice = CpcIODevice::Keyboard;
+													 //ay->port_a = ay->in_cb(AY38910_PORT_A, ay->user_data);
+												 }
+												 else
+												 {
+													 //ay->port_a = 0xFF;
+												 }
+											 }
+										 }
+										 else if (ay->addr == AY38910_REG_IO_PORT_B)
+										 {
+										 }
+									 }
+								 }
+							 }
+						 }
+
+						 break;
+					 }
+					 case I8255_A0: /* read from port B */
+						 //data = _i8255_in_b(ppi);
+						 break;
+					 case I8255_A1: /* read from port C */
+						 //data = _i8255_in_c(ppi);
+						 break;
+					 case (I8255_A0 | I8255_A1): /* read control word */
+						 //data = ppi->control;
+						 break;
+					 }
+
 					 /* read from PPI */
 					 /*const uint8_t data = _i8255_read(ppi, ppi_pins);
 					 I8255_SET_DATA(pins, data);*/
@@ -207,3 +278,13 @@ void FIOAnalysis::DrawUI()
 	ImGui::EndChild();
 
 }
+
+
+
+
+
+
+
+
+
+
