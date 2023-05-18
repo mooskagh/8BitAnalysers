@@ -11,12 +11,13 @@
 std::map< CpcIODevice, const char*> g_DeviceNames = 
 {
 	{CpcIODevice::Keyboard, "Keyboard"},
-	{CpcIODevice::BorderColour, "BorderColour"},
+	{CpcIODevice::Joystick, "Joystick"},
+	{CpcIODevice::CRTC, "CRTC"},
 #if SPECCY
+	{CpcIODevice::BorderColour, "BorderColour"},
 	{SpeccyIODevice::Ear, "Ear"},
 	{SpeccyIODevice::Mic, "Mic"},
 	{SpeccyIODevice::Beeper, "Beeper"},
-	{SpeccyIODevice::KempstonJoystick, "KempstonJoystick"},
 	{SpeccyIODevice::MemoryBank, "Memory Bank Switch"},
 	{SpeccyIODevice::SoundChip, "Sound Chip (AY)"},
 #endif
@@ -28,42 +29,49 @@ void FIOAnalysis::Init(FCpcEmu* pEmu)
 	pCpcEmu = pEmu;
 }
 
-// sam get rid of this hack
-#define _AM40010_GET_DATA(p) ((uint8_t)((p&0xFF0000ULL)>>16))
-
-CpcIODevice FIOAnalysis::HandlePPIRead(uint64_t pins)
+void FIOAnalysis::HandlePPI(uint64_t pins, CpcIODevice& readDevice, CpcIODevice& writeDevice)
 {
-  if ((pins & (I8255_A0 | I8255_A1)) == 0)
+  if (pins & I8255_RD)
   {
-	 i8255_t& ppi = pCpcEmu->CpcEmuState.ppi;
-	 if ((ppi.control & I8255_CTRL_A) == I8255_CTRL_A_OUTPUT)
+	 if ((pins & (I8255_A0 | I8255_A1)) == 0)
 	 {
-	 }
-	 else
-	 {
-		uint64_t ay_pins = 0;
-		uint8_t ay_ctrl = ppi.output[I8255_PORT_C];
-		if (ay_ctrl & (1 << 7)) ay_pins |= AY38910_BDIR;
-		if (ay_ctrl & (1 << 6)) ay_pins |= AY38910_BC1;
-
-		const ay38910_t* ay = &pCpcEmu->CpcEmuState.psg;
-
-		if (ay_pins & (AY38910_BDIR | AY38910_BC1))
+		i8255_t& ppi = pCpcEmu->CpcEmuState.ppi;
+		if ((ppi.control & I8255_CTRL_A) == I8255_CTRL_A_OUTPUT)
 		{
-		  if (ay_pins & AY38910_BDIR)
+		}
+		else
+		{
+		  uint64_t ay_pins = 0;
+		  uint8_t ay_ctrl = ppi.output[I8255_PORT_C];
+		  if (ay_ctrl & (1 << 7)) ay_pins |= AY38910_BDIR;
+		  if (ay_ctrl & (1 << 6)) ay_pins |= AY38910_BC1;
+
+		  const ay38910_t* ay = &pCpcEmu->CpcEmuState.psg;
+
+		  if (ay_pins & (AY38910_BDIR | AY38910_BC1))
 		  {
-		  }
-		  else
-		  {
-			 if (ay->addr < AY38910_NUM_REGISTERS)
+			 if (ay_pins & AY38910_BDIR)
 			 {
-				if (ay->addr == AY38910_REG_IO_PORT_A)
+			 }
+			 else
+			 {
+				if (ay->addr < AY38910_NUM_REGISTERS)
 				{
-				  if ((ay->enable & (1 << 6)) == 0)
+				  if (ay->addr == AY38910_REG_IO_PORT_A)
 				  {
-					 if (ay->in_cb)
+					 if ((ay->enable & (1 << 6)) == 0)
 					 {
-						return CpcIODevice::Keyboard;
+						if (ay->in_cb)
+						{
+						  if (pCpcEmu->CpcEmuState.kbd.active_columns & (1 << 9))
+						  {
+							 readDevice = CpcIODevice::Joystick;
+						  }
+						  else
+						  {
+							 readDevice = CpcIODevice::Keyboard;
+						  }
+						}
 					 }
 				  }
 				}
@@ -72,45 +80,100 @@ CpcIODevice FIOAnalysis::HandlePPIRead(uint64_t pins)
 		}
 	 }
   }
-  return CpcIODevice::None;
+  else if (pins & I8255_WR)
+  {
+	 if ((pins & (I8255_A0 | I8255_A1)) == I8255_A1)
+	 {
+		const uint8_t ay_ctrl = pCpcEmu->CpcEmuState.ppi.output[I8255_PORT_C] & ((1 << 7) | (1 << 6));
+		if (ay_ctrl)
+		{
+		  uint64_t ay_pins = 0;
+		  if (ay_ctrl & (1 << 7)) { ay_pins |= AY38910_BDIR; }
+		  if (ay_ctrl & (1 << 6)) { ay_pins |= AY38910_BC1; }
+		  if (ay_pins & (AY38910_BDIR | AY38910_BC1))
+		  {
+			 const ay38910_t* ay = &pCpcEmu->CpcEmuState.psg;
+			 if (ay_pins & AY38910_BDIR)
+			 {
+			 }
+			 else
+			 {
+				if (ay->addr < AY38910_NUM_REGISTERS)
+				{
+				  if (ay->addr == AY38910_REG_IO_PORT_A)
+				  {
+					 if ((ay->enable & (1 << 6)) == 0)
+					 {
+						if (ay->in_cb)
+						{
+						  writeDevice = CpcIODevice::Keyboard;
+						}
+					 }
+				  }
+				}
+			 }
+		  }
+		}
+	 }
+  }
 }
 
-CpcIODevice FIOAnalysis::HandlePPIWrite(uint64_t pins)
+// Sam. I had to duplicate this table as it's declared as static in the chips code.
+// readable/writable per chip type and register (1: writable, 2: readable, 3: read/write)
+static uint8_t _mc6845_rw[MC6845_NUM_TYPES][0x20] = {
+	 { 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 3, 3, 3, 3, 2, 2, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 },
+	 { 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 3, 3, 2, 2, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 2 },
+	 { 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 3, 3, 2, 2, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 }
+};
+
+void FIOAnalysis::HandleCRTC(uint64_t pins, CpcIODevice& readDevice, CpcIODevice& writeDevice)
 {
-  if ((pins & (I8255_A0 | I8255_A1)) == I8255_A1)
+  if (pins & MC6845_CS) // chip select
   {
-	 const uint8_t ay_ctrl = pCpcEmu->CpcEmuState.ppi.output[I8255_PORT_C] & ((1 << 7) | (1 << 6));
-	 if (ay_ctrl)
+	 mc6845_t* c = &pCpcEmu->CpcEmuState.crtc;
+
+	 /* register select (active: data register, inactive: address register) */
+	 if (pins & MC6845_RS) // register select
 	 {
-		uint64_t ay_pins = 0;
-		if (ay_ctrl & (1 << 7)) { ay_pins |= AY38910_BDIR; }
-		if (ay_ctrl & (1 << 6)) { ay_pins |= AY38910_BC1; }
-		if (ay_pins & (AY38910_BDIR | AY38910_BC1))
+		/* read/write register value */
+		
+		// get currently selected register
+		int r = c->sel & 0x1F;
+
+		if (pins & MC6845_RW)
 		{
-		  const ay38910_t* ay = &pCpcEmu->CpcEmuState.psg;
-		  if (ay_pins & AY38910_BDIR)
+		  /* read register value (only if register is readable) */
+		  uint8_t val = 0;
+		  if (_mc6845_rw[c->type][r] & (1 << 1))
 		  {
+			 readDevice = CpcIODevice::CRTC;
 		  }
-		  else
+		}
+		else 
+		{
+		  /* write register value (only if register is writable) */
+		  if (_mc6845_rw[c->type][r] & (1 << 0))
 		  {
-			 if (ay->addr < AY38910_NUM_REGISTERS)
-			 {
-				if (ay->addr == AY38910_REG_IO_PORT_A)
-				{
-				  if ((ay->enable & (1 << 6)) == 0)
-				  {
-					 if (ay->in_cb)
-					 {
-						return CpcIODevice::Keyboard;
-					 }
-				  }
-				}
-			 }
+			 writeDevice = CpcIODevice::CRTC;
 		  }
 		}
 	 }
+	 else 
+	 {
+		/* register address selected */
+		/* read/write (active: write, inactive: read) */
+		if (pins & MC6845_RW)
+		{
+		  // ???
+		  // potentially crtc read 
+		}
+		else
+		{
+		  /* write to address register */
+		  writeDevice = CpcIODevice::CRTC;
+		}
+	 }
   }
-  return CpcIODevice::None;
 }
 
 void FIOAnalysis::IOHandler(uint16_t pc, uint64_t pins)
@@ -124,6 +187,7 @@ void FIOAnalysis::IOHandler(uint16_t pc, uint64_t pins)
 	 {
 		 if ((pins & Z80_A11) == 0)
 		 {
+			// PPI chip in/out
 			 uint64_t ppi_pins = (pins & Z80_PIN_MASK) | I8255_CS;
 			 if (pins & Z80_A9) { ppi_pins |= I8255_A1; }
 			 if (pins & Z80_A8) { ppi_pins |= I8255_A0; }
@@ -132,15 +196,17 @@ void FIOAnalysis::IOHandler(uint16_t pc, uint64_t pins)
 
 			 if (ppi_pins & I8255_CS)
 			 {
-				 if (ppi_pins & I8255_RD)
-				 {
-					readDevice = HandlePPIRead(ppi_pins);
-				 }
-				 else if (ppi_pins & I8255_WR)
-				 {
-					writeDevice = HandlePPIWrite(ppi_pins);
-				 }
+				HandlePPI(ppi_pins, readDevice, writeDevice);
 			 }
+		 }
+
+		 if ((pins & Z80_A14) == 0) 
+		 {
+			// CRTC (6845) in/out 
+			uint64_t crtc_pins = (pins & Z80_PIN_MASK) | MC6845_CS;
+			if (pins & Z80_A9) { crtc_pins |= MC6845_RW; }
+			if (pins & Z80_A8) { crtc_pins |= MC6845_RS; }
+			HandleCRTC(crtc_pins, readDevice, writeDevice);
 		 }
 	 }
 
@@ -222,12 +288,10 @@ void FIOAnalysis::DrawUI()
 
 }
 
-
-
-
-
-
-
-
-
-
+void FIOAnalysis::Reset()
+{
+  for (int i = 0; i < (int)CpcIODevice::Count; i++)
+  {
+	 IODeviceAcceses[i].Callers.Reset();
+  }
+}
