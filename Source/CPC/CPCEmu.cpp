@@ -825,6 +825,7 @@ bool FCpcEmu::Init(const FCpcConfig& config)
 	// Set up code analysis
 	// initialise code analysis pages
 
+#if 0
 	// Low ROM 0x0000 - 0x3fff
 	ROMBanks[ROM_OS] = CodeAnalysis.CreateBank("ROM OS", 16, CpcEmuState.rom_os, true);
 	CodeAnalysis.GetBank(ROMBanks[ROM_OS])->PrimaryMappedPage = 0;
@@ -836,6 +837,7 @@ bool FCpcEmu::Init(const FCpcConfig& config)
 	// High ROM BASIC 0xc000 - 0xffff
 	ROMBanks[ROM_BASIC] = CodeAnalysis.CreateBank("ROM BASIC", 16, CpcEmuState.rom_basic, true);
 	CodeAnalysis.GetBank(ROMBanks[ROM_BASIC])->PrimaryMappedPage = 48;
+#endif
 
 	// create & register RAM banks
 	for (int bankNo = 0; bankNo < kNoRAMBanks; bankNo++)
@@ -959,6 +961,8 @@ void FCpcEmu::StartGame(FGameConfig* pGameConfig)
 #endif
 	// Initialise code analysis
 	CodeAnalysis.Init(this);
+	
+	IOAnalysis.Reset();
 
 	// Set options from config
 	for (int i = 0; i < FCodeAnalysisState::kNoViewStates; i++)
@@ -1177,6 +1181,7 @@ void FCpcEmu::DrawSystemMenu()
 		{
 			cpc_reset(&CpcEmuState);
 			ui_dbg_reset(&UICpc.dbg);
+			IOAnalysis.Reset();
 		}
 
 		if (ImGui::BeginMenu("Joystick"))

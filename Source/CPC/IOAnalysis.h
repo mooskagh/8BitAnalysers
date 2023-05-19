@@ -33,7 +33,8 @@ struct FIOAccess
 	int				WriteCount = 0;
 	int				FrameWriteCount = 0;
 
-	FItemReferenceTracker	Callers;
+	FItemReferenceTracker	Readers;
+	FItemReferenceTracker	Writers;
 };
 
 class FIOAnalysis

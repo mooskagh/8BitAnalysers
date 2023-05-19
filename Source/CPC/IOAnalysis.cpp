@@ -29,6 +29,7 @@ void FIOAnalysis::Init(FCpcEmu* pEmu)
 	pCpcEmu = pEmu;
 }
 
+// todo get rid of the code duplication here
 void FIOAnalysis::HandlePPI(uint64_t pins, CpcIODevice& readDevice, CpcIODevice& writeDevice)
 {
   if (pins & I8255_RD)
@@ -36,32 +37,25 @@ void FIOAnalysis::HandlePPI(uint64_t pins, CpcIODevice& readDevice, CpcIODevice&
 	 if ((pins & (I8255_A0 | I8255_A1)) == 0)
 	 {
 		i8255_t& ppi = pCpcEmu->CpcEmuState.ppi;
-		if ((ppi.control & I8255_CTRL_A) == I8255_CTRL_A_OUTPUT)
-		{
-		}
-		else
+		if (!((ppi.control & I8255_CTRL_A) == I8255_CTRL_A_OUTPUT)) // diff
 		{
 		  uint64_t ay_pins = 0;
 		  uint8_t ay_ctrl = ppi.output[I8255_PORT_C];
 		  if (ay_ctrl & (1 << 7)) ay_pins |= AY38910_BDIR;
 		  if (ay_ctrl & (1 << 6)) ay_pins |= AY38910_BC1;
 
-		  const ay38910_t* ay = &pCpcEmu->CpcEmuState.psg;
-
 		  if (ay_pins & (AY38910_BDIR | AY38910_BC1))
 		  {
-			 if (ay_pins & AY38910_BDIR)
+			 if (!(ay_pins & AY38910_BDIR))
 			 {
-			 }
-			 else
-			 {
+				const ay38910_t* ay = &pCpcEmu->CpcEmuState.psg;
 				if (ay->addr < AY38910_NUM_REGISTERS)
 				{
 				  if (ay->addr == AY38910_REG_IO_PORT_A)
 				  {
 					 if ((ay->enable & (1 << 6)) == 0)
 					 {
-						if (ay->in_cb)
+						if (ay->in_cb) // is this check needed?
 						{
 						  if (pCpcEmu->CpcEmuState.kbd.active_columns & (1 << 9))
 						  {
@@ -84,7 +78,7 @@ void FIOAnalysis::HandlePPI(uint64_t pins, CpcIODevice& readDevice, CpcIODevice&
   {
 	 if ((pins & (I8255_A0 | I8255_A1)) == I8255_A1)
 	 {
-		const uint8_t ay_ctrl = pCpcEmu->CpcEmuState.ppi.output[I8255_PORT_C] & ((1 << 7) | (1 << 6));
+		const uint8_t ay_ctrl = pCpcEmu->CpcEmuState.ppi.output[I8255_PORT_C] & ((1 << 7) | (1 << 6)); // diff
 		if (ay_ctrl)
 		{
 		  uint64_t ay_pins = 0;
@@ -92,19 +86,16 @@ void FIOAnalysis::HandlePPI(uint64_t pins, CpcIODevice& readDevice, CpcIODevice&
 		  if (ay_ctrl & (1 << 6)) { ay_pins |= AY38910_BC1; }
 		  if (ay_pins & (AY38910_BDIR | AY38910_BC1))
 		  {
-			 const ay38910_t* ay = &pCpcEmu->CpcEmuState.psg;
-			 if (ay_pins & AY38910_BDIR)
+			 if (!(ay_pins & AY38910_BDIR))
 			 {
-			 }
-			 else
-			 {
+				const ay38910_t* ay = &pCpcEmu->CpcEmuState.psg;
 				if (ay->addr < AY38910_NUM_REGISTERS)
 				{
 				  if (ay->addr == AY38910_REG_IO_PORT_A)
 				  {
 					 if ((ay->enable & (1 << 6)) == 0)
 					 {
-						if (ay->in_cb)
+						if (ay->in_cb) // is this check needed?
 						{
 						  writeDevice = CpcIODevice::Keyboard;
 						}
@@ -119,7 +110,7 @@ void FIOAnalysis::HandlePPI(uint64_t pins, CpcIODevice& readDevice, CpcIODevice&
 }
 
 // Sam. I had to duplicate this table as it's declared as static in the chips code.
-// readable/writable per chip type and register (1: writable, 2: readable, 3: read/write)
+/* readable / writable per chip type and register (1: writable, 2 : readable, 3 : read / write) */
 static uint8_t _mc6845_rw[MC6845_NUM_TYPES][0x20] = {
 	 { 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 3, 3, 3, 3, 2, 2, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 },
 	 { 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 3, 3, 2, 2, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 2 },
@@ -146,8 +137,9 @@ void FIOAnalysis::HandleCRTC(uint64_t pins, CpcIODevice& readDevice, CpcIODevice
 		  uint8_t val = 0;
 		  if (_mc6845_rw[c->type][r] & (1 << 1))
 		  {
-			 readDevice = CpcIODevice::CRTC;
+			 //readDevice = CpcIODevice::CRTC;
 		  }
+		  readDevice = CpcIODevice::CRTC;
 		}
 		else 
 		{
@@ -166,6 +158,7 @@ void FIOAnalysis::HandleCRTC(uint64_t pins, CpcIODevice& readDevice, CpcIODevice
 		{
 		  // ???
 		  // potentially crtc read 
+		  readDevice = CpcIODevice::CRTC;
 		}
 		else
 		{
@@ -213,7 +206,7 @@ void FIOAnalysis::IOHandler(uint16_t pc, uint64_t pins)
 	 if (writeDevice != CpcIODevice::None)
 	 {
 		 FIOAccess& ioDevice = IODeviceAcceses[(int)writeDevice];
-		 ioDevice.Callers.RegisterAccess(PCaddrRef);
+		 ioDevice.Writers.RegisterAccess(PCaddrRef);
 		 ioDevice.WriteCount++;
 		 ioDevice.FrameReadCount++;
 	 }
@@ -221,7 +214,7 @@ void FIOAnalysis::IOHandler(uint16_t pc, uint64_t pins)
 	 if (readDevice != CpcIODevice::None)
 	 {
 		FIOAccess& ioDevice = IODeviceAcceses[(int)readDevice];
-		ioDevice.Callers.RegisterAccess(PCaddrRef);
+		ioDevice.Readers.RegisterAccess(PCaddrRef);
 		ioDevice.ReadCount++;
 		ioDevice.FrameReadCount++;
 	 }
@@ -232,6 +225,13 @@ void FIOAnalysis::DrawUI()
 	FCodeAnalysisState& state = pCpcEmu->CodeAnalysis;
 	FCodeAnalysisViewState& viewState = state.GetFocussedViewState();
 	ImGuiWindowFlags window_flags = ImGuiWindowFlags_HorizontalScrollbar;
+	
+	if (ImGui::Button("Reset"))
+	{
+	  Reset();
+	}
+	ImGui::Separator();
+
 	ImGui::BeginChild("DrawIOAnalysisGUIChild1", ImVec2(ImGui::GetWindowContentRegionWidth() * 0.25f, 0), false, window_flags);
 	FIOAccess *pSelectedIOAccess = nullptr;
 	static CpcIODevice selectedDevice = CpcIODevice::None;
@@ -243,9 +243,19 @@ void FIOAnalysis::DrawUI()
 
 		const bool bSelected = (int)selectedDevice == i;
 
+		if (ioAccess.FrameReadCount || ioAccess.FrameWriteCount)
+		{
+		  ImGui::PushStyleColor(ImGuiCol_Text, IM_COL32(255, 255, 0, 255));
+		}
+
 		if (ImGui::Selectable(g_DeviceNames[device], bSelected))
 		{
 			selectedDevice = device;
+		}
+
+		if (ioAccess.FrameReadCount || ioAccess.FrameWriteCount)
+		{
+		  ImGui::PopStyleColor();
 		}
 
 		if(bSelected)
@@ -265,23 +275,51 @@ void FIOAnalysis::DrawUI()
 		ImGui::Text("Reads %d (frame %d)", ioAccess.ReadCount, ioAccess.FrameReadCount);
 		ImGui::Text("Writes %d (frame %d)", ioAccess.WriteCount, ioAccess.FrameWriteCount);
 
-		ImGui::Text("Callers");
-		for (const auto &accessPC : ioAccess.Callers.GetReferences())
+		ImGui::Text("Readers");
+		if (ioAccess.Readers.IsEmpty())
 		{
-			ImGui::PushID(accessPC.Val);
-			ShowCodeAccessorActivity(state, accessPC);
-			ImGui::Text("   ");
-			ImGui::SameLine();
-			DrawCodeAddress(state, viewState, accessPC);
-			ImGui::PopID();
+		  ImGui::Text("   None");
+		}
+		else
+		{
+		  for (const auto& accessPC : ioAccess.Readers.GetReferences())
+		  {
+			 ImGui::PushID(accessPC.Val);
+			 ShowCodeAccessorActivity(state, accessPC);
+			 ImGui::Text("   ");
+			 ImGui::SameLine();
+			 DrawCodeAddress(state, viewState, accessPC);
+			 ImGui::PopID();
+		  }
+		}
+
+		ImGui::Text("Writers");
+		if (ioAccess.Writers.IsEmpty())
+		{
+		  ImGui::Text("   None");
+		}
+		else
+		{
+		  for (const auto& accessPC : ioAccess.Writers.GetReferences())
+		  {
+			 ImGui::PushID(accessPC.Val);
+			 ShowCodeAccessorActivity(state, accessPC);
+			 ImGui::Text("   ");
+			 ImGui::SameLine();
+			 DrawCodeAddress(state, viewState, accessPC);
+			 ImGui::PopID();
+		  }
 		}
 	}
 
-	// reset for frame
-	for (int i = 0; i < (int)CpcIODevice::Count; i++)
+	if (!pCpcEmu->IsStopped())
 	{
-		IODeviceAcceses[i].FrameReadCount = 0;
-		IODeviceAcceses[i].FrameWriteCount = 0;
+	  // reset for frame
+	  for (int i = 0; i < (int)CpcIODevice::Count; i++)
+	  {
+		 IODeviceAcceses[i].FrameReadCount = 0;
+		 IODeviceAcceses[i].FrameWriteCount = 0;
+	  }
 	}
 
 	ImGui::EndChild();
@@ -292,6 +330,9 @@ void FIOAnalysis::Reset()
 {
   for (int i = 0; i < (int)CpcIODevice::Count; i++)
   {
-	 IODeviceAcceses[i].Callers.Reset();
+	 IODeviceAcceses->ReadCount = 0;
+	 IODeviceAcceses->WriteCount = 0;
+	 IODeviceAcceses[i].Readers.Reset();
+	 IODeviceAcceses[i].Writers.Reset();
   }
 }
