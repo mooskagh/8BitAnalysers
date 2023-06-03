@@ -1,7 +1,7 @@
 #pragma once
 
 #include <string>
-#include <CodeAnalyser/CodeAnaysisPage.h> 
+#include <CodeAnalyser/CodeAnalysisPage.h> 
 
 class FSpectrumEmu;
 
@@ -13,6 +13,7 @@ enum class SpeccyIODevice
 	Mic,	// for saving
 	Beeper,
 	BorderColour,
+	FloatingBus,
 	KempstonJoystick,
 	MemoryBank,		// Switching in/out RAM banks
 	SoundChip,		// AY

@@ -6,6 +6,13 @@
 
 #include "FileUtil.h"
 
+FMemoryBuffer::~FMemoryBuffer()
+{
+	if (AllocationSize != 0)
+		free(BasePtr);
+}
+
+
 void FMemoryBuffer::Init(size_t initialSize)
 {
 	if (BasePtr != nullptr)	// free old buffer
@@ -16,7 +23,7 @@ void FMemoryBuffer::Init(size_t initialSize)
 	CurrentSize = 0;
 }
 
-void FMemoryBuffer::Init(void *pData, size_t dataSize)
+void FMemoryBuffer::Init(const void *pData, size_t dataSize)
 {
 	Init(dataSize);
 	CurrentSize = dataSize;
@@ -37,11 +44,18 @@ void	FMemoryBuffer::WriteBytes(const void* pData, size_t noBytes)
 	CurrentSize += noBytes;
 }
 
-void FMemoryBuffer::ReadBytes(void* Dest, size_t noBytes)
+bool FMemoryBuffer::ReadBytes(void* Dest, size_t noBytes)
 {
-	assert(ReadPosition + noBytes <= CurrentSize);
-	memcpy(Dest, (uint8_t*)BasePtr + ReadPosition, noBytes);
-	ReadPosition += noBytes;
+	if (ReadPosition + noBytes <= CurrentSize)
+	{
+		memcpy(Dest, (uint8_t*)BasePtr + ReadPosition, noBytes);
+		ReadPosition += noBytes;
+		return true;
+	}
+	else
+	{
+		return false;
+	}
 }
 
 bool FMemoryBuffer::LoadFromFile(const char* pFileName)

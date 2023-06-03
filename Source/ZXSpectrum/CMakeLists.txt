@@ -1,9 +1,27 @@
 # This is for the features that allow the creating of filter folders in Visual Studio (source_group)
-cmake_minimum_required (VERSION 3.10)
+cmake_minimum_required (VERSION 3.14)
 
 project (SpectrumAnalyser)
 
+# for Google test
+set(CMAKE_CXX_STANDARD 14)
+
+include(FetchContent)
+FetchContent_Declare(
+  googletest
+  GIT_REPOSITORY https://github.com/google/googletest.git
+  GIT_TAG v1.13.0
+)
+#FetchContent_Declare(
+#  googletest
+#  URL https://github.com/google/googletest/archive/03597a01ee50ed33e9dfd640b249b4be3799d395.zip
+#)
+# For Windows: Prevent overriding the parent project's compiler/linker settings
+set(gtest_force_shared_crt ON CACHE BOOL "" FORCE)
+FetchContent_MakeAvailable(googletest)
+
 set(APP_NAME SpectrumAnalyser)
+set( with_tests true )
 
 if(CMAKE_SYSTEM_NAME STREQUAL "Linux")
 	find_package(OpenGL REQUIRED)
@@ -21,11 +39,13 @@ if(CMAKE_SYSTEM_NAME STREQUAL "Darwin")
 	find_package(Threads REQUIRED)
 	find_library(AUDIOTOOLBOX_LIBRARY AudioToolbox)
 	set( gfxapi "GLFWApi")
+	set( with_tests false )
 endif()
 
 if(CMAKE_SYSTEM_NAME STREQUAL "Windows")
 	#set( gfxapi "DX11")
 	set( gfxapi "GLFWApi")	
+	set( with_tests true )
 endif()
 
 
@@ -36,7 +56,6 @@ include_directories( ${vendor_dir}/sokol )
 include_directories( ${vendor_dir}/imgui-docking )
 include_directories( ${vendor_dir}/chips )
 include_directories( ${vendor_dir}/magic_enum/include )
-include_directories( ${vendor_dir}/rzx-sdk )
 include_directories( ${vendor_dir}/zlib )
 include_directories( ${vendor_dir}/implot )
 include_directories( ${vendor_dir}/json )
@@ -48,9 +67,12 @@ include( ../Shared/CMakeShared.txt )
 
 # compiler defines
 add_compile_definitions( _CRT_SECURE_NO_WARNINGS )
+add_compile_definitions( _SILENCE_ALL_CXX20_DEPRECATION_WARNINGS )
 
 # compiler options
-set(CMAKE_BUILD_TYPE Release)
+if (NOT CMAKE_BUILD_TYPE)
+    set (CMAKE_BUILD_TYPE Release)
+endif ()
 
 # vendor source
 
@@ -92,10 +114,6 @@ set ( implot_src ${vendor_dir}/implot/implot.h
 	${vendor_dir}/implot/implot_items.cpp
 	${vendor_dir}/implot/implot_internal.h)
 
-# rzx-lib
-set ( rzxlib_src ${vendor_dir}/rzx-sdk/rzx.c
-	${vendor_dir}/rzx-sdk/rzx.h)
-
 # zlib
 set ( zlib_src ${vendor_dir}/zlib/adler32.c
 	${vendor_dir}/zlib/compress.c
@@ -113,7 +131,7 @@ set ( vendor_src ${imgui_src} ${imgui_backend_src} ${implot_src} ${chips_src} ${
 
 # program source
 file ( GLOB program_src 
-	./*.cpp ./*.h
+	./*.cpp ./*.c ./*.h
 	Exporters/*.cpp Exporters/*.h
 	GameViewers/*.cpp GameViewers/*.h
 	Importers/*.cpp Importers/*.h
@@ -128,12 +146,33 @@ endif()
 
 add_executable (SpectrumAnalyser MACOSX_BUNDLE ${shared_src} ${program_src} ${platform_main} ${vendor_src} )
 
+# set up test
+if(${with_tests})
+
+file ( GLOB test_src
+	Tests/*.cpp Tests/*.h)
+file ( GLOB shared_test_src
+	../Shared/CodeAnalyser/Tests/*.cpp ../Shared/CodeAnalyser/Tests/*.h)
+
+add_executable (SpectrumAnalyserTest MACOSX_BUNDLE ${test_src} ${shared_test_src} ${shared_src} ${program_src} ${vendor_src} )
+
+set_target_properties( SpectrumAnalyserTest PROPERTIES CXX_STANDARD 20 )
+set_target_properties( SpectrumAnalyserTest PROPERTIES C_STANDARD 11 )
+
+target_link_libraries( SpectrumAnalyserTest GTest::gtest_main )
+
+include(GoogleTest)
+gtest_discover_tests(SpectrumAnalyserTest)
+
+endif()
+
 # This is to make the filter folders in Visual Studio, we need cmake 3.10 for this
 source_group( TREE ${CMAKE_CURRENT_SOURCE_DIR}/${vendor_dir} PREFIX Vendor FILES ${vendor_src} )
-source_group( TREE ${CMAKE_CURRENT_SOURCE_DIR}/../Shared PREFIX Shared FILES ${shared_src} )
-source_group( TREE ${CMAKE_CURRENT_SOURCE_DIR} PREFIX ZXSpectrum FILES ${program_src} ${platform_main})
+source_group( TREE ${CMAKE_CURRENT_SOURCE_DIR}/../Shared PREFIX Shared FILES ${shared_src} ${shared_test_src})
+source_group( TREE ${CMAKE_CURRENT_SOURCE_DIR} PREFIX ZXSpectrum FILES ${program_src} ${platform_main} ${test_src})
 
-set_target_properties( SpectrumAnalyser PROPERTIES CXX_STANDARD 17 )
+set_target_properties( SpectrumAnalyser PROPERTIES CXX_STANDARD 20 )
+set_target_properties( SpectrumAnalyser PROPERTIES C_STANDARD 11 )
 
 #windows specific
 if(${gfxapi} STREQUAL "DX11")
@@ -149,7 +188,9 @@ endif()
 if(CMAKE_SYSTEM_NAME STREQUAL "Windows")
 	# debugger working dir
 	set_property(TARGET ${PROJECT_NAME} PROPERTY VS_DEBUGGER_WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}/../../Data/SpectrumAnalyser")
-
+	if(${with_tests})
+		set_property(TARGET SpectrumAnalyserTest PROPERTY VS_DEBUGGER_WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}/../../Data/SpectrumAnalyser")
+	endif()
 	set_property(DIRECTORY PROPERTY VS_STARTUP_PROJECT ${PROJECT_NAME})
 	
 	if(${gfxapi} STREQUAL "GLFWApi")
@@ -160,11 +201,29 @@ if(CMAKE_SYSTEM_NAME STREQUAL "Windows")
 			${X11_LIBRARIES}
 			${CMAKE_DL_LIBS}
 			)
+		if(${with_tests})
+			target_link_libraries(SpectrumAnalyserTest
+				glfw 
+				${OPENGL_LIBRARIES} 
+				${CMAKE_THREAD_LIBS_INIT}
+				${X11_LIBRARIES}
+				${CMAKE_DL_LIBS}
+				)
+		endif()
 	endif()
 endif()
 
 if(CMAKE_SYSTEM_NAME STREQUAL "Linux")
 	target_link_libraries(${PROJECT_NAME}
+		glfw
+		asound
+		${OPENGL_LIBRARIES} 
+		${CMAKE_THREAD_LIBS_INIT}
+		${X11_LIBRARIES}
+		${CMAKE_DL_LIBS}
+		)
+
+	target_link_libraries(SpectrumAnalyserTest
 		glfw
 		asound
 		${OPENGL_LIBRARIES} 
@@ -182,6 +241,15 @@ if(CMAKE_SYSTEM_NAME STREQUAL "Darwin")
 		${CMAKE_DL_LIBS}
 		${AUDIOTOOLBOX_LIBRARY}
 		)
+	if(${with_tests})
+		target_link_libraries(SpectrumAnalyserTest
+			glfw
+			${OPENGL_LIBRARIES} 
+			${CMAKE_THREAD_LIBS_INIT}
+			${CMAKE_DL_LIBS}
+			${AUDIOTOOLBOX_LIBRARY}
+			)
+	endif()
 	install(TARGETS ${APP_NAME}
 		BUNDLE DESTINATION . COMPONENT RunTime
 		RUNTIME DESTINATION bin COMPONENT RunTime

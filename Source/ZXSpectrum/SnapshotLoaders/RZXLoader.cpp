@@ -1,244 +1,454 @@
 #include "RZXLoader.h"
 #include <stdlib.h>
 #include "Util/FileUtil.h"
+#include "Debug/DebugLog.h"
 #include "GamesList.h"
 #include "Z80Loader.h"
 #include "SNALoader.h"
 
 #include <imgui.h>
+#include <zlib.h>
+#include <Util/MemoryBuffer.h>
 
-#include "rzx.h"
+#include "../SpectrumEmu.h"
 
-static FRZXManager* g_pManager = nullptr;
 
-rzx_u32 RZXCallback(int msg, void* param)
+//#include "rzx.h"
+// https://worldofspectrum.net/RZXformat.html
+
+// block Ids
+const uint8_t	kBlockId_CreatorInfo		= 0x10;
+const uint8_t	kBlockId_SecurityInfo		= 0x20;
+const uint8_t	kBlockId_SecuritySignature	= 0x21;
+const uint8_t	kBlockId_Snapshot			= 0x30;
+const uint8_t	kBlockId_InputRecording		= 0x80;
+
+enum class ERZXStatus
 {
-    return g_pManager->RZXCallbackHandler(msg,param) ? RZX_OK : RZX_INVALID;
+	Init = 0x01,
+	IRB = 0x02,
+	Prot = 0x04,
+	Pack = 0x08,
+};
+
+static const int kRZXBlockBufferSize = 512;
+
+enum class ERZXError
+{
+	Ok,
+	Finished,
+	SyncLost,
+	Invalid,
+	UnSupported
+};
+
+// aka: IRB
+struct FRZXInputRecordingBlockFrame
+{
+	uint16_t	FetchCounter = 0;
+	uint16_t	NoIOPortReads = 0;
+	uint8_t*	PortReadValues = nullptr;
+};
+
+struct FRZXInputRecordingBlock
+{
+	uint32_t	NoFrames = 0;
+	uint32_t	TStateCounterAtBeginning = 0;
+	std::vector<FRZXInputRecordingBlockFrame>	Frames;
+};
+
+struct FRZXData
+{
+	uint8_t		VersionMajor = 0;
+	uint8_t		VersionMinor = 0;
+
+	// creator
+	char		CreatorIdentifier[20];
+	uint16_t	CreateVersionMajor = 0;
+	uint16_t	CreateVersionMinor = 0;
+	uint8_t*	CreatorCustomData = nullptr;
+
+	// security
+	uint32_t	SecurityKeyId = 0;
+	uint32_t	SecurityWeekCode = 0;
+	uint8_t*	DSASignature = nullptr;
+
+	// snapshot info
+	uint16_t	SnapshotFlags = 0;
+	char		SnapshotExtension[4];
+	uint32_t	SnapshotLength = 0;
+	uint8_t*	SnapshotData = nullptr;
+
+	FRZXInputRecordingBlock		InputRecordingBlock;
+};
+
+class FRZXLoader
+{
+public:
+    bool    Load(const char* fName, FRZXData& rzxData);
+private:
+	ERZXError    ReadBlock(FMemoryBuffer& inputBuffer, FRZXData& rzxData);
+
+
+};
+
+bool DecompressToBuffer(void* pCompData, uint32_t compDataSize, FMemoryBuffer& outBuffer)
+{
+	z_stream stream;
+	memset(&stream, 0, sizeof(stream));
+	stream.avail_in = compDataSize;
+	stream.next_in = (Bytef*)pCompData;
+	if (inflateInit(&stream) != Z_OK)
+	{
+		LOGERROR("RZXLoader: Decompression Error!");
+		return false;
+	}
+
+	// Decompress the data
+	char buffer[1024];
+	int ret;
+	outBuffer.Init(1024);
+	do 
+	{
+		stream.avail_out = sizeof(buffer);
+		stream.next_out = (Bytef*)buffer;
+		ret = inflate(&stream, Z_NO_FLUSH);
+		switch (ret) 
+		{
+		case Z_NEED_DICT:
+		case Z_DATA_ERROR:
+		case Z_MEM_ERROR:
+			LOGERROR("RZXLoader: Error while decompressing the data");
+			inflateEnd(&stream);
+			return false;
+		}
+		int have = sizeof(buffer) - stream.avail_out;
+		if (have > 0) 
+		{
+			outBuffer.WriteBytes(buffer, have);
+		}
+	} while (ret != Z_STREAM_END);
+
+	// Clean up the decompression stream
+	inflateEnd(&stream);
+
+	outBuffer.ResetPosition();	// reset to beginning
+	return true;
 }
 
+ERZXError FRZXLoader::ReadBlock(FMemoryBuffer& inputBuffer, FRZXData& rzxData)
+{
+	bool bDone = false;
+
+	while (bDone == false)
+	{
+		if (inputBuffer.Finished())
+			return ERZXError::Finished;
+
+		// get block Id & Length
+		uint8_t blockId = 0;
+		uint32_t blockLength = 0;
+		
+		inputBuffer.Read(blockId);
+		inputBuffer.Read(blockLength);
+
+		if (blockLength == 0)
+			return ERZXError::Invalid;
+
+		switch (blockId)
+		{
+			case kBlockId_CreatorInfo:
+			{
+				LOGINFO("RZXLoader: Creator Info Block");
+				inputBuffer.ReadBytes(rzxData.CreatorIdentifier, 20);
+				inputBuffer.Read(rzxData.CreateVersionMajor);
+				inputBuffer.Read(rzxData.CreateVersionMinor);
+
+				const uint32_t customDataSize = blockLength - 29;
+				if (customDataSize > 0)
+				{
+					rzxData.CreatorCustomData = new uint8_t[customDataSize];
+					inputBuffer.ReadBytes(rzxData.CreatorCustomData, customDataSize);
+				}
+			}
+			break;
+
+			case kBlockId_SecurityInfo:
+			{
+				LOGINFO("RZXLoader: Security Info Block");
+				inputBuffer.Read(rzxData.SecurityKeyId);
+				inputBuffer.Read(rzxData.SecurityWeekCode);
+			}
+			break;
+
+			case kBlockId_SecuritySignature:
+			{
+				LOGINFO("RZXLoader: Security Signature Block");
+				const uint32_t securitySigSize = blockLength - 5;
+				rzxData.DSASignature = new uint8_t[securitySigSize];
+				inputBuffer.ReadBytes(rzxData.DSASignature, securitySigSize);
+			}
+			break;
+
+			case kBlockId_Snapshot:
+			{
+				LOGINFO("RZXLoader: Snapshot Block");
+				uint32_t snaphotFlags = 0;
+				inputBuffer.Read(snaphotFlags);
+				const bool bExternalSnapshot = !!(snaphotFlags & 0x1);
+				const bool bCompressed = !!(snaphotFlags & 0x2);
+
+				inputBuffer.Read(rzxData.SnapshotExtension);
+				inputBuffer.Read(rzxData.SnapshotLength);
+
+				uint32_t snapshotDataLength = blockLength - 17;
+				uint8_t* snapshotData = new uint8_t[snapshotDataLength];
+				inputBuffer.ReadBytes(snapshotData, snapshotDataLength);
+
+				if (bExternalSnapshot)
+				{
+					LOGINFO("RZXLoader: External snapshot");
+				}
+				else
+				{
+					if (bCompressed)
+					{
+						uint8_t* decompressedData = new uint8_t[rzxData.SnapshotLength];
+						unsigned long nDataSize = rzxData.SnapshotLength;
+						// Decompress
+						LOGINFO("RZXLoader: Compressed snapshot");
+						uncompress(decompressedData, &nDataSize, snapshotData, snapshotDataLength);
+						delete[] snapshotData;
+						rzxData.SnapshotData = decompressedData;
+					}
+					else
+					{
+						rzxData.SnapshotData = snapshotData;
+					}
+				}
+
+			}
+			break;
+
+			case kBlockId_InputRecording:
+			{
+				LOGINFO("RZXLoader: Input Recording Block");
+
+				FRZXInputRecordingBlock& irb = rzxData.InputRecordingBlock;
+
+				inputBuffer.Read(irb.NoFrames);
+				uint8_t reserved;
+				inputBuffer.Read(reserved);
+				inputBuffer.Read(irb.TStateCounterAtBeginning);
+				uint32_t irbFlags = 0;
+				inputBuffer.Read(irbFlags);
+
+				const bool bProtected = !!(irbFlags & 0x1);
+				const bool bCompressed = !!(irbFlags & 0x2);
+
+				const uint32_t framesDataSize = blockLength - 18;
+				uint8_t* pFramesData = new uint8_t[framesDataSize];
+				inputBuffer.ReadBytes(pFramesData, framesDataSize);
+
+				FMemoryBuffer framesBuffer;
+
+				if (bCompressed)
+					DecompressToBuffer(pFramesData, framesDataSize, framesBuffer);
+				else
+					framesBuffer.Init(pFramesData, framesDataSize);
+
+				for (uint32_t frameNo = 0; frameNo < irb.NoFrames; frameNo++)
+				{
+					FRZXInputRecordingBlockFrame& frame = irb.Frames.emplace_back();
+
+					framesBuffer.Read(frame.FetchCounter);
+					framesBuffer.Read(frame.NoIOPortReads);
+					//assert(frame.FetchCounter != 0);
+					//assert(frame.NoIOPortReads < frame.FetchCounter || frame.NoIOPortReads == 65535);
+
+					if (frame.NoIOPortReads > 0 && frame.NoIOPortReads != 65535)
+					{
+						frame.PortReadValues = new uint8_t[frame.NoIOPortReads];
+						framesBuffer.ReadBytes(frame.PortReadValues, frame.NoIOPortReads);
+					}
+				}
+
+				delete[] pFramesData;
+
+			}
+			break;
+
+			default:
+				LOGERROR("RZXLoader: Unrecognised block %d", blockId);
+				return ERZXError::Invalid;
+				break;
+		}
+	}
+
+	return ERZXError::Ok;
+}
+
+
+bool FRZXLoader::Load(const char* fName, FRZXData& rzxData)
+{
+	FMemoryBuffer inputBuffer;
+	if (inputBuffer.LoadFromFile(fName) == false)
+		return false;
+
+	// load & check signature
+	char signature[4];
+	inputBuffer.ReadBytes(signature, 4);
+	if (strncmp(signature, "RZX!", 4) != 0)
+	{
+		return false;
+	}
+
+	// get version number
+	uint8_t	verMajor = inputBuffer.Read<uint8_t>();
+	uint8_t	verMinor = inputBuffer.Read<uint8_t>();
+
+	// flags
+	uint32_t	flags = inputBuffer.Read<uint32_t>();
+	ReadBlock(inputBuffer, rzxData);
+
+
+	return true;
+}
+
+
+// Manager class
 
 bool	FRZXManager::Init(FSpectrumEmu* pEmu) 
 { 
-    pZXEmulator = pEmu; 
-
-    RZX_EMULINFO emulInfo;
-    strcpy(emulInfo.name, "RZX Loader");
-    emulInfo.ver_major = 1;
-    emulInfo.ver_minor = 0;
-    emulInfo.data = 0;
-    emulInfo.length = 0;
-    emulInfo.options = 0;
-
-    if (rzx_init(&emulInfo, RZXCallback) != RZX_OK)
-        return false;
-
-    Initialised = true;
-    g_pManager = this;  // crap
-    return true;
-}
-
-bool FRZXManager::RZXCallbackHandler(int msg, void* param)
-{
-    switch (msg)
-    {
-    case RZXMSG_LOADSNAP:
-    {
-        // This is proper shit, it loads the snapshot into memory and then saves it out to a temp file 
-        // So we just load it right back in again
-        RZX_SNAPINFO* pSnapInfo = (RZX_SNAPINFO*)param;
-
-        printf("> LOADSNAP: '%s' (%i bytes), %s %s\n",
-            pSnapInfo->filename,
-            (int)pSnapInfo->length,
-            (pSnapInfo->options & RZX_EXTERNAL) ? "external" : "embedded",
-            (pSnapInfo->options & RZX_COMPRESSED) ? "compressed" : "uncompressed");
-
-        switch (GetSnapshotTypeFromFileName(pSnapInfo->filename))
-        {
-        case ESnapshotType::Z80:
-            return LoadZ80File(pZXEmulator, pSnapInfo->filename);
-        case ESnapshotType::SNA:
-            return LoadSNAFile(pZXEmulator, pSnapInfo->filename);
-        default: 
-            return false;
-        }
-    }
-    break;
-
-    case RZXMSG_CREATOR:
-    {
-        RZX_EMULINFO* pInfo = (RZX_EMULINFO*)param;
-        CurrentRZXInfo.Creator = pInfo->name;
-    }
-    break;
-
-    case RZXMSG_IRBNOTIFY:
-    {
-        RZX_IRBINFO* pIRBInfo = (RZX_IRBINFO*)param;
-        if (rzx.mode == RZX_PLAYBACK)
-        {
-            /* fetch the IRB info if needed */
-            IRBTStates = pIRBInfo->tstates;
-            printf("> IRB notify: tstates=%i, %s\n", (int)IRBTStates,
-                pIRBInfo->options & RZX_COMPRESSED ? "compressed" : "uncompressed");
-        }
-        else if (rzx.mode == RZX_RECORD)
-        {
-            int tstates = 1;
-            /* fill in the relevant info, i.e. tstates, options */
-            pIRBInfo->tstates = tstates;
-            pIRBInfo->options = 0;
-#ifdef RZX_USE_COMPRESSION
-            pIRBInfo->options |= RZX_COMPRESSED;
-#endif
-            printf("> IRB notify: tstates=%i, %s\n", (int)tstates,
-                pIRBInfo->options & RZX_COMPRESSED ? "compressed" : "uncompressed");
-        }
-    }
-    break;
-
-    default:
-        printf("> MSG #%02X\n", msg);
-        return false;
-    }
+	pZXEmulator = pEmu;
     return true;
 }
 
 
 bool FRZXManager::Load(const char* fName)
 {
-    if (Initialised == false)
-        return false;
+	FRZXLoader	loader;
+	pData = new FRZXData;
 
-    if (rzx_playback(fName) != RZX_OK)
-    {
-        printf("Error starting playback\n");
-        return false;
-    }
+	loader.Load(fName, *pData);
 
-    ReplayMode = EReplayMode::Playback;
+	// Load Snapshot
+	bool bSnapLoaded = false;
+	if(strncmp(pData->SnapshotExtension,"Z80",3) == 0 || strncmp(pData->SnapshotExtension, "z80", 3) == 0)
+		bSnapLoaded = LoadZ80FromMemory(pZXEmulator, pData->SnapshotData, pData->SnapshotLength);
+	else if (strncmp(pData->SnapshotExtension, "SNA",3) == 0 || strncmp(pData->SnapshotExtension, "sna", 3) == 0)
+		bSnapLoaded = LoadSNAFromMemory(pZXEmulator, pData->SnapshotData, pData->SnapshotLength);
 
-    // get first frame
-    const int ret = rzx_update(&ICount);
-    if (ret != RZX_OK)
-    {
-        printf("rzx_update error, ret val %d", ret);
-    }
-
-    TickCounter = ICount;
-
-    return true;
+	if (bSnapLoaded)
+	{
+		ReplayMode = EReplayMode::Playback;
+		FrameNo = -1;	// because if gets incremented at the start of the update
+		return true;
+	}
+    return false;
 }
 
 void FRZXManager::DrawUI(void)
 {
-    ImGui::Text("IRB Tstates: %d", IRBTStates);
-    ImGui::Text("ICount: %d", ICount);
-    ImGui::Text("TickCounter: %d", TickCounter);
-    ImGui::Text("Frame Inputs: %d", INmax);
-    ImGui::Text("Inputs this frame: %d", InputsThisFrame);
-    ImGui::Text("Last Input: %d", LastInput);
-    ImGui::Text("Last Frame Input Vals: %d", LastFrameInputVals);
-    ImGui::Text("Last Frame Input Calls: %d", LastFrameInputCalls);
+ 
 }
 
-void FRZXManager::RegisterInstructions(int num)
+// this should update the number of 
+uint32_t FRZXManager::Update(void)
 {
-    if (ReplayMode == EReplayMode::Off)
-        return;
-    
-    TickCounter -= num;
-    if (TickCounter <= 0)
-    {
-        const int ret = rzx_update(&ICount);
-        if (ret != RZX_OK)
-        {
-            printf("rzx_update error, ret val %d", ret);
-        }
-        TickCounter += ICount;
+	// check if we've read all the IO reads
+	if (FrameNo != -1)
+	{
+		FRZXInputRecordingBlockFrame& oldFrame = pData->InputRecordingBlock.Frames[FrameNo];
+		if (NoPortVals != NoInputAttempts)
+		{
+			LOGINFO("FRZXManager : [Frame:%d] %d input attempts, old frame had %d inputs", FrameNo, NoInputAttempts, NoPortVals);
+		}
+	}
 
-        //printf("FRZXManager::RegisterTicks - Underflow");
-    }
+	FrameNo++;
+	if (FrameNo >= (int)pData->InputRecordingBlock.NoFrames)
+		return 0;	// we've reached the end
+
+	FRZXInputRecordingBlockFrame& frame = pData->InputRecordingBlock.Frames[FrameNo];
+
+	// update if not a repeating stream
+	if (frame.NoIOPortReads != 0xffff)
+	{
+		NoPortVals = frame.NoIOPortReads;
+		PortVals = frame.PortReadValues;
+	}
+	
+	InputCount = 0;
+	NoInputAttempts = 0;
+    return frame.FetchCounter;
 }
 
+static void OutputPortDebug(FSpectrumEmu* pEmu, uint16_t port, uint8_t val);
 
-uint16_t FRZXManager::Update(void)
+bool	FRZXManager::GetInput(uint16_t port, uint8_t& outVal)
 {
-    if (ReplayMode == EReplayMode::Off)
-        return 0;
-    InputsThisFrame = 0;
-    return 0;
-    LastFrameInputVals = INmax;
-    LastFrameInputCalls = InputsThisFrame;
+	NoInputAttempts++;
 
-    const int ret = rzx_update(&ICount);
-    if (ret != RZX_OK)
-    {
-        printf("rzx_update error, ret val %d", ret);
-    }
-    
-    TickCounter = ICount;
-    InputsThisFrame = 0;
-    return ICount;
-}
+	if (NoInputAttempts > NoPortVals)
+		return false;
 
-bool	FRZXManager::GetInput(uint8_t& outVal)
-{
-    if (LastCounter == TickCounter) // to stop multiple reads
-        return false;
+	assert(PortVals != nullptr);
+	outVal = PortVals[InputCount];
+	//OutputPortDebug(pZXEmulator, port, outVal);
+	InputCount++;
 
-    LastCounter = TickCounter;
-
-    const uint8_t synclost = RZX_SYNCLOST;
-    outVal = rzx_get_input();
-    if (outVal == synclost)
-    {
-        //printf("Sync Lost");
-        return false;
-    }
-    LastInput = outVal;
-    InputsThisFrame++;
     return true;
 }
 
+// Some debugging stuff
 
-static RZX_EMULINFO gEmulInfo;
+#include <map>
 
-const size_t kInBufferSize = 8192;
-rzx_u8 g_InBuffer[kInBufferSize];
-
-static bool g_RZXInitialised = false;
-
-
-bool LoadRZXFile(FSpectrumEmu* pEmu, const char* fName)
+std::map<uint16_t,std::vector<std::string>> g_KeyNames =
 {
-	
-    if (rzx_playback(fName) != RZX_OK)
-    {
-        printf("Error starting playback\n");
-        return false;
-    }
+	{0xfefe, {"Shift","Z","X","C","V"}},
+	{0xfdfe, {"A","S","D","F","G"}},
+	{0xfbfe, {"Q","W","E","R","T"}},
+	{0xf7fe, {"1","2","3","4","5"}},
+	{0xeffe, {"0","9","8","7","6"}},
+	{0xdffe, {"P","O","I","U","Y"}},
+	{0xbffe, {"Enter","L","K","J","H"}},
+	{0x7ffe, {"Space","Sym","M","N","B"}},
+};
 
-    int n = 0;
-    int ret = RZX_OK;
-    do
-    {
-        memset(g_InBuffer, 0, kInBufferSize);
-        rzx_u16 icount;
-        ret = rzx_update(&icount);
-        if (ret == RZX_OK)
-        {
-            for (int j = 0; j < 8; j++) 
-                g_InBuffer[j] = rzx_get_input();
-            printf("frame %04i: icount=%05i(%04X) #in=%04i  input =", n, icount, icount, INmax);
-            
-            for (int j = 0; j < 8; j++) 
-                printf(" %02X", g_InBuffer[j]);
-            printf("\n");
-        }
-        n++;
-    } while (ret == RZX_OK);
-    rzx_close();
+static void OutputPortDebug(FSpectrumEmu* pEmu,uint16_t port, uint8_t val)
+{
+	if ((val & 0x1f) == 0x1f)	// no key down
+		return;
 
-	return false;
+	/*const uint16_t columnMask = (~(port >> 8)) & 0x00FF;
+
+	for (int colNo = 0; colNo < 8; colNo++)
+	{
+		if (columnMask & (1 << colNo))
+		{
+			for (int i = 0; i < 5; i++)
+			{
+				if ((val & (1 << i)) == 0)
+				{
+					LOGINFO("0x%04X : Column %d, key %d Down", pEmu->GetPC().Address, colNo, i);
+
+				}
+			}
+		}
+	}*/
+
+	const auto findIt = g_KeyNames.find(port);
+	if (findIt == g_KeyNames.end())
+		return;
+
+	auto& row = findIt->second;
+	for (int i = 0; i < 5; i++)
+	{
+		if ((val & (1 << i)) == 0)
+			LOGINFO("0x%04X : Key %s pressed", pEmu->GetPC().Address, row[i].c_str());
+	}
+
 }
+

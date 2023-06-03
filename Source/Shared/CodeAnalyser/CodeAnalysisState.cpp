@@ -1,12 +1,12 @@
 #include "CodeAnalysisState.h"
 
 #include <stdint.h>
-#include "CodeAnaysisPage.h"
+#include "CodeAnalysisPage.h"
 #include "CodeAnalyser.h"
 
 const uint32_t kAnalysisStateMagic = 0xBeefCafe;
 const uint32_t kAnalysisStatePageMagic = 0xDeadCafe;
-const uint32_t kAnalysisStateVersion = 1;
+const uint32_t kAnalysisStateVersion = 2;
 
 const uint16_t kLabelId = 0x8000;
 const uint16_t kDataId = 0x4000;
@@ -169,6 +169,8 @@ bool ExportAnalysisState(FCodeAnalysisState& state, const char* pAnalysisBinFile
 	fwrite(&kAnalysisStatePageMagic, sizeof(kAnalysisStatePageMagic), 1, fp);
 	fwrite(&kTerminatorId, sizeof(kTerminatorId), 1, fp);
 
+	state.Debugger.SaveToFile(fp);
+
 	fclose(fp);
 	return true;
 }
@@ -208,6 +210,9 @@ bool ImportAnalysisState(FCodeAnalysisState& state, const char* pAnalysisBinFile
 
 		fread(&pageId, sizeof(pageId), 1, fp);
 	}
+
+	if (version > 1)
+		state.Debugger.LoadFromFile(fp);
 
 	fclose(fp);
 	return true;

@@ -24,8 +24,8 @@ public:
 
 	virtual const char* GenerateAddressString(uint16_t addr) = 0;
 protected:
-	uint16_t	RegionMin;
-	uint16_t	RegionMax;
+	uint16_t	RegionMin = 0xffff;
+	uint16_t	RegionMax = 0;
 };
 
 
@@ -45,10 +45,6 @@ bool DrawOperandTypeCombo(const char* pLabel, EOperandType& operandType);
 
 void DrawCodeAnalysisData(FCodeAnalysisState &state, int windowId);
 void DrawGlobals(FCodeAnalysisState& state, FCodeAnalysisViewState& viewState);
-void DrawStackInfo(FCodeAnalysisState& state);
-void DrawTrace(FCodeAnalysisState& state);
-void DrawRegisters(FCodeAnalysisState& state);
-void DrawWatchWindow(FCodeAnalysisState& state);
 
 float DrawDataBinary(FCodeAnalysisState& state, const FDataInfo* pDataInfo);
 void DrawDataInfo(FCodeAnalysisState& state, FCodeAnalysisViewState& viewState, const FCodeAnalysisItem &item, bool bDrawLabel = false, bool bEdit = true);
@@ -59,5 +55,7 @@ void DrawComment(const FItem* pItem, float offset = 0.0f);
 
 // util functions - move?
 bool DrawU8Input(const char* label, uint8_t* value);
-bool DrawAddressInput(const char* label, FAddressRef& address);
+bool DrawAddressInput(FCodeAnalysisState& state, const char* label, FAddressRef& address);
 bool DrawAddressInput(const char* label, uint16_t* value);
+const char* GetBankText(FCodeAnalysisState& state, int16_t bankId);
+bool DrawBankInput(FCodeAnalysisState& state, const char* label, int16_t& bankId);
