@@ -305,28 +305,19 @@ void FDiffTool::DrawUI()
 				{
 					for (const uint16_t changedAddr : DiffChangedLocations)
 					{
-						FItem* pItem = nullptr;
-						if (FCodeInfo* pCodeInfo = pCpcEmu->CodeAnalysis.GetCodeInfoForAddress(changedAddr))
-						{
-							pItem = pCodeInfo;
-						}
-
-						if (FDataInfo* pReadDataInfo = pCpcEmu->CodeAnalysis.GetReadDataInfoForAddress(changedAddr))
-						{
-							pItem = pReadDataInfo;
-						}
-
 						if (FDataInfo* pWriteDataInfo = pCpcEmu->CodeAnalysis.GetWriteDataInfoForAddress(changedAddr))
 						{
-							pItem = pWriteDataInfo;
-						}
-
-						if (pItem)
-						{
-							if (bReplaceExistingComment)
-								pItem->Comment = CommentText;
+							if (bReplaceExistingComment || pWriteDataInfo->Comment.empty())
+								pWriteDataInfo->Comment = CommentText;
 							else
-								pItem->Comment += "; " + CommentText;
+							{
+								if (!CommentText.empty())
+								{
+									if (!pWriteDataInfo->Comment.empty())
+										pWriteDataInfo->Comment += "; ";
+									pWriteDataInfo->Comment += CommentText;
+								}
+							}
 						}
 					}
 				}
@@ -341,7 +332,7 @@ void FDiffTool::DrawUI()
 				ImGui::InputText("##comment", &CommentText, ImGuiInputTextFlags_AutoSelectAll);
 				
 				ImGui::SameLine();
-				ImGui::Checkbox("Replace existing", &bReplaceExistingComment);
+				ImGui::Checkbox("Override existing", &bReplaceExistingComment);
 
 				ImGui::Separator();
 			}
@@ -359,9 +350,14 @@ void FDiffTool::DrawUI()
 		
 			ImGui::SetItemAllowOverlap();	// allow buttons
 			ImGui::SameLine();
-			ImGui::Text("%s\t%s\t%s", NumStr(changedAddr), NumStr(DiffSnapShotMemory[changedAddr]), NumStr(pCpcEmu->ReadWritableByte( changedAddr)));
+			ImGui::Text("%s\t%s\t%s", NumStr(changedAddr), NumStr(DiffSnapShotMemory[changedAddr]), NumStr(pCpcEmu->ReadWritableByte(changedAddr)));
 			ImGui::SameLine();
 			DrawAddressLabel(pCpcEmu->CodeAnalysis, viewState, changedAddr);
+			
+			if (const FDataInfo* pWriteDataInfo = pCpcEmu->CodeAnalysis.GetWriteDataInfoForAddress(changedAddr))
+			{
+				DrawComment(pWriteDataInfo);
+			}
 			ImGui::PopID();
 		}
 	}
