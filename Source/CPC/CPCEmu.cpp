@@ -173,6 +173,11 @@ void MemWriteFunc(int layer, uint16_t addr, uint8_t data, void* user_data)
 }
 #endif
 
+uint8_t	FCpcEmu::ReadWritableByte(uint16_t address) const
+{
+	return CpcEmuState.mem.page_table[address >> MEM_PAGE_SHIFT].write_ptr[address & MEM_PAGE_MASK];
+}
+
 uint8_t	FCpcEmu::ReadByte(uint16_t address) const
 {
 	return mem_rd(const_cast<mem_t*>(&CpcEmuState.mem), address);
@@ -817,6 +822,7 @@ bool FCpcEmu::Init(const FCpcConfig& config)
 	GraphicsViewer.pEmu = this;
 	InitGraphicsViewer(GraphicsViewer);
 	IOAnalysis.Init(this);
+	DiffTool.Init(this);
 	CpcViewer.Init(this);
 	CodeAnalysis.ViewState[0].Enabled = true;	// always have first view enabled
 
@@ -825,7 +831,7 @@ bool FCpcEmu::Init(const FCpcConfig& config)
 	// Set up code analysis
 	// initialise code analysis pages
 
-#if 0
+#//if 0
 	// Low ROM 0x0000 - 0x3fff
 	ROMBanks[ROM_OS] = CodeAnalysis.CreateBank("ROM OS", 16, CpcEmuState.rom_os, true);
 	CodeAnalysis.GetBank(ROMBanks[ROM_OS])->PrimaryMappedPage = 0;
@@ -837,7 +843,7 @@ bool FCpcEmu::Init(const FCpcConfig& config)
 	// High ROM BASIC 0xc000 - 0xffff
 	ROMBanks[ROM_BASIC] = CodeAnalysis.CreateBank("ROM BASIC", 16, CpcEmuState.rom_basic, true);
 	CodeAnalysis.GetBank(ROMBanks[ROM_BASIC])->PrimaryMappedPage = 48;
-#endif
+//#endif
 
 	// create & register RAM banks
 	for (int bankNo = 0; bankNo < kNoRAMBanks; bankNo++)
@@ -1481,23 +1487,26 @@ void FCpcEmu::DrawMemoryTools()
 	if (ImGui::BeginTabBar("MemoryToolsTabBar"))
 	{
 #if SPECCY
+	  // mark said he's not sure what this does
 		if (ImGui::BeginTabItem("Memory Handlers"))
 		{
 			DrawMemoryHandlers(this);
 			ImGui::EndTabItem();
 		}
 
+		// mark said he needs to look at this again. it might not be worth bringing across
 		if (ImGui::BeginTabItem("Memory Analysis"))
 		{
 			DrawMemoryAnalysis(this);
 			ImGui::EndTabItem();
 		}
+#endif
 		if (ImGui::BeginTabItem("Memory Diff"))
 		{
-			DrawMemoryDiffUI(this);
+			DiffTool.DrawUI();
 			ImGui::EndTabItem();
 		}
-#endif
+
 		if (ImGui::BeginTabItem("IO Analysis"))
 		{
 			IOAnalysis.DrawUI();

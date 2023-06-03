@@ -120,7 +120,7 @@ public:
 	FCpcEmu& operator= (const FCpcEmu&) = delete;
 
 	//ICPUInterface Begin
-	uint8_t		ReadByte(uint16_t address) const override;
+	uint8_t	ReadByte(uint16_t address) const override;
 	uint16_t	ReadWord(uint16_t address) const override;
 	const uint8_t* GetMemPtr(uint16_t address) const override;
 	void		WriteByte(uint16_t address, uint8_t value) override;
@@ -140,6 +140,10 @@ public:
 	bool		IsStopped(void) const override;
 	void*		GetCPUEmulator(void) const override;
 	//ICPUInterface End
+	
+	// Read a byte from writable memory. i.e. RAM
+	// In the case of RAM behind ROM this will always return a byte from RAM - unlike ReadByte() which will return ROM.
+	uint8_t	ReadWritableByte(uint16_t address) const;
 
 	//void SetROMBank(int bankNo);
 	void SetROMBankLo(int bankNo);
@@ -169,8 +173,9 @@ public:
 	FCpcViewer				CpcViewer;
 	//FFrameTraceViewer		FrameTraceViewer;
 	FGraphicsViewerState	GraphicsViewer;
-	FCodeAnalysisState		CodeAnalysis;
+	FCodeAnalysisState	CodeAnalysis;
 	FIOAnalysis				IOAnalysis;
+	FDiffTool				DiffTool;
 
 	static const int	kNoBankPages = 16;	// no of pages per physical address slot (16k)
 	static const int	kNoRAMPages = 128;

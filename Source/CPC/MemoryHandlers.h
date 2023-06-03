@@ -61,7 +61,30 @@ struct FMemoryAccessHandler
 	FItemReferenceTracker	Callers;
 };
 
+class FDiffTool
+{
+public:
+	void Init(FCpcEmu* pEmu);
+	void DrawUI();
 
+private:
+	bool bDiffVideoMem = false;
+	bool bSnapshotAvailable = false;
+
+	uint8_t DiffSnapShotMemory[1 << 16];	// 64 Kb
+	uint16_t SnapShotGfxMemStart = 0xffff;
+	uint16_t SnapShotGfxMemEnd = 0xffff;
+	uint16_t DiffStartAddr = 0;
+	uint16_t DiffEndAddr = 0xffff;
+
+	std::vector<uint16_t> DiffChangedLocations;
+	int DiffSelectedAddr = -1;
+	
+	std::string CommentText = "byte was modified";
+	bool bReplaceExistingComment = false;
+
+	FCpcEmu* pCpcEmu = nullptr;
+};
 
 int MemoryHandlerTrapFunction(uint16_t pc, int ticks, uint64_t pins, FCpcEmu* pEmu);
 
@@ -71,4 +94,3 @@ void ResetMemoryStats(FMemoryStats &memStats);
 // UI
 void DrawMemoryAnalysis(FCpcEmu* pEmu);
 void DrawMemoryHandlers(FCpcEmu* pEmu);
-void DrawMemoryDiffUI(FCpcEmu* pEmu);
