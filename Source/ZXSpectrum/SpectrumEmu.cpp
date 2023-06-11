@@ -252,11 +252,16 @@ int UIEvalBreakpoint(ui_dbg_t* dbg_win, uint16_t pc, int ticks, uint64_t pins, v
 uint64_t FSpectrumEmu::Z80Tick(int num, uint64_t pins)
 {
 	FCodeAnalysisState &state = CodeAnalysis;
-	z80_t* pCPU = (z80_t*)state.CPUInterface->GetCPUEmulator();
+	FDebugger& debugger = CodeAnalysis.Debugger;
+	z80_t& cpu = ZXEmuState.cpu;
 	const uint16_t pc = GetPC().Address;
 	static uint64_t lastTickPins = 0;
 	const uint64_t risingPins = pins & (pins ^ lastTickPins);
 	lastTickPins = pins;
+	const uint16_t scanlinePos = (uint16_t)ZXEmuState.scanline_y;
+
+	if (scanlinePos == 0)	// clear scanline info on new frame
+		debugger.ResetScanlineEvents();
 
 	/* memory and IO requests */
 	if (pins & Z80_MREQ) 
@@ -272,11 +277,11 @@ uint64_t FSpectrumEmu::Z80Tick(int num, uint64_t pins)
 			{
 				// TODO: read is to fetch interrupt handler address
 				//LOGINFO("Interrupt Handler at: %x", value);
-				const uint8_t im = pCPU->im;
+				const uint8_t im = cpu.im;
 
 				if (im == 2)
 				{
-					const uint8_t i = pCPU->i;	// I register has high byte of interrupt vector
+					const uint8_t i = cpu.i;	// I register has high byte of interrupt vector
 					const uint16_t interruptVector = (i << 8) | value;
 					const uint16_t interruptHandler = state.CPUInterface->ReadWord(interruptVector);
 					bHasInterruptHandler = true;
@@ -298,29 +303,72 @@ uint64_t FSpectrumEmu::Z80Tick(int num, uint64_t pins)
 			state.SetLastWriterForAddress(addr, pcAddrRef);
 			
 			if (addr >= kScreenPixMemStart && addr <= kScreenPixMemEnd)
-				FrameScreenPixWrites.push_back({ addrRef,value, pcAddrRef });	// Log screen pixel writes
+			{
+				debugger.RegisterEvent((uint8_t)EEventType::ScreenPixWrite, pcAddrRef, addr, value, scanlinePos);
+			}
 			else if (addr >= kScreenAttrMemStart && addr < kScreenAttrMemEnd)
-				FrameScreenAttrWrites.push_back({ addrRef,value, pcAddrRef });	// Log screen attribute writes
+			{
+				debugger.RegisterEvent((uint8_t)EEventType::ScreenAttrWrite, pcAddrRef, addr, value, scanlinePos);
+			}
 		}
 	}
 
 	// Handle IO operations
 	if (pins & Z80_IORQ)
 	{
+		const FAddressRef pcAddrRef = state.AddressRefFromPhysicalAddress(pc);
+		const uint8_t data = Z80_GET_DATA(pins);
+		const uint16_t addr = Z80_GET_ADDR(pins);
+
 		IOAnalysis.IOHandler(pc, pins);
 
-		// handle bank switching on speccy 128
-		if (ZXEmuState.type == ZX_TYPE_128)
+		if (pins & Z80_RD)
 		{
-			if (pins & Z80_WR)
+			if ((pins & Z80_A0) == 0)
+				debugger.RegisterEvent((uint8_t)EEventType::KeyboardRead, pcAddrRef, addr , data, scanlinePos);
+			else if ((pins & (Z80_A7 | Z80_A6 | Z80_A5)) == 0) // Kempston Joystick (........000.....)
+				debugger.RegisterEvent((uint8_t)EEventType::KempstonJoystickRead, pcAddrRef, addr, data, scanlinePos);
+			else if (pins & 0xff)
+				debugger.RegisterEvent((uint8_t)EEventType::FloatingBusRead, pcAddrRef, addr, data, scanlinePos);
+			// 128K specific
+			else if (ZXEmuState.type == ZX_TYPE_128)
 			{
-				// an IO write
-				const uint8_t data = Z80_GET_DATA(pins);
+				if ((pins & (Z80_A15 | Z80_A14 | Z80_A1)) == (Z80_A15 | Z80_A14))
+					debugger.RegisterEvent((uint8_t)EEventType::SoundChipRead, pcAddrRef, addr, data, scanlinePos);
+			}
+		}
+		else if (pins & Z80_WR)
+		{
+			// an IO write
 
+			// handle bank switching on speccy 128
+			if ((pins & Z80_A0) == 0)
+			{
+				static uint8_t LastFE = 0;
+				// Spectrum ULA (...............0)
+
+				// has border colour changed?
+				if ((data & 7) != (LastFE & 7))
+					debugger.RegisterEvent((uint8_t)EEventType::SetBorderColour, pcAddrRef, Z80_GET_ADDR(pins), data, scanlinePos);
+
+				// has beeper changed
+				if ((data & (1 << 4)) != (LastFE & (1 << 4)))
+					debugger.RegisterEvent((uint8_t)EEventType::OutputBeeper, pcAddrRef, Z80_GET_ADDR(pins), data, scanlinePos);
+
+				// has mic output changed
+				if ((data & (1 << 3)) != (LastFE & (1 << 3)))
+					debugger.RegisterEvent((uint8_t)EEventType::OutputMic, pcAddrRef, Z80_GET_ADDR(pins), data, scanlinePos);
+
+				LastFE = data;
+			}
+			else if (ZXEmuState.type == ZX_TYPE_128)
+			{
 				if ((pins & (Z80_A15 | Z80_A1)) == 0)
 				{
 					if (!ZXEmuState.memory_paging_disabled)
 					{
+						debugger.RegisterEvent((uint8_t)EEventType::SwitchMemoryBanks, pcAddrRef, Z80_GET_ADDR(pins), data, scanlinePos);
+
 						const int ramBank = data & 0x7;
 						const int romBank = (data & (1 << 4)) ? 1 : 0;
 						const int displayRamBank = (data & (1 << 3)) ? 7 : 5;
@@ -329,7 +377,12 @@ uint64_t FSpectrumEmu::Z80Tick(int num, uint64_t pins)
 						SetRAMBank(3, ramBank);
 					}
 				}
+				else if ((pins & (Z80_A15 | Z80_A14 | Z80_A1)) == (Z80_A15 | Z80_A14))	// select AY-3-8912 register (11............0.)
+					debugger.RegisterEvent((uint8_t)EEventType::SoundChipRegisterSelect, pcAddrRef, addr, data, scanlinePos);
+				else if ((pins & (Z80_A15 | Z80_A14 | Z80_A1)) == Z80_A15)	// write to AY-3-8912 (10............0.) 
+					debugger.RegisterEvent((uint8_t)EEventType::SoundChipRegisterWrite, pcAddrRef, addr, data, scanlinePos);
 			}
+
 		}
 	}
 
@@ -347,7 +400,7 @@ uint64_t FSpectrumEmu::Z80Tick(int num, uint64_t pins)
 		InstructionsTicks = 0;
 	}
 
-	CodeAnalysis.Debugger.CPUTick(pins);
+	debugger.CPUTick(pins);
 	return pins;
 }
 
@@ -402,6 +455,101 @@ void DebugCB(void* user_data, uint64_t pins)
 	FSpectrumEmu* pEmu = (FSpectrumEmu*)user_data;
 	pEmu->Z80Tick(0, pins);
 }
+
+// keyboard/port LUT
+static std::map<uint16_t, std::vector<std::string>> g_KeyPortLUT =
+{
+	{0xfefe, {"Shift","Z","X","C","V"}},
+	{0xfdfe, {"A","S","D","F","G"}},
+	{0xfbfe, {"Q","W","E","R","T"}},
+	{0xf7fe, {"1","2","3","4","5"}},
+	{0xeffe, {"0","9","8","7","6"}},
+	{0xdffe, {"P","O","I","U","Y"}},
+	{0xbffe, {"Enter","L","K","J","H"}},
+	{0x7ffe, {"Space","Sym","M","N","B"}},
+};
+
+const char* g_AYRegNames[] = {
+	"CH A Period Fine",
+	"CH A Period Coarse",
+	"CH B Period Fine",
+	"CH B Period Coarse",
+	"CH C Period Fine",
+	"CH C Period Coarse",
+	"Noise Pitch",
+	"Mixer",
+	"CH A Volume",
+	"CH B Volume",
+	"CH C Volume",
+	"Env Dur fine",
+	"Env Dur coarse",
+	"Env Shape",
+	"I/O Port A",
+	"I/O Port B",
+};
+
+
+// Event viewer address/value visualisers - move somewhere?
+void IOPortEventShowAddress(FCodeAnalysisState& state, const FEvent& event)
+{
+	if (event.Type == (int)EEventType::KeyboardRead)
+	{
+		const auto& portRow = g_KeyPortLUT.find(event.Address);
+		if (portRow != g_KeyPortLUT.end())
+		{
+			ImGui::Text("Row:");
+			for (const auto& key : portRow->second)
+			{
+				ImGui::SameLine();
+				ImGui::Text("%s", key.c_str());
+			}
+		}
+	}
+	else
+	{
+		ImGui::Text("IO Port: %s", NumStr(event.Address));
+	}
+}
+
+void IOPortEventShowValue(FCodeAnalysisState& state, const FEvent& event)
+{
+	if (event.Type == (int)EEventType::KeyboardRead)
+	{
+		if ((event.Value & 0x1f) == 0x1f)	// no key down
+		{
+			ImGui::Text("No Keys");
+		}
+		else
+		{
+			const auto& portRow = g_KeyPortLUT.find(event.Address);
+			if (portRow != g_KeyPortLUT.end())
+			{
+				for (int i = 0; i < 5; i++)
+				{
+					if ((event.Value & (1 << i)) == 0)
+					{
+						ImGui::SameLine();
+						ImGui::Text("%s", portRow->second[i].c_str());
+					}
+				}
+			}
+		}
+	}
+	else if (event.Type == (int)EEventType::SwitchMemoryBanks)
+	{
+		ImGui::Text("RAM:%d ROM:%d", event.Value & 0x7, (event.Value >> 4) & 1);
+	}
+	else if (event.Type == (int)EEventType::SoundChipRegisterSelect)
+	{
+		ImGui::Text("%s", g_AYRegNames[event.Value & 15]);
+	}
+	else
+	{
+		ImGui::Text("%s", NumStr(event.Value));
+	}
+}
+
+
 
 bool FSpectrumEmu::Init(const FSpectrumConfig& config)
 {
@@ -589,7 +737,24 @@ bool FSpectrumEmu::Init(const FSpectrumConfig& config)
 	if(config.SkoolkitImport.empty() == false)
 		ImportSkoolFile(config.SkoolkitImport.c_str());
 
-	CodeAnalysis.Debugger.SetScreenMemoryArea(kScreenPixMemStart, kScreenAttrMemEnd);
+	// Setup Debugger
+	FDebugger& debugger = CodeAnalysis.Debugger;
+	debugger.RegisterEventType((int)EEventType::None, "None", 0);
+	debugger.RegisterEventType((int)EEventType::ScreenPixWrite, "Screen Pixel Write", 0xff0000ff, nullptr, EventShowPixValue);
+	debugger.RegisterEventType((int)EEventType::ScreenAttrWrite, "Screen Attr Write", 0xff007fff, nullptr, EventShowAttrValue);
+	debugger.RegisterEventType((int)EEventType::KeyboardRead, "Keyboard Read", 0xff00ff1f, IOPortEventShowAddress, IOPortEventShowValue);
+	debugger.RegisterEventType((int)EEventType::KempstonJoystickRead, "Kempston Read", 0xff007f1f, IOPortEventShowAddress, IOPortEventShowValue);
+	debugger.RegisterEventType((int)EEventType::FloatingBusRead, "Floating Bus Read", 0xff407f00, IOPortEventShowAddress, IOPortEventShowValue);
+	debugger.RegisterEventType((int)EEventType::SoundChipRead, "AY Chip Read", 0xff007f40, IOPortEventShowAddress, IOPortEventShowValue);
+	debugger.RegisterEventType((int)EEventType::SoundChipRegisterSelect, "AY Register Select", 0xff007f7f, IOPortEventShowAddress, IOPortEventShowValue);
+	debugger.RegisterEventType((int)EEventType::SoundChipRegisterWrite, "AY Register Write", 0xff00ffff, IOPortEventShowAddress, IOPortEventShowValue);
+	debugger.RegisterEventType((int)EEventType::SwitchMemoryBanks, "Switch Memory Banks", 0xffff00ff, IOPortEventShowAddress, IOPortEventShowValue);
+	debugger.RegisterEventType((int)EEventType::SetBorderColour, "Set Border Colour", 0xff003f1f, IOPortEventShowAddress, IOPortEventShowValue);
+	debugger.RegisterEventType((int)EEventType::OutputBeeper, "Output Beeper", 0xff0000ff, IOPortEventShowAddress, IOPortEventShowValue);
+	debugger.RegisterEventType((int)EEventType::OutputMic, "Output Mic", 0xff0000ff, IOPortEventShowAddress, IOPortEventShowValue);
+
+	debugger.SetScreenMemoryArea(kScreenPixMemStart, kScreenAttrMemEnd);
+
 	bInitialised = true;
 	return true;
 }
@@ -1283,8 +1448,8 @@ void FSpectrumEmu::Tick()
 			kbd_update(&ZXEmuState.kbd);
 		}*/
 		FrameTraceViewer.CaptureFrame();
-		FrameScreenPixWrites.clear();
-		FrameScreenAttrWrites.clear();
+		//FrameScreenPixWrites.clear();
+		//FrameScreenAttrWrites.clear();
 		CodeAnalysis.OnFrameEnd();
 	}
 
