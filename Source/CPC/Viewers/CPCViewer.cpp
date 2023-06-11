@@ -7,6 +7,7 @@
 #include <CodeAnalyser/UI/CodeAnalyserUI.h>
 
 #include <Util/Misc.h>
+#include <ImGuiSupport/ImGuiTexture.h>
 #include <algorithm>
 
 template<typename T> static inline T Clamp(T v, T mn, T mx)
@@ -17,6 +18,25 @@ template<typename T> static inline T Clamp(T v, T mn, T mx)
 void FCpcViewer::Init(FCpcEmu* pEmu)
 {
 	pCpcEmu = pEmu;
+
+	/*
+	* this is how we used to do it in cpcemu::init(). dbg_display_width no longer exists
+	const size_t pixelBufferSize = AM40010_DBG_DISPLAY_WIDTH * AM40010_DBG_DISPLAY_HEIGHT * 4;
+	FrameBuffer = new unsigned char[pixelBufferSize * 2];
+
+	// setup texture
+	Texture = ImGui_CreateTextureRGBA(FrameBuffer, AM40010_DISPLAY_WIDTH, AM40010_DISPLAY_HEIGHT);*/
+
+	// setup texture
+	chips_display_info_t dispInfo = cpc_display_info(&pEmu->CpcEmuState);
+
+	// setup pixel buffer
+	size_t w = dispInfo.frame.dim.width;
+	size_t h = dispInfo.frame.dim.height;
+	const size_t pixelBufferSize = w * h;
+	FrameBuffer = new uint32_t[pixelBufferSize * 2];
+	//ScreenTexture = ImGui_CreateTextureRGBA(FrameBuffer, dispInfo.frame.dim.width, dispInfo.frame.dim.height); // 1024 x 312
+	ScreenTexture = ImGui_CreateTextureRGBA(FrameBuffer, w, h); // 1024 x 312
 }
 
 void FCpcViewer::Draw()
@@ -91,11 +111,38 @@ void FCpcViewer::Draw()
 	}
 
 	// draw the cpc display
+	chips_display_info_t disp = cpc_display_info(&pCpcEmu->CpcEmuState);
+
+	// convert texture to RGBA
+	const uint8_t* pix = (const uint8_t*)disp.frame.buffer.ptr;
+	const uint32_t* pal = (const uint32_t*)disp.palette.ptr;
+	for (int i = 0; i < disp.frame.buffer.size; i++)
+		FrameBuffer[i] = pal[pix[i]];
+
+	ImGui_UpdateTextureRGBA(ScreenTexture, FrameBuffer);
+
+	static uint16_t dispw = 512;
+	static uint16_t disph = 312;
+	static float uv1w = 1.0f;
+	static float uv1h = 1.0f;
+
+	ImGui::PushItemWidth(60);
+	ImGui::InputScalar("width", ImGuiDataType_U16, &dispw, NULL, NULL, "%u", ImGuiInputTextFlags_CharsDecimal); ImGui::SameLine();
+	ImGui::InputScalar("height", ImGuiDataType_U16, &disph, NULL, NULL, "%u", ImGuiInputTextFlags_CharsDecimal); ImGui::SameLine();
+	ImGui::InputScalar("uv1w", ImGuiDataType_Float, &uv1w, NULL, NULL, "%u", ImGuiInputTextFlags_CharsDecimal); ImGui::SameLine();
+	ImGui::InputScalar("uv1h", ImGuiDataType_Float, &uv1h, NULL, NULL, "%u", ImGuiInputTextFlags_CharsDecimal);
+	ImGui::PopItemWidth();
+
+	// sam. fix this up
 	const ImVec2 pos = ImGui::GetCursorScreenPos();					// get the position of the texture
 	const int textureWidth = AM40010_DISPLAY_WIDTH / 2;
 	const int textureHeight = AM40010_DISPLAY_HEIGHT;
-	ImGui::Image(pCpcEmu->Texture, ImVec2(textureWidth, textureHeight));
-	
+	ImVec2 uv0(0, 0);
+	ImVec2 uv1(uv1w, uv1h);
+	//ImVec2 uv1(textureWidth / disp.frame.dim.width, 1.0f); // DISPLAY_WIDTH / FRAMEBUFFER_WIDTH
+	//ImGui::Image(ScreenTexture, ImVec2(textureWidth, textureHeight), uv0, uv1);
+	ImGui::Image(ScreenTexture, ImVec2(dispw, disph), uv0, uv1);
+
 	// work out the position and size of the logical cpc screen based on the crtc registers.
 	// note: these calculations will be wrong if the game sets crtc registers dynamically during the frame.
 	// registers not hooked up: R3

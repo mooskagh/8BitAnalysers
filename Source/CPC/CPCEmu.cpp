@@ -1,19 +1,8 @@
 #include <cstdint>
 
-#define CHIPS_IMPL
+#define CHIPS_UI_IMPL
+
 #include <imgui.h>
-
-typedef void (*z80dasm_output_t)(char c, void* user_data);
-
-void DasmOutputU8(uint8_t val, z80dasm_output_t out_cb, void* user_data);
-void DasmOutputU16(uint16_t val, z80dasm_output_t out_cb, void* user_data);
-void DasmOutputD8(int8_t val, z80dasm_output_t out_cb, void* user_data);
-
-
-#define _STR_U8(u8) DasmOutputU8((uint8_t)(u8),out_cb,user_data);
-#define _STR_U16(u16) DasmOutputU16((uint16_t)(u16),out_cb,user_data);
-#define _STR_D8(d8) DasmOutputD8((int8_t)(d8),out_cb,user_data);
-
 #include "CPCEmu.h"
 
 #include "GlobalConfig.h"
@@ -25,7 +14,6 @@ void DasmOutputD8(int8_t val, z80dasm_output_t out_cb, void* user_data);
 #include "Debug/DebugLog.h"
 
 #include "App.h"
-#include "Viewers/BreakpointViewer.h"
 #include "Viewers/CRTCViewer.h"
 
 #include <sokol_audio.h>
@@ -39,30 +27,7 @@ const char* kGlobalConfigFilename = "GlobalConfig.json";
 
 void StoreRegisters_Z80(FCodeAnalysisState& state);
 
-/* output an unsigned 8-bit value as hex string */
-void DasmOutputU8(uint8_t val, z80dasm_output_t out_cb, void* user_data) 
-{
-	IDasmNumberOutput* pNumberOutput = GetNumberOutput();
-	if(pNumberOutput)
-		pNumberOutput->OutputU8(val, out_cb);
-	
-}
 
-/* output an unsigned 16-bit value as hex string */
-void DasmOutputU16(uint16_t val, z80dasm_output_t out_cb, void* user_data) 
-{
-	IDasmNumberOutput* pNumberOutput = GetNumberOutput();
-	if (pNumberOutput)
-		pNumberOutput->OutputU16(val, out_cb);
-}
-
-/* output a signed 8-bit offset as hex string */
-void DasmOutputD8(int8_t val, z80dasm_output_t out_cb, void* user_data) 
-{
-	IDasmNumberOutput* pNumberOutput = GetNumberOutput();
-	if (pNumberOutput)
-		pNumberOutput->OutputD8(val, out_cb);
-}
 
 #if 0
 // sam. this was taken from  _ui_cpc_memptr()
@@ -181,7 +146,6 @@ uint8_t	FCpcEmu::ReadWritableByte(uint16_t address) const
 uint8_t	FCpcEmu::ReadByte(uint16_t address) const
 {
 	return mem_rd(const_cast<mem_t*>(&CpcEmuState.mem), address);
-	//return MemReadFunc(CurrentLayer, address, const_cast<cpc_t *>(&CpcEmuState));
 }
 
 uint16_t FCpcEmu::ReadWord(uint16_t address) const 
@@ -229,18 +193,16 @@ const uint8_t* FCpcEmu::GetMemPtr(uint16_t address) const
 void FCpcEmu::WriteByte(uint16_t address, uint8_t value)
 {
 	mem_wr(&CpcEmuState.mem, address, value);
-
-	//MemWriteFunc(CurrentLayer, address, value, &CpcEmuState);
 }
 
-uint16_t FCpcEmu::GetPC(void) 
+FAddressRef FCpcEmu::GetPC(void) 
 {
-	return z80_pc(&CpcEmuState.cpu);
+	return CodeAnalysis.Debugger.GetPC();
 } 
 
 uint16_t FCpcEmu::GetSP(void)
 {
-	return z80_sp(&CpcEmuState.cpu);
+	return CpcEmuState.cpu.sp;
 }
 
 void* FCpcEmu::GetCPUEmulator(void) const
@@ -248,103 +210,6 @@ void* FCpcEmu::GetCPUEmulator(void) const
 	return (void*)&CpcEmuState.cpu;
 }
 
-bool FCpcEmu::IsAddressBreakpointed(uint16_t addr)
-{
-	for (int i = 0; i < UICpc.dbg.dbg.num_breakpoints; i++)
-	{
-		if (UICpc.dbg.dbg.breakpoints[i].addr == addr)
-			return true;
-	}
-
-	return false;
-}
-
-bool FCpcEmu::SetExecBreakpointAtAddress(uint16_t addr, bool bSet)
-{
-	const bool bAlreadySet = IsAddressBreakpointed(addr);
-	if (bAlreadySet == bSet)
-		return false;
-
-	if (bSet)
-	{
-		_ui_dbg_bp_add_exec(&UICpc.dbg, true, addr);
-	}
-	else
-	{
-		const int index = _ui_dbg_bp_find(&UICpc.dbg, UI_DBG_BREAKTYPE_EXEC, addr);
-		/* breakpoint already exists, remove */
-		assert(index >= 0);
-		_ui_dbg_bp_del(&UICpc.dbg, index);
-	}
-
-	return true;
-}
-
-bool FCpcEmu::SetDataBreakpointAtAddress(uint16_t addr, uint16_t dataSize, bool bSet)
-{
-	const bool bAlreadySet = IsAddressBreakpointed(addr);
-	if (bAlreadySet == bSet)
-		return false;
-	const int type = dataSize == 1 ? UI_DBG_BREAKTYPE_BYTE : UI_DBG_BREAKTYPE_WORD;
-
-	if (bSet)
-	{
-		// breakpoint doesn't exist, add a new one 
-		if (UICpc.dbg.dbg.num_breakpoints < UI_DBG_MAX_BREAKPOINTS)
-		{
-			ui_dbg_breakpoint_t* bp = &UICpc.dbg.dbg.breakpoints[UICpc.dbg.dbg.num_breakpoints++];
-			bp->type = type;
-			bp->cond = UI_DBG_BREAKCOND_NONEQUAL;
-			bp->addr = addr;
-			bp->val = type == UI_DBG_BREAKTYPE_BYTE ? ReadByte(addr) : ReadWord(addr);
-			bp->enabled = true;
-		}
-		else
-		{
-			return false;
-		}
-	}
-	else
-	{
-		int index = _ui_dbg_bp_find(&UICpc.dbg, type, addr);
-		assert(index >= 0);
-		_ui_dbg_bp_del(&UICpc.dbg, index);
-	}
-
-	return true;
-}
-
-void FCpcEmu::Break(void)
-{
-	_ui_dbg_break(&UICpc.dbg);
-}
-
-void FCpcEmu::Continue(void) 
-{
-	_ui_dbg_continue(&UICpc.dbg);
-}
-
-void FCpcEmu::StepOver(void)
-{
-	_ui_dbg_step_over(&UICpc.dbg);
-}
-
-void FCpcEmu::StepInto(void)
-{
-	_ui_dbg_step_into(&UICpc.dbg);
-}
-
-void FCpcEmu::StepFrame()
-{
-	_ui_dbg_continue(&UICpc.dbg);
-	bStepToNextFrame = true;
-}
-
-void FCpcEmu::StepScreenWrite()
-{
-	_ui_dbg_continue(&UICpc.dbg);
-	bStepToNextScreenWrite = true;
-}
 
 #if 0
 void FCpcEmu::GraphicsViewerSetView(uint16_t address, int charWidth)
@@ -355,16 +220,6 @@ void FCpcEmu::GraphicsViewerSetView(uint16_t address, int charWidth)
 #endif //#if SPECCY
 }
 #endif
-
-bool FCpcEmu::ShouldExecThisFrame(void) const
-{
-	return ExecThisFrame;
-}
-
-bool FCpcEmu::IsStopped(void) const
-{
-	return UICpc.dbg.dbg.stopped;
-}
 
 /* reboot callback */
 static void boot_cb(cpc_t* sys, cpc_type_t type)
@@ -396,80 +251,29 @@ static void PushAudio(const float* samples, int num_samples, void* user_data)
 		saudio_push(samples, num_samples);
 }
 
-int CPCTrapCallback(uint16_t pc, int ticks, uint64_t pins, void* user_data)
+void	FCpcEmu::OnInstructionExecuted(int ticks, uint64_t pins)
 {
-	FCpcEmu* pEmu = (FCpcEmu*)user_data;
-	return pEmu->TrapFunction(pc, ticks, pins);
-}
-
-// Note - you can't read register values in Trap function
-// They are only written back at end of exec function
-int	FCpcEmu::TrapFunction(uint16_t pc, int ticks, uint64_t pins)
-{
-	FCodeAnalysisState &state = CodeAnalysis;
+	FCodeAnalysisState& state = CodeAnalysis;
 	const uint16_t addr = Z80_GET_ADDR(pins);
-	const bool bMemAccess = !!((pins & Z80_CTRL_MASK) & Z80_MREQ);
-	const bool bWrite = (pins & Z80_CTRL_MASK) == (Z80_MREQ | Z80_WR);
-	const bool irq = (pins & Z80_INT) && z80_iff1(&CpcEmuState.cpu);	
+	const bool bMemAccess = !!((pins & Z80_CTRL_PIN_MASK) & Z80_MREQ);
+	const bool bWrite = (pins & Z80_CTRL_PIN_MASK) == (Z80_MREQ | Z80_WR);
+	const uint16_t pc = pins & 0xffff;	// set PC to pc of instruction just executed
 
-	const uint16_t nextpc = pc;
-	// store program count in history
-	const uint16_t prevPC = PCHistory[PCHistoryPos];
-	PCHistoryPos = (PCHistoryPos + 1) % FCpcEmu::kPCHistorySize;
-	PCHistory[PCHistoryPos] = pc;
+	RegisterCodeExecuted(state, pc, PreviousPC);
+	MemoryHandlerTrapFunction(pc, ticks, pins, this);
 
-	pc = prevPC;	// set PC to pc of instruction just executed
-
-	if (irq)
-	{
-		FCPUFunctionCall callInfo;
-		callInfo.CallAddr = state.AddressRefFromPhysicalAddress(pc);
-		callInfo.FunctionAddr = state.AddressRefFromPhysicalAddress(pc);
-		callInfo.ReturnAddr = state.AddressRefFromPhysicalAddress(pc);
-		state.CallStack.push_back(callInfo);
-		//return UI_DBG_BP_BASE_TRAPID + 255;	//hack
-	}
-
-	const bool bBreak = RegisterCodeExecuted(state, pc, nextpc);
-	//FCodeInfo* pCodeInfo = state.GetCodeInfoForAddress(pc);
-	//pCodeInfo->FrameLastAccessed = state.CurrentFrameNo;
-	// check for breakpointed code line
-	if (bBreak)
-		return UI_DBG_BP_BASE_TRAPID;
-	
-	int trapId = MemoryHandlerTrapFunction(pc, ticks, pins, this);
-
-	// break on screen memory write
-	if (bWrite && addr >= GetScreenAddrStart() && addr <= GetScreenAddrEnd())
-	{
-		if (bStepToNextScreenWrite)
-		{
-			bStepToNextScreenWrite = false;
-			return UI_DBG_BP_BASE_TRAPID;
-		}
-	}
 #if ENABLE_CAPTURES
 	FLabelInfo* pLabel = state.GetLabelForAddress(pc);
 	if (pLabel != nullptr)
 	{
-		if(pLabel->LabelType == ELabelType::Function)
+		if (pLabel->LabelType == ELabelType::Function)
 			trapId = kCaptureTrapId;
 	}
 #endif
-	// work out stack size
-	const uint16_t sp = z80_sp(&CpcEmuState.cpu);	// this won't get the proper stack pos (see comment above function)
-	if (sp == state.StackMin - 2 || state.StackMin == 0xffff)
-		state.StackMin = sp;
-	if (sp == state.StackMax + 2 || state.StackMax == 0 )
-		state.StackMax = sp;
 
-	// work out instruction count
-	int iCount = 1;
-	uint8_t opcode = ReadByte(pc);
-	if (opcode == 0xED || opcode == 0xCB)
-		iCount++;
+	PreviousPC = pc;
 
-	// Store the screen mode per scanline.
+	// sam. Store the screen mode per scanline.
 	// Shame to do this here. Would be nice to have a horizontal blank callback
 	const int curScanline = CpcEmuState.ga.crt.pos_y;
 	if (LastScanline != curScanline)
@@ -478,7 +282,6 @@ int	FCpcEmu::TrapFunction(uint16_t pc, int ticks, uint64_t pins)
 		ScreenModePerScanline[curScanline] = screenMode;
 		LastScanline = CpcEmuState.ga.crt.pos_y;
 	}
-	return trapId;
 }
 
 // Note - you can't read the cpu vars during tick
@@ -486,11 +289,11 @@ int	FCpcEmu::TrapFunction(uint16_t pc, int ticks, uint64_t pins)
 uint64_t FCpcEmu::Z80Tick(int num, uint64_t pins)
 {
 	FCodeAnalysisState& state = CodeAnalysis;
+	FDebugger& debugger = CodeAnalysis.Debugger;
 
 	// we have to pass data to the tick through an internal state struct because the z80_t struct only gets updated after an emulation exec period
 	z80_t* pCPU = (z80_t*)state.CPUInterface->GetCPUEmulator();
-	const FZ80InternalState& cpuState = pCPU->internal_state;
-	const uint16_t pc = cpuState.PC;
+	const uint16_t pc = GetPC().Address;
 
 	/* memory and IO requests */
 	if (pins & Z80_MREQ)
@@ -499,7 +302,7 @@ uint64_t FCpcEmu::Z80Tick(int num, uint64_t pins)
 		const uint8_t value = Z80_GET_DATA(pins);
 		if (pins & Z80_RD) 
 		{
-			if (cpuState.IRQ)
+			if (false)
 			{
 				// todo interrupt handler?
 			}
@@ -517,25 +320,32 @@ uint64_t FCpcEmu::Z80Tick(int num, uint64_t pins)
 			const FAddressRef pcAddrRef = state.AddressRefFromPhysicalAddress(pc);
 			state.SetLastWriterForAddress(addr, pcAddrRef);
 
-
+			// sam todo. replace with event viewer code
 			// Log screen pixel writes
 			if (addr >= GetScreenAddrStart() && addr <= GetScreenAddrEnd())
 			{
+				// this needs to be replaced with a call to RegisterEvent
 				FrameScreenPixWrites.push_back({ addrRef,value, pcAddrRef });
-			}
-			
-			FCodeInfo* pCodeWrittenTo = state.GetCodeInfoForAddress(addr);
-			if (pCodeWrittenTo != nullptr && pCodeWrittenTo->bSelfModifyingCode == false)
-			{
-				// TODO: record some info such as what byte was written
-				pCodeWrittenTo->bSelfModifyingCode = true;
 			}
 		}
 	}
 
 	// Memory gets remapped here
-	pins =  OldTickCB(num, pins, OldTickUserData);
 
+	InstructionsTicks++;
+
+	const bool bNewOp = z80_opdone(&CpcEmuState.cpu);
+
+	if (bNewOp)
+	{
+		OnInstructionExecuted(InstructionsTicks, pins);
+		InstructionsTicks = 0;
+	}
+
+	debugger.CPUTick(pins);
+
+// might need to move this to the chipsimpl code as we use chips functions/defines only available when CHIPS_IMPL is defined
+#if FIXME
 	if (pins & Z80_IORQ)
 	{
 		IOAnalysis.IOHandler(pc, pins);
@@ -619,8 +429,9 @@ uint64_t FCpcEmu::Z80Tick(int num, uint64_t pins)
 			}
 #endif		
 
-		}	
+		}
 	}
+#endif // FIXME
 
 	return pins;
 }
@@ -690,6 +501,10 @@ void FCpcEmu::SetRAMBank(int slot, int bankNo)
 
 void FCpcEmu::SetRAMBanks(int bankPresetIndex)
 {
+	//_cpc_ram_config isn't available because we don't have CHIPS_IMPL.
+	// might have to move this whole function to cpchipsimpl.c.
+	// or write a GetRamConfig() function in cpcchipsimpl.c
+#if FIXME
 	const int slot0BankIndex = _cpc_ram_config[bankPresetIndex][0];
 	const int slot1BankIndex = _cpc_ram_config[bankPresetIndex][1];
 	const int slot2BankIndex = _cpc_ram_config[bankPresetIndex][2];
@@ -699,9 +514,27 @@ void FCpcEmu::SetRAMBanks(int bankPresetIndex)
 	SetRAMBank(1, slot1BankIndex);
 	SetRAMBank(2, slot2BankIndex);
 	SetRAMBank(3, slot3BankIndex);
+#endif
 
 	// sam todo: only set dirty banks that have changed?
 	CodeAnalysis.SetAllBanksDirty();
+}
+
+// callback function to save snapshot to a numbered slot
+void UISnapshotSaveCB(size_t slot_index)
+{
+}
+
+// callback function to load snapshot from numbered slot
+bool UISnapshotLoadCB(size_t slot_index)
+{
+	return true;
+}
+
+void DebugCB(void* user_data, uint64_t pins)
+{
+	FCpcEmu* pEmu = (FCpcEmu*)user_data;
+	pEmu->Z80Tick(0, pins);
 }
 
 bool FCpcEmu::Init(const FCpcConfig& config)
@@ -709,13 +542,6 @@ bool FCpcEmu::Init(const FCpcConfig& config)
 	const std::string memStr = config.Model == ECpcModel::CPC_6128 ? " (128K)" : " (64K)";
 	SetWindowTitle((std::string(kAppTitle) + memStr).c_str());
 	SetWindowIcon("CPCALogo.png");
-
-	// setup pixel buffer
-	const size_t pixelBufferSize = AM40010_DBG_DISPLAY_WIDTH * AM40010_DBG_DISPLAY_HEIGHT * 4;
-	FrameBuffer = new unsigned char[pixelBufferSize * 2];
-
-	// setup texture
-	Texture = ImGui_CreateTextureRGBA(FrameBuffer, AM40010_DISPLAY_WIDTH, AM40010_DISPLAY_HEIGHT);
 
 	// Initialise the CPC emulator
 	LoadGlobalConfig(kGlobalConfigFilename);
@@ -748,65 +574,63 @@ bool FCpcEmu::Init(const FCpcConfig& config)
 	cpc_desc_t desc;
 	memset(&desc, 0, sizeof(cpc_desc_t));
 	desc.type = type;
-	desc.user_data = this;
 	desc.joystick_type = joy_type;
-	desc.pixel_buffer = FrameBuffer;
-	desc.pixel_buffer_size = static_cast<int>(pixelBufferSize);
-	desc.audio_cb = PushAudio;	// our audio callback
-	desc.audio_sample_rate = saudio_sample_rate();
-	desc.rom_464_os = dump_cpc464_os_bin;
-	desc.rom_464_os_size = sizeof(dump_cpc464_os_bin);
-	desc.rom_464_basic = dump_cpc464_basic_bin;
-	desc.rom_464_basic_size = sizeof(dump_cpc464_basic_bin);
-	desc.rom_6128_os = dump_cpc6128_os_bin;
-	desc.rom_6128_os_size = sizeof(dump_cpc6128_os_bin);
-	desc.rom_6128_basic = dump_cpc6128_basic_bin;
-	desc.rom_6128_basic_size = sizeof(dump_cpc6128_basic_bin);
-	desc.rom_6128_amsdos = dump_cpc6128_amsdos_bin;
-	desc.rom_6128_amsdos_size = sizeof(dump_cpc6128_amsdos_bin);
-	desc.rom_kcc_os = dump_kcc_os_bin;
-	desc.rom_kcc_os_size = sizeof(dump_kcc_os_bin);
-	desc.rom_kcc_basic = dump_kcc_bas_bin;
-	desc.rom_kcc_basic_size = sizeof(dump_kcc_bas_bin);
+	
+	// audio
+	desc.audio.callback.func = PushAudio;	// our audio callback
+	desc.audio.callback.user_data = this;
+	desc.audio.sample_rate = saudio_sample_rate();
+	
+	// roms
+	desc.roms.cpc464.os.ptr = dump_cpc464_os_bin;
+	desc.roms.cpc464.os.size= sizeof(dump_cpc464_os_bin);
+	desc.roms.cpc464.basic.ptr = dump_cpc464_basic_bin;
+	desc.roms.cpc464.basic.size = sizeof(dump_cpc464_basic_bin);
+	desc.roms.cpc6128.os.ptr = dump_cpc6128_os_bin;
+	desc.roms.cpc6128.os.size = sizeof(dump_cpc6128_os_bin);
+	desc.roms.cpc6128.basic.ptr = dump_cpc6128_basic_bin;
+	desc.roms.cpc6128.basic.size = sizeof(dump_cpc6128_basic_bin);
+	desc.roms.cpc6128.amsdos.ptr = dump_cpc6128_amsdos_bin;
+	desc.roms.cpc6128.amsdos.size = sizeof(dump_cpc6128_amsdos_bin);
+	
+	// setup debug hook
+	desc.debug.callback.func = DebugCB;
+	desc.debug.callback.user_data = this;
+	desc.debug.stopped = CodeAnalysis.Debugger.GetDebuggerStoppedPtr();
 
 	cpc_init(&CpcEmuState, &desc);
 
 	// Clear UI
 	memset(&UICpc, 0, sizeof(ui_cpc_t));
 
-	// Trap callback needs to be set before we create the UI
-	z80_trap_cb(&CpcEmuState.cpu, CPCTrapCallback, this);
-
-	// todo: put this back in
-	// Setup our tick callback
-	OldTickCB = CpcEmuState.cpu.tick_cb;
-	OldTickUserData = CpcEmuState.cpu.user_data;
-	CpcEmuState.cpu.tick_cb = Z80TickThunk;
-	CpcEmuState.cpu.user_data = this;
-
 	//ui_init(zxui_draw);
 	{
 		ui_cpc_desc_t desc = { 0 };
 		desc.cpc = &CpcEmuState;
 		desc.boot_cb = boot_cb;
-		desc.create_texture_cb = gfx_create_texture;
-		desc.update_texture_cb = gfx_update_texture;
-		desc.destroy_texture_cb = gfx_destroy_texture;
-		desc.dbg_keys.break_keycode = ImGui::GetKeyIndex(ImGuiKey_Space);
-		desc.dbg_keys.break_name = "F5";
-		desc.dbg_keys.continue_keycode = ImGui::GetKeyIndex(ImGuiKey_F5);
-		desc.dbg_keys.continue_name = "F5";
-		desc.dbg_keys.step_over_keycode = ImGui::GetKeyIndex(ImGuiKey_F6);
-		desc.dbg_keys.step_over_name = "F6";
-		desc.dbg_keys.step_into_keycode = ImGui::GetKeyIndex(ImGuiKey_F7);
-		desc.dbg_keys.step_into_name = "F7";
-		desc.dbg_keys.toggle_breakpoint_keycode = ImGui::GetKeyIndex(ImGuiKey_F9);
-		desc.dbg_keys.toggle_breakpoint_name = "F9";
+
+		desc.dbg_texture.create_cb = gfx_create_texture;
+		desc.dbg_texture.update_cb = gfx_update_texture;
+		desc.dbg_texture.destroy_cb = gfx_destroy_texture;
+
+		desc.dbg_keys.stop.keycode = ImGui::GetKeyIndex(ImGuiKey_Space);
+		desc.dbg_keys.stop.name = "F5";
+		desc.dbg_keys.cont.keycode = ImGui::GetKeyIndex(ImGuiKey_F5);
+		desc.dbg_keys.cont.name = "F5";
+		desc.dbg_keys.step_over.keycode = ImGui::GetKeyIndex(ImGuiKey_F6);
+		desc.dbg_keys.step_over.name = "F6";
+		desc.dbg_keys.step_into.keycode = ImGui::GetKeyIndex(ImGuiKey_F7);
+		desc.dbg_keys.step_into.name = "F7";
+		desc.dbg_keys.toggle_breakpoint.keycode = ImGui::GetKeyIndex(ImGuiKey_F9);
+		desc.dbg_keys.toggle_breakpoint.name = "F9";
+
+		desc.snapshot.load_cb = UISnapshotLoadCB;
+		desc.snapshot.save_cb = UISnapshotSaveCB;
+
 		ui_cpc_init(&UICpc, &desc);
 	}
 
 	// This is where we add the viewers we want
-	Viewers.push_back(new FBreakpointViewer(this));
 	Viewers.push_back(new FCrtcViewer(this));
 	//Viewers.push_back(new FOverviewViewer(this));
 
@@ -1027,7 +851,10 @@ void FCpcEmu::StartGame(FGameConfig* pGameConfig)
 
 	// Start in break mode so the memory will be in it's initial state. 
 	// Otherwise, if we export an asm file once the game is running the memory will be in an arbitrary state.
-	Break();
+	CodeAnalysis.Debugger.SetPC(CodeAnalysis.AddressRefFromPhysicalAddress(CpcEmuState.cpu.pc - 1));
+	CodeAnalysis.Debugger.Break();
+
+	CodeAnalysis.Debugger.RegisterNewStackPointer(CpcEmuState.cpu.sp, FAddressRef());
 }
 
 bool FCpcEmu::StartGame(const char* pGameName)
@@ -1367,7 +1194,7 @@ void FCpcEmu::DrawMainMenu(double timeMS)
 
 		// draw emu timings
 		ImGui::SameLine(ImGui::GetWindowWidth() - 120);
-		if (IsStopped())
+		if (UICpc.dbg.dbg.stopped)
 			ImGui::Text("emu: stopped");
 		else
 			ImGui::Text("emu: %.2fms", timeMS);
@@ -1433,42 +1260,27 @@ void FCpcEmu::ExportAsmGui()
 
 void FCpcEmu::Tick()
 {
+	FDebugger& debugger = CodeAnalysis.Debugger;
+
 	CpcViewer.Tick();
 
-	ExecThisFrame = ui_cpc_before_exec(&UICpc);
-
-	if (ExecThisFrame)
+	if (debugger.IsStopped() == false)
 	{
 		const float frameTime = std::min(1000000.0f / ImGui::GetIO().Framerate, 32000.0f) * ExecSpeedScale;
 		const uint32_t microSeconds = std::max(static_cast<uint32_t>(frameTime), uint32_t(1));
 
-		// TODO: Start frame method in analyser
-		CodeAnalysis.FrameTrace.clear();
+		CodeAnalysis.OnFrameStart();
 		
 		StoreRegisters_Z80(CodeAnalysis);
 
 		cpc_exec(&CpcEmuState, microSeconds);
 		
-		ImGui_UpdateTextureRGBA(Texture, FrameBuffer);
-
 #if SPECCY
 		FrameTraceViewer.CaptureFrame();
 #endif
 		FrameScreenPixWrites.clear();
 
-		if (bStepToNextFrame)
-		{
-			_ui_dbg_break(&UICpc.dbg);
-			CodeAnalysis.GetFocussedViewState().GoToAddress({ CodeAnalysis.GetBankFromAddress(GetPC()), GetPC() });
-			bStepToNextFrame = false;
-		}
-
-
-		// on debug break send code analyser to address
-		else if (UICpc.dbg.dbg.z80->trap_id >= UI_DBG_STEP_TRAPID)
-		{
-			CodeAnalysis.GetFocussedViewState().GoToAddress({ CodeAnalysis.GetBankFromAddress(GetPC()), GetPC() });
-		}
+		CodeAnalysis.OnFrameEnd();
 	}
 	
 #if SPECCY
@@ -1524,13 +1336,6 @@ void FCpcEmu::DrawUI()
 	ui_cpc_t* pCPCUI = &UICpc;
 	const double timeMS = 1000.0f / ImGui::GetIO().Framerate;
 	
-	if(ExecThisFrame)
-		ui_cpc_after_exec(pCPCUI);
-
-	const int instructionsThisFrame = (int)CodeAnalysis.FrameTrace.size();
-	static int maxInst = 0;
-	maxInst = std::max(maxInst, instructionsThisFrame);
-
 	// Draw the main menu
 	DrawMainMenu(timeMS);
 
@@ -1547,7 +1352,7 @@ void FCpcEmu::DrawUI()
 	}
 
 	// call the Chips UI functions
-	ui_audio_draw(&pCPCUI->audio, pCPCUI->cpc->sample_pos);
+	ui_audio_draw(&pCPCUI->audio, pCPCUI->cpc->audio.sample_pos);
 	ui_z80_draw(&pCPCUI->cpu);
 	ui_ay38910_draw(&pCPCUI->psg);
 	ui_kbd_draw(&pCPCUI->kbd);
@@ -1565,35 +1370,18 @@ void FCpcEmu::DrawUI()
 		}
 	}
 
+	if (ImGui::Begin("Debugger"))
+	{
+		CodeAnalysis.Debugger.DrawUI();
+	}
+	ImGui::End();
+
 	if (ImGui::Begin("CPC View"))
 	{
 		CpcViewer.Draw();
 	}
 	ImGui::End();
 
-	if (ImGui::Begin("Call Stack"))
-	{
-		DrawStackInfo(CodeAnalysis);
-	}
-	ImGui::End();
-
-	if (ImGui::Begin("Trace"))
-	{
-		DrawTrace(CodeAnalysis);
-	}
-	ImGui::End();
-
-	if (ImGui::Begin("Registers"))
-	{
-		DrawRegisters(CodeAnalysis);
-	}
-	ImGui::End();
-
-	if (ImGui::Begin("Watches"))
-	{
-		DrawWatchWindow(CodeAnalysis);
-	}
-	ImGui::End();
 	/*if (ImGui::Begin("Frame Trace"))
 	{
 		FrameTraceViewer.Draw();

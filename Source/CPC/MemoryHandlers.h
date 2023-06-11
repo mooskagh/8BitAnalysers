@@ -1,6 +1,6 @@
 #pragma once
 
-#include <CodeAnalyser/CodeAnaysisPage.h> 
+#include <CodeAnalyser/CodeAnalysisPage.h> 
 
 #include <cstdint>
 #include <vector>

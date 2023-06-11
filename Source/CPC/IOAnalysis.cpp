@@ -40,7 +40,7 @@ void FIOAnalysis::HandlePPI(uint64_t pins, CpcIODevice& readDevice, CpcIODevice&
 		if (!((ppi.control & I8255_CTRL_A) == I8255_CTRL_A_OUTPUT)) // diff
 		{
 		  uint64_t ay_pins = 0;
-		  uint8_t ay_ctrl = ppi.output[I8255_PORT_C];
+		  uint8_t ay_ctrl = ppi.pc.outp;
 		  if (ay_ctrl & (1 << 7)) ay_pins |= AY38910_BDIR;
 		  if (ay_ctrl & (1 << 6)) ay_pins |= AY38910_BC1;
 
@@ -78,7 +78,7 @@ void FIOAnalysis::HandlePPI(uint64_t pins, CpcIODevice& readDevice, CpcIODevice&
   {
 	 if ((pins & (I8255_A0 | I8255_A1)) == I8255_A1)
 	 {
-		const uint8_t ay_ctrl = pCpcEmu->CpcEmuState.ppi.output[I8255_PORT_C] & ((1 << 7) | (1 << 6)); // diff
+		const uint8_t ay_ctrl = pCpcEmu->CpcEmuState.ppi.pc.outp & ((1 << 7) | (1 << 6)); // diff
 		if (ay_ctrl)
 		{
 		  uint64_t ay_pins = 0;
@@ -312,7 +312,7 @@ void FIOAnalysis::DrawUI()
 		}
 	}
 
-	if (!pCpcEmu->IsStopped())
+	if (!pCpcEmu->CodeAnalysis.Debugger.IsStopped())
 	{
 	  // reset for frame
 	  for (int i = 0; i < (int)CpcIODevice::Count; i++)

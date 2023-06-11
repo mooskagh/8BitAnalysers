@@ -11,7 +11,7 @@ void InputU8Decimal(const char* label, uint8_t& val)
 
 // Draw register value.
 // Change text colour if register's value has been modified from the default value.
-void DrawCrtcRegValue(uint8_t& reg, const char* text, uint8_t default_val, std::string& description = std::string(""))
+void DrawCrtcRegValue(uint8_t& reg, const char* text, uint8_t default_val, const std::string& description)
 {
 	bool bModified = false;
 	bModified = reg != default_val;

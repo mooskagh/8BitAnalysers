@@ -19,6 +19,9 @@ public:
 private:
 	FCpcEmu* pCpcEmu = nullptr;
 
+	uint32_t* FrameBuffer;	// pixel buffer to store emu output
+	ImTextureID		ScreenTexture;		// texture
+
 	bool	bWindowFocused = false;
 	// screen inspector
 	/*bool		bScreenCharSelected = false;

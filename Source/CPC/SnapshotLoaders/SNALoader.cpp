@@ -29,9 +29,12 @@ bool LoadSNAFileCached(FCpcEmu* pEmu, const char* fName, uint8_t*& pData , size_
 	return LoadSNAFromMemory(pEmu, pData, dataSize);
 }
 
-bool LoadSNAFromMemory(FCpcEmu * pEmu, const uint8_t * pData, size_t dataSize)
+bool LoadSNAFromMemory(FCpcEmu * pEmu, uint8_t * pData, size_t dataSize)
 {	
-	bool bResult = cpc_quickload(&pEmu->CpcEmuState, pData, static_cast<int>(dataSize));
+	chips_range_t range;
+	range.ptr = static_cast<void*>(pData);
+	range.size = dataSize;
+	bool bResult = cpc_quickload(&pEmu->CpcEmuState, range);
 	if (bResult == true)
 	{
 		if (pEmu->CpcEmuState.type == CPC_TYPE_6128)
