@@ -12,6 +12,7 @@
 #include <CodeAnalyser/CodeAnalysisState.h>
 #include "CodeAnalyser/CodeAnalysisJson.h"
 #include "Debug/DebugLog.h"
+#include "CpcChipsImpl.h"
 
 #include "App.h"
 #include "Viewers/CRTCViewer.h"
@@ -295,6 +296,9 @@ uint64_t FCpcEmu::Z80Tick(int num, uint64_t pins)
 	z80_t* pCPU = (z80_t*)state.CPUInterface->GetCPUEmulator();
 	const uint16_t pc = GetPC().Address;
 
+	// sam. no idea if this is right or not
+	const uint16_t scanlinePos = CpcEmuState.ga.crt.v_pos;
+
 	/* memory and IO requests */
 	if (pins & Z80_MREQ)
 	{
@@ -320,12 +324,10 @@ uint64_t FCpcEmu::Z80Tick(int num, uint64_t pins)
 			const FAddressRef pcAddrRef = state.AddressRefFromPhysicalAddress(pc);
 			state.SetLastWriterForAddress(addr, pcAddrRef);
 
-			// sam todo. replace with event viewer code
 			// Log screen pixel writes
 			if (addr >= GetScreenAddrStart() && addr <= GetScreenAddrEnd())
 			{
-				// this needs to be replaced with a call to RegisterEvent
-				FrameScreenPixWrites.push_back({ addrRef,value, pcAddrRef });
+				debugger.RegisterEvent((uint8_t)EEventType::ScreenPixWrite, pcAddrRef, addr, value, scanlinePos);
 			}
 		}
 	}
@@ -342,14 +344,19 @@ uint64_t FCpcEmu::Z80Tick(int num, uint64_t pins)
 		InstructionsTicks = 0;
 	}
 
+	// sam. need to do this somewhere better. like when the screen ram address gets set 
+	debugger.SetScreenMemoryArea(GetScreenAddrStart(), GetScreenAddrEnd());
+
 	debugger.CPUTick(pins);
 
 // might need to move this to the chipsimpl code as we use chips functions/defines only available when CHIPS_IMPL is defined
-#if FIXME
+//#if FIXME
 	if (pins & Z80_IORQ)
 	{
 		IOAnalysis.IOHandler(pc, pins);
 
+#if FIXME
+		// note: this code is duplicated in IOAnalysis.cpp in HandleGateArray
 		if (pins & (Z80_RD | Z80_WR))
 		{
 			if ((pins & (AM40010_A14 | AM40010_A15)) == AM40010_A14)
@@ -401,37 +408,37 @@ uint64_t FCpcEmu::Z80Tick(int num, uint64_t pins)
 						break;
 					}
 				}
-			}
-				
-#if 0
-				/* 0x0000 .. 0x3FFF */
-				if (rom_enable & AM40010_CONFIG_LROMEN) {
-					/* read/write RAM */
-					mem_map_ram(&sys->mem, 0, 0x0000, 0x4000, sys->ram[i0]);
-				}
-				else {
-					/* RAM-behind-ROM */
-					mem_map_rw(&sys->mem, 0, 0x0000, 0x4000, rom0_ptr, sys->ram[i0]);
-				}
-				/* 0x4000 .. 0x7FFF */
-				mem_map_ram(&sys->mem, 0, 0x4000, 0x4000, sys->ram[i1]);
-				/* 0x8000 .. 0xBFFF */
-				mem_map_ram(&sys->mem, 0, 0x8000, 0x4000, sys->ram[i2]);
-				/* 0xC000 .. 0xFFFF */
-				if (rom_enable & AM40010_CONFIG_HROMEN) {
-					/* read/write RAM */
-					mem_map_ram(&sys->mem, 0, 0xC000, 0x4000, sys->ram[i3]);
-				}
-				else {
-					/* RAM-behind-ROM */
-					mem_map_rw(&sys->mem, 0, 0xC000, 0x4000, rom1_ptr, sys->ram[i3]);
-				}
-			}
-#endif		
-
+			}		
 		}
-	}
 #endif // FIXME
+	}
+
+
+#if 0
+			/* 0x0000 .. 0x3FFF */
+	if (rom_enable & AM40010_CONFIG_LROMEN) {
+		/* read/write RAM */
+		mem_map_ram(&sys->mem, 0, 0x0000, 0x4000, sys->ram[i0]);
+	}
+	else {
+		/* RAM-behind-ROM */
+		mem_map_rw(&sys->mem, 0, 0x0000, 0x4000, rom0_ptr, sys->ram[i0]);
+	}
+	/* 0x4000 .. 0x7FFF */
+	mem_map_ram(&sys->mem, 0, 0x4000, 0x4000, sys->ram[i1]);
+	/* 0x8000 .. 0xBFFF */
+	mem_map_ram(&sys->mem, 0, 0x8000, 0x4000, sys->ram[i2]);
+	/* 0xC000 .. 0xFFFF */
+	if (rom_enable & AM40010_CONFIG_HROMEN) {
+		/* read/write RAM */
+		mem_map_ram(&sys->mem, 0, 0xC000, 0x4000, sys->ram[i3]);
+	}
+	else {
+		/* RAM-behind-ROM */
+		mem_map_rw(&sys->mem, 0, 0xC000, 0x4000, rom1_ptr, sys->ram[i3]);
+	}
+			}
+#endif
 
 	return pins;
 }
@@ -535,6 +542,140 @@ void DebugCB(void* user_data, uint64_t pins)
 {
 	FCpcEmu* pEmu = (FCpcEmu*)user_data;
 	pEmu->Z80Tick(0, pins);
+}
+
+/// keyboard / port LUT
+static std::map<uint8_t, std::vector<std::string>> g_KeyPortLUT =
+{
+	{0x40, {"FDOT",		"ENTER",	"F3",		"F6",		"F9",		"CURDOWN",	"CURRIGHT",	"CURUP"}},
+	{0x41, {"F0",		"F2",		"F1",		"F5",		"F8",		"F7",		"COPY",		"CURLEFT"}},
+	{0x42, {"CONTROL",	"\\",		"SHIFT",	"F4",		"]",		"RETURN",	"[",		"CLR"}},
+	{0x43, {".",		"/",		":",		";",		"P",		"@",		"-",		"^"}},
+	{0x44, {",",		"M",		"K",		"L",		"I",		"O",		"9",		"0"}},
+	{0x45, {"SPACE",	"N",		"J",		"H",		"Y",		"U",		"7",		"8"}},
+	{0x46, {"V",		"B",		"F",		"G(J2F)",	"T(J2R)",	"R(J2L)",	"5(J2D)",	"6(J2U)"}},
+	{0x47, {"X",		"C",		"D",		"S",		"W",		"E",		"3",		"4"}},
+	{0x48, {"Z",		"CAPSLOCK",	"A",		"TAB",		"Q",		"ESC",		"2",		"1"}},
+	{0x49, {"DEL",		"J1F3",		"J1F2",		"J11F",		"J1R",		"J1L",		"J1D",		"J1U"}},
+};
+
+
+// Event viewer address/value visualisers - move somewhere?
+void IOPortEventShowAddress(FCodeAnalysisState& state, const FEvent& event)
+{
+	if (event.Type == (int)EEventType::KeyboardRead)
+	{
+		const auto& portRow = g_KeyPortLUT.find(event.Address&0xff);
+		if (portRow != g_KeyPortLUT.end())
+		{
+			ImGui::Text("Row:");
+			for (const auto& key : portRow->second)
+			{
+				ImGui::SameLine();
+				ImGui::Text("%s", key.c_str());
+			}
+		}
+		else
+			ImGui::Text("Port: %s", NumStr(event.Address));
+	}
+	else
+	{
+		ImGui::Text("IO Port: %s", NumStr(event.Address));
+	}
+}
+
+void IOPortEventShowValue(FCodeAnalysisState& state, const FEvent& event)
+{
+	if (event.Type == (int)EEventType::KeyboardRead)
+	{
+		if (event.Value == 0xff)	// no key down
+		{
+			ImGui::Text("No Keys");
+		}
+		else
+		{
+			const auto& portRow = g_KeyPortLUT.find(event.Address&0xff);
+			if (portRow != g_KeyPortLUT.end())
+			{
+				for (int i = 7; i >= 0; i--)
+				{
+					if ((event.Value & (1 << i)) == 0)
+					{
+						const char* pString = portRow->second[7 - i].c_str();
+						ImGui::Text("%s", pString);
+						ImGui::SameLine();
+					}
+				}
+			}
+		}
+	}
+	else
+	{
+		ImGui::Text("%s", NumStr(event.Value));
+	}
+}
+
+const char* g_CRTCRegNames[18] =
+{
+"Horiz.Total",						
+"Horiz. Displayed",
+"Horiz. Sync Pos.",
+"Sync Widths",
+"Vert. Total",
+"Vert. Total Adjust",
+"Vert. Displayed",
+"Vert. Sync Pos.",
+"Interlace and Skew",
+"Max Scan lines",
+"Cursor Start",
+"Cursor End",
+"Disp. Start Addr. H"
+"Disp. Start Addr. L",
+"Cursor H",
+"Cursor L",
+"Light Pen H",
+"Light Pen L",
+};
+
+void CRTCWriteEventShowAddress(FCodeAnalysisState& state, const FEvent& event)
+{
+	int regIndex = event.Address & 0x1f;
+	ImGui::Text("Port %s: R%d %s", NumStr(event.Address), regIndex, regIndex <= 18 ? g_CRTCRegNames[regIndex] : "");
+}
+
+void CRTCWriteEventShowValue(FCodeAnalysisState& state, const FEvent& event)
+{
+	ImGui::Text("%s", NumStr(event.Value));
+}
+
+void PaletteEventShowValue(FCodeAnalysisState& state, const FEvent& event)
+{
+	if (event.Type == (uint8_t)EEventType::PaletteColour)
+	{
+		ImDrawList* dl = ImGui::GetWindowDrawList();
+		ImVec2 pos = ImGui::GetCursorScreenPos();
+		const float line_height = ImGui::GetTextLineHeight();
+		const float rectSize = line_height;
+
+		const uint8_t colAttr = event.Value;
+
+		const bool bBright = !!(colAttr & (1 << 6));
+		const uint32_t col = GetCpcColour(event.Value & 0x1f);
+
+		const ImVec2 rectMin(pos.x, pos.y);
+		const ImVec2 rectMax(pos.x + rectSize, pos.y + rectSize);
+		dl->AddRectFilled(rectMin, rectMax, col);
+		ImGui::Text("   %s", NumStr(event.Value));
+	}
+	else
+	{
+		ImGui::Text("%s", NumStr(event.Value));
+	}
+}
+
+void ScreenModeShowValue(FCodeAnalysisState& state, const FEvent& event)
+{
+	ImGui::Text("Mode %d", event.Value);
 }
 
 bool FCpcEmu::Init(const FCpcConfig& config)
@@ -734,6 +875,20 @@ bool FCpcEmu::Init(const FCpcConfig& config)
 #endif
 	}
 
+	FDebugger& debugger = CodeAnalysis.Debugger;
+	debugger.RegisterEventType((int)EEventType::None, "None", 0);
+	debugger.RegisterEventType((int)EEventType::ScreenPixWrite,			"Screen RAM Write",	0xff0000ff, nullptr, EventShowPixValue);
+	debugger.RegisterEventType((int)EEventType::PaletteSelect,			"Palette Select",	0xffffffff, IOPortEventShowAddress, PaletteEventShowValue);
+	debugger.RegisterEventType((int)EEventType::PaletteColour,			"Palette Colour",	0xff00ffff, IOPortEventShowAddress, PaletteEventShowValue);
+	debugger.RegisterEventType((int)EEventType::BorderColour,			"Border Colour",	0xff00ff00, IOPortEventShowAddress, PaletteEventShowValue);
+	debugger.RegisterEventType((int)EEventType::ScreenModeChange,		"Screen Mode",		0xff0080ff, IOPortEventShowAddress, ScreenModeShowValue);
+	debugger.RegisterEventType((int)EEventType::CrtcRegisterSelect,		"CRTC Reg. Select",	0xffff00ff, CRTCWriteEventShowAddress, CRTCWriteEventShowValue);
+	debugger.RegisterEventType((int)EEventType::CrtcRegisterRead,		"CRTC Reg. Read",	0xffff0000, CRTCWriteEventShowAddress, CRTCWriteEventShowValue);
+	debugger.RegisterEventType((int)EEventType::CrtcRegisterWrite,		"CRTC Reg. Write",	0xffffff00, CRTCWriteEventShowAddress, CRTCWriteEventShowValue);
+	debugger.RegisterEventType((int)EEventType::KeyboardRead,			"Keyboard Read",	0xff808080, IOPortEventShowAddress, IOPortEventShowValue);
+	
+	debugger.SetScreenMemoryArea(GetScreenAddrStart(), GetScreenAddrEnd());
+
 	bInitialised = true;
 
 	return true;
@@ -755,14 +910,12 @@ void FCpcEmu::Shutdown()
 	SaveGlobalConfig(kGlobalConfigFilename);
 }
 
-void FCpcEmu::StartGame(FGameConfig* pGameConfig)
+void FCpcEmu::StartGame(FGameConfig* pGameConfig, bool bLoadGameData /* =  true*/)
 {
 	// reset systems
 	MemoryAccessHandlers.clear();	// remove old memory handlers
 	ResetMemoryStats(MemStats);
-#if SPECCY
 	FrameTraceViewer.Reset();
-#endif
 
 	const std::string memStr = CpcEmuState.type == CPC_TYPE_6128 ? " (128K)" : " (64K)";
 	const std::string windowTitle = kAppTitle + " - " + pGameConfig->Name + memStr;
@@ -799,33 +952,35 @@ void FCpcEmu::StartGame(FGameConfig* pGameConfig)
 	{
 		CodeAnalysis.ViewState[i].Enabled = pGameConfig->ViewConfigs[i].bEnabled;
 		CodeAnalysis.ViewState[i].GoToAddress(pGameConfig->ViewConfigs[i].ViewAddress);
-
 	}
 
-	const std::string root = GetGlobalConfig().WorkspaceRoot;
+	if (bLoadGameData)
+	{
+		const std::string root = GetGlobalConfig().WorkspaceRoot;
 #if SPECCY
-	std::string romJsonFName = kRomInfo48JsonFile;
+		std::string romJsonFName = kRomInfo48JsonFile;
 
-	if (ZXEmuState.type == ZX_TYPE_128)
-		romJsonFName = root + kRomInfo128JsonFile;
+		if (ZXEmuState.type == ZX_TYPE_128)
+			romJsonFName = root + kRomInfo128JsonFile;
 #endif
 
-	const std::string analysisJsonFName = root + "AnalysisJson/" + pGameConfig->Name + ".json";
-	const std::string analysisStateFName = root + "AnalysisState/" + pGameConfig->Name + ".astate";
-	const std::string saveStateFName = root + "SaveStates/" + pGameConfig->Name + ".state";
-	
-	ImportAnalysisJson(CodeAnalysis, analysisJsonFName.c_str());
-	ImportAnalysisState(CodeAnalysis, analysisStateFName.c_str());
-	
+		const std::string analysisJsonFName = root + "AnalysisJson/" + pGameConfig->Name + ".json";
+		const std::string analysisStateFName = root + "AnalysisState/" + pGameConfig->Name + ".astate";
+		const std::string saveStateFName = root + "SaveStates/" + pGameConfig->Name + ".state";
+
+		ImportAnalysisJson(CodeAnalysis, analysisJsonFName.c_str());
+		ImportAnalysisState(CodeAnalysis, analysisStateFName.c_str());
+
 #if SPECCY
-	LoadGameState(this, saveStateFName.c_str());
+		LoadGameState(this, saveStateFName.c_str());
 
-	if (FileExists(romJsonFName.c_str()))
-		ImportAnalysisJson(CodeAnalysis, romJsonFName.c_str());
+		if (FileExists(romJsonFName.c_str()))
+			ImportAnalysisJson(CodeAnalysis, romJsonFName.c_str());
 
-	// where do we want pokes to live?
-	LoadPOKFile(*pGameConfig, std::string(GetGlobalConfig().PokesFolder + pGameConfig->Name + ".pok").c_str());
+		// where do we want pokes to live?
+		LoadPOKFile(*pGameConfig, std::string(GetGlobalConfig().PokesFolder + pGameConfig->Name + ".pok").c_str());
 #endif
+	}
 
 	ReAnalyseCode(CodeAnalysis);
 	GenerateGlobalInfo(CodeAnalysis);
@@ -929,6 +1084,29 @@ void FCpcEmu::SaveCurrentGameData()
 #endif
 }
 
+bool FCpcEmu::NewGameFromSnapshot(int snapshotIndex)
+{
+	if (GamesList.LoadGame(snapshotIndex))
+	{
+		const FGameSnapshot& game = GamesList.GetGame(snapshotIndex);
+
+		// Remove any existing config 
+		RemoveGameConfig(game.DisplayName.c_str());
+
+		FGameConfig* pNewConfig = CreateNewGameConfigFromSnapshot(game);
+
+		if (pNewConfig != nullptr)
+		{
+			StartGame(pNewConfig, /* bLoadGameData */ false);
+			AddGameConfig(pNewConfig);
+			SaveCurrentGameData();
+
+			return true;
+		}
+	}
+	return false;
+}
+
 void FCpcEmu::DrawFileMenu()
 {
 	if (ImGui::BeginMenu("File"))
@@ -941,11 +1119,22 @@ void FCpcEmu::DrawFileMenu()
 
 				if (ImGui::MenuItem(game.DisplayName.c_str()))
 				{
-					if (GamesList.LoadGame(gameNo))
+					bool bGameExists = false;
+
+					// does the game config exist?
+					for (const auto& pGameConfig : GetGameConfigs())
 					{
-						FGameConfig *pNewConfig = CreateNewGameConfigFromSnapshot(game);
-						if(pNewConfig != nullptr)
-							StartGame(pNewConfig);
+						if (pGameConfig->SnapshotFile == game.DisplayName)
+							bGameExists = true;
+					}
+					if (bGameExists)
+					{
+						bReplaceGamePopup = true;
+						ReplaceGameSnapshotIndex = gameNo;
+					}
+					else
+					{
+						NewGameFromSnapshot(gameNo);
 					}
 				}
 			}
@@ -1187,6 +1376,7 @@ void FCpcEmu::DrawMenus()
 void FCpcEmu::DrawMainMenu(double timeMS)
 {
 	bExportAsm = false;
+	bReplaceGamePopup = false;
 
 	if (ImGui::BeginMainMenuBar())
 	{
@@ -1202,10 +1392,14 @@ void FCpcEmu::DrawMainMenu(double timeMS)
 		ImGui::EndMainMenuBar();
 	}
 
-	ExportAsmGui();
+	// Draw any modal popups that have been requested from clicking on menu items.
+	// This is a workaround for an open bug.
+	// https://github.com/ocornut/imgui/issues/331
+	DrawExportAsmModalPopup();
+	DrawReplaceGameModalPopup();
 }
 
-void FCpcEmu::ExportAsmGui()
+void FCpcEmu::DrawExportAsmModalPopup()
 {
 	if (bExportAsm)
 	{
@@ -1258,6 +1452,44 @@ void FCpcEmu::ExportAsmGui()
 	}
 }
 
+void FCpcEmu::DrawReplaceGameModalPopup()
+{
+	if (bReplaceGamePopup)
+	{
+		ImGui::OpenPopup("Overwrite Game?");
+	}
+	if (ImGui::BeginPopupModal("Overwrite Game?", NULL, ImGuiWindowFlags_AlwaysAutoResize))
+	{
+		ImGui::Text("Do you want to overwrite existing game data?\nAny reverse engineering progress will be lost!\n\n");
+		ImGui::Separator();
+
+		if (ImGui::Button("Overwrite", ImVec2(120, 0)))
+		{
+			if (GamesList.LoadGame(ReplaceGameSnapshotIndex))
+			{
+				const FGameSnapshot& game = GamesList.GetGame(ReplaceGameSnapshotIndex);
+
+				for (const auto& pGameConfig : GetGameConfigs())
+				{
+					if (pGameConfig->SnapshotFile == game.DisplayName)
+					{
+						NewGameFromSnapshot(ReplaceGameSnapshotIndex);
+						break;
+					}
+				}
+			}
+			ImGui::CloseCurrentPopup();
+		}
+		ImGui::SetItemDefaultFocus();
+		ImGui::SameLine();
+		if (ImGui::Button("Cancel", ImVec2(120, 0)))
+		{
+			ImGui::CloseCurrentPopup();
+		}
+		ImGui::EndPopup();
+	}
+}
+
 void FCpcEmu::Tick()
 {
 	FDebugger& debugger = CodeAnalysis.Debugger;
@@ -1275,10 +1507,7 @@ void FCpcEmu::Tick()
 
 		cpc_exec(&CpcEmuState, microSeconds);
 		
-#if SPECCY
 		FrameTraceViewer.CaptureFrame();
-#endif
-		FrameScreenPixWrites.clear();
 
 		CodeAnalysis.OnFrameEnd();
 	}
@@ -1382,11 +1611,11 @@ void FCpcEmu::DrawUI()
 	}
 	ImGui::End();
 
-	/*if (ImGui::Begin("Frame Trace"))
+	if (ImGui::Begin("Frame Trace"))
 	{
 		FrameTraceViewer.Draw();
 	}
-	ImGui::End();*/
+	ImGui::End();
 
 	DrawGraphicsViewer(GraphicsViewer);
 	DrawMemoryTools();
@@ -1506,7 +1735,7 @@ void FCpcConfig::ParseCommandline(int argc, char** argv)
 // https://gist.github.com/neuro-sys/eeb7a323b27a9d8ad891b41144916946#registers
 uint16_t FCpcEmu::GetScreenAddrStart() const
 {
-	const uint16_t dispStart = (CpcEmuState.crtc.start_addr_hi << 8) | CpcEmuState.crtc.start_addr_lo;
+	const uint16_t  dispStart = (CpcEmuState.crtc.start_addr_hi << 8) | CpcEmuState.crtc.start_addr_lo;
 	const uint16_t pageIndex = (dispStart >> 12) & 0x3; // bits 12 & 13 hold the page index
 	const uint16_t baseAddr = pageIndex * 0x4000;
 	const uint16_t offset = (dispStart & 0x3ff) << 1; // 1024 positions. bits 0..9

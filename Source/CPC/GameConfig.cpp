@@ -21,6 +21,13 @@ static std::vector< FGameConfig *>	g_GameConfigs;
 
 bool AddGameConfig(FGameConfig *pConfig)
 {
+	for (const auto& pGameConfig : GetGameConfigs())
+	{
+		// Dont add game configs with identical names
+		if (pGameConfig->Name == pConfig->Name)
+			return false;
+	}
+
 	g_GameConfigs.push_back(pConfig);
 	return true;
 }
@@ -28,6 +35,20 @@ bool AddGameConfig(FGameConfig *pConfig)
 const std::vector< FGameConfig *>& GetGameConfigs()
 {
 	return g_GameConfigs;
+}
+
+bool RemoveGameConfig(const char* pName)
+{
+	for (std::vector< FGameConfig*>::iterator it = g_GameConfigs.begin(); it != g_GameConfigs.end(); ++it)
+	{
+		FGameConfig* pConfig = *it;
+		if (pConfig->Name == pName)
+		{
+			g_GameConfigs.erase(it);
+			return true;
+		}
+	}
+	return false;
 }
 
 FGameConfig * CreateNewGameConfigFromSnapshot(const FGameSnapshot& snapshot)

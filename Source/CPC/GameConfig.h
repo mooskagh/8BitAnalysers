@@ -79,11 +79,12 @@ struct FGameConfig
 };
 
 bool AddGameConfig(FGameConfig *pConfig);
+bool RemoveGameConfig(const char* pName);
+
 const std::vector< FGameConfig *>& GetGameConfigs();
 
 FGameConfig *CreateNewGameConfigFromSnapshot(const FGameSnapshot& snapshot);
 bool SaveGameConfigToFile(const FGameConfig &config, const char *fname);
-bool LoadGameConfigFromFile(FGameConfig &config, const char *fname);
 bool LoadGameConfigs(FCpcEmu*pUI);
 
 #if SPECCY

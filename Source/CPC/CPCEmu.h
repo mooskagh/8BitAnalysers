@@ -47,6 +47,7 @@
 
 #include "CodeAnalyser/CodeAnalyser.h"
 #include "Viewers/CPCViewer.h"
+#include "Viewers/FrameTraceViewer.h"
 #include "Viewers/GraphicsViewer.h"
 #include "MemoryHandlers.h"
 #include "IOAnalysis.h"
@@ -94,7 +95,7 @@ public:
 
 	bool	Init(const FCpcConfig& config);
 	void	Shutdown();
-	void	StartGame(FGameConfig* pGameConfig);
+	void	StartGame(FGameConfig* pGameConfig, bool bLoadGameData = true);
 	bool	StartGame(const char* pGameName);
 	void	SaveCurrentGameData();
 
@@ -115,7 +116,8 @@ public:
 	void	DrawDebugMenu();
 	void	DrawMenus();
 	void	DrawMainMenu(double timeMS);
-	void	ExportAsmGui();
+	void	DrawExportAsmModalPopup();
+	void	DrawReplaceGameModalPopup();
 
 	// disable copy & assign because this class is big!
 	FCpcEmu(const FCpcEmu&) = delete;
@@ -148,6 +150,8 @@ public:
 	uint16_t GetScreenMemSize() const;
 	bool GetScreenMemoryAddress(int x, int y, uint16_t& addr) const;
 
+	bool NewGameFromSnapshot(int snapshotIndex);
+
 	// Emulator 
 	cpc_t			CpcEmuState;		// Chips CPC State
 	uint8_t*		MappedInMemory = nullptr;
@@ -160,7 +164,7 @@ public:
 
 	// Viewers
 	FCpcViewer				CpcViewer;
-	//FFrameTraceViewer		FrameTraceViewer;
+	FFrameTraceViewer		FrameTraceViewer;
 	FGraphicsViewerState	GraphicsViewer;
 	FCodeAnalysisState	CodeAnalysis;
 	FIOAnalysis				IOAnalysis;
@@ -183,7 +187,7 @@ public:
 	// Memory handling
 	std::string				SelectedMemoryHandler;
 	std::vector< FMemoryAccessHandler>	MemoryAccessHandlers;
-	std::vector< FMemoryAccess>	FrameScreenPixWrites;
+	//std::vector< FMemoryAccess>	FrameScreenPixWrites;
 
 	FMemoryStats	MemStats;
 
@@ -205,7 +209,11 @@ private:
 
 	std::vector<FViewerBase*>	Viewers;
 
+	bool bReplaceGamePopup = false;
+	int ReplaceGameSnapshotIndex = 0;
+
 	bool bExportAsm = false;
+
 	bool	bInitialised = false;
 };
 

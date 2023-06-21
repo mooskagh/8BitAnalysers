@@ -11,9 +11,11 @@ enum class CpcIODevice
 	Keyboard,
 	Joystick,
 	CRTC,
+	PaletteRegisterSelect,
+	PaletteWrite,
+	BorderColour,
 
 #if SPECCY
-	BorderColour,
 	Ear,	// for loading
 	Mic,	// for saving
 	KempstonJoystick,
@@ -48,9 +50,12 @@ public:
 private:
   void HandlePPI(uint64_t pins, CpcIODevice& readDevice, CpcIODevice& writeDevice);
   void HandleCRTC(uint64_t pins, CpcIODevice& readDevice, CpcIODevice& writeDevice);
+  void HandleGateArray(uint64_t pins, CpcIODevice& readDevice, CpcIODevice& writeDevice);
+  void RegisterEvent(uint8_t type, uint16_t address, uint8_t value);
 
   FCpcEmu*	  pCpcEmu = nullptr;
   FIOAccess	  IODeviceAcceses[(int)CpcIODevice::Count];
   uint8_t	  LastFE = 0;
   CpcIODevice SelectedDevice = CpcIODevice::None;
+  int		  CurScreenMode = -1;
 };
