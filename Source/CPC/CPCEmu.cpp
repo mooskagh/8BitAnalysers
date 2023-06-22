@@ -14,21 +14,23 @@
 #include "Debug/DebugLog.h"
 #include "CpcChipsImpl.h"
 
+#include "Exporters/AssemblerExport.h"
 #include "App.h"
 #include "Viewers/CRTCViewer.h"
+#include "Viewers/OverviewViewer.h"
 
 #include <sokol_audio.h>
 #include "cpc-roms.h"
 
 #include <ImGuiSupport/ImGuiTexture.h>
 
+#define RUN_AHEAD_TO_GENERATE_SCREEN
+
 const std::string kAppTitle = "CPC Analyser";
 
 const char* kGlobalConfigFilename = "GlobalConfig.json";
 
 void StoreRegisters_Z80(FCodeAnalysisState& state);
-
-
 
 #if 0
 // sam. this was taken from  _ui_cpc_memptr()
@@ -773,7 +775,7 @@ bool FCpcEmu::Init(const FCpcConfig& config)
 
 	// This is where we add the viewers we want
 	Viewers.push_back(new FCrtcViewer(this));
-	//Viewers.push_back(new FOverviewViewer(this));
+	Viewers.push_back(new FOverviewViewer(this));
 
 	// Initialise Viewers
 	for (auto Viewer : Viewers)
@@ -996,7 +998,7 @@ void FCpcEmu::StartGame(FGameConfig* pGameConfig, bool bLoadGameData /* =  true*
 	// todo mute audio so we don't hear a frame of audio
 	cpc_exec(&CpcEmuState, 48000);
 
-	ImGui_UpdateTextureRGBA(Texture, FrameBuffer);
+	ImGui_UpdateTextureRGBA(CpcViewer.GetScreenTexture(), CpcViewer.GetFrameBuffer());
 
 	// Load the game again (from memory - it should be cached) to restore the cpc state.
 	const std::string snapFolder = GetGlobalConfig().SnapshotFolder;
@@ -1165,7 +1167,7 @@ void FCpcEmu::DrawFileMenu()
 		{
 			SaveCurrentGameData();
 		}
-		if (ImGui::MenuItem("Export Binary File"))
+		/*if (ImGui::MenuItem("Export Binary File"))
 		{
 			/*if (pActiveGame != nullptr)
 			{
@@ -1177,8 +1179,8 @@ void FCpcEmu::DrawFileMenu()
 					pSpecMem[i] = ReadByte(i);
 				SaveBinaryFile(outBinFname.c_str(), pSpecMem, 65536);
 				delete [] pSpecMem;
-			}*/
-		}
+			}
+		}*/
 
 		if (ImGui::MenuItem("Export ASM File"))
 		{
@@ -1423,7 +1425,6 @@ void FCpcEmu::DrawExportAsmModalPopup()
 		{
 			if (addrEnd > addrStart)
 			{
-				/*
 				if (pActiveGame != nullptr)
 				{
 					const std::string dir = GetGlobalConfig().WorkspaceRoot + "OutputASM/";
@@ -1438,7 +1439,7 @@ void FCpcEmu::DrawExportAsmModalPopup()
 					std::string outBinFname = dir + pActiveGame->pConfig->Name + addrRangeStr + ".asm";
 
 					ExportAssembler(CodeAnalysis, outBinFname.c_str(), addrStart, addrEnd);
-				}*/
+				}
 				ImGui::CloseCurrentPopup();
 			}
 		}

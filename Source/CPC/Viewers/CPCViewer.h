@@ -17,6 +17,7 @@ public:
 	void	Tick(void);
 
 	const uint32_t* GetFrameBuffer() const { return FrameBuffer; }
+	const ImTextureID GetScreenTexture() const { return ScreenTexture; }
 
 private:
 	FCpcEmu* pCpcEmu = nullptr;
