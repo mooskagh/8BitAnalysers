@@ -26,6 +26,9 @@
 
 #define RUN_AHEAD_TO_GENERATE_SCREEN
 
+// Disabled for now
+//#define ENABLE_CPC_6128
+
 const std::string kAppTitle = "CPC Analyser";
 
 const char* kGlobalConfigFilename = "GlobalConfig.json";
@@ -682,7 +685,7 @@ void ScreenModeShowValue(FCodeAnalysisState& state, const FEvent& event)
 
 bool FCpcEmu::Init(const FCpcConfig& config)
 {
-	const std::string memStr = config.Model == ECpcModel::CPC_6128 ? " (128K)" : " (64K)";
+	const std::string memStr = config.Model == ECpcModel::CPC_6128 ? " (CPC 6128)" : " (CPC 464)";
 	SetWindowTitle((std::string(kAppTitle) + memStr).c_str());
 	SetWindowIcon("CPCALogo.png");
 
@@ -1717,7 +1720,9 @@ void FCpcConfig::ParseCommandline(int argc, char** argv)
 	{
 		if (*argIt == std::string("-128"))
 		{
+#ifdef ENABLE_CPC_6128
 			Model = ECpcModel::CPC_6128;
+#endif
 		}
 		else if (*argIt == std::string("-game"))
 		{
