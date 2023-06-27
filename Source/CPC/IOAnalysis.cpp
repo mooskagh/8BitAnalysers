@@ -13,7 +13,7 @@ std::map< CpcIODevice, const char*> g_DeviceNames =
 	{CpcIODevice::Keyboard, "Keyboard"},
 	{CpcIODevice::Joystick, "Joystick"},
 	{CpcIODevice::CRTC, "CRTC"},
-	{CpcIODevice::PaletteRegisterSelect, "Palette Register Select"},
+	{CpcIODevice::PaletteRegisterSelect, "Palette Select"},
 	{CpcIODevice::PaletteWrite, "Palette Write"},
 	{CpcIODevice::BorderColour, "BorderColour"},
 #if SPECCY
