@@ -922,7 +922,7 @@ void FCpcEmu::StartGame(FGameConfig* pGameConfig, bool bLoadGameData /* =  true*
 	ResetMemoryStats(MemStats);
 	FrameTraceViewer.Reset();
 
-	const std::string memStr = CpcEmuState.type == CPC_TYPE_6128 ? " (128K)" : " (64K)";
+	const std::string memStr = CpcEmuState.type == CPC_TYPE_6128 ? " (CPC 6128)" : " (CPC 464)";
 	const std::string windowTitle = kAppTitle + " - " + pGameConfig->Name + memStr;
 	SetWindowTitle(windowTitle.c_str());
 
@@ -999,6 +999,7 @@ void FCpcEmu::StartGame(FGameConfig* pGameConfig, bool bLoadGameData /* =  true*
 	// sam todo: run for exactly 1 video frame. The current technique is crude and can render >1 frame, including partial frames and produce 
 	// a glitch when continuing execution.
 	// todo mute audio so we don't hear a frame of audio
+	CodeAnalysis.Debugger.Continue();
 	cpc_exec(&CpcEmuState, 48000);
 
 	ImGui_UpdateTextureRGBA(CpcViewer.GetScreenTexture(), CpcViewer.GetFrameBuffer());
