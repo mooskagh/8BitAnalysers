@@ -23,8 +23,8 @@ void FCpcViewer::Init(FCpcEmu* pEmu)
 	chips_display_info_t dispInfo = cpc_display_info(&pEmu->CpcEmuState);
 
 	// setup pixel buffer
-	size_t w = dispInfo.frame.dim.width; // 1024
-	size_t h = dispInfo.frame.dim.height; // 312
+	int w = dispInfo.frame.dim.width; // 1024
+	int h = dispInfo.frame.dim.height; // 312
 
 	const size_t pixelBufferSize = w * h;
 	FrameBuffer = new uint32_t[pixelBufferSize * 2];
@@ -117,11 +117,11 @@ void FCpcViewer::Draw()
 	static float uv0h = 0.0f;
 	static float uv1w = (float)AM40010_DISPLAY_WIDTH / (float)AM40010_FRAMEBUFFER_WIDTH;
 	static float uv1h = (float)AM40010_DISPLAY_HEIGHT / (float)AM40010_FRAMEBUFFER_HEIGHT;
-	static uint16_t dispw = 384;
-	static uint16_t disph = 272;
+	static float textureWidth = AM40010_DISPLAY_WIDTH / 2;
+	static float textureHeight = AM40010_DISPLAY_HEIGHT;
 #if 0
-	ImGui::InputScalar("width", ImGuiDataType_U16, &dispw, NULL, NULL, "%u", ImGuiInputTextFlags_CharsDecimal); ImGui::SameLine();
-	ImGui::InputScalar("height", ImGuiDataType_U16, &disph, NULL, NULL, "%u", ImGuiInputTextFlags_CharsDecimal);// ImGui::SameLine();
+	ImGui::InputScalar("width", ImGuiDataType_Float, &textureWidth, NULL, NULL, "%f", ImGuiInputTextFlags_CharsDecimal); ImGui::SameLine();
+	ImGui::InputScalar("height", ImGuiDataType_Float, textureHeight, NULL, NULL, "%f", ImGuiInputTextFlags_CharsDecimal);// ImGui::SameLine();
 	ImGui::InputScalar("uv1w", ImGuiDataType_Float, &uv1w, NULL, NULL, "%f", ImGuiInputTextFlags_CharsDecimal); ImGui::SameLine();
 	ImGui::InputScalar("uv1h", ImGuiDataType_Float, &uv1h, NULL, NULL, "%f", ImGuiInputTextFlags_CharsDecimal); ImGui::SameLine();
 	ImGui::InputScalar("uv0w", ImGuiDataType_Float, &uv0w, NULL, NULL, "%f", ImGuiInputTextFlags_CharsDecimal); ImGui::SameLine();
@@ -136,7 +136,7 @@ void FCpcViewer::Draw()
 	const ImVec2 pos = ImGui::GetCursorScreenPos(); // get the position of the texture
 	ImVec2 uv0(uv0w, uv0h);
 	ImVec2 uv1(uv1w, uv1h);
-	ImGui::Image(ScreenTexture, ImVec2(dispw, disph), uv0, uv1);
+	ImGui::Image(ScreenTexture, ImVec2(textureWidth, textureHeight), uv0, uv1);
 
 	// work out the position and size of the logical cpc screen based on the crtc registers.
 	// note: these calculations will be wrong if the game sets crtc registers dynamically during the frame.
@@ -151,7 +151,6 @@ void FCpcViewer::Draw()
 	
 	ImDrawList* dl = ImGui::GetWindowDrawList();
 
-	
 	// draw screen area.
 	if (bDrawScreenExtents)
 	{

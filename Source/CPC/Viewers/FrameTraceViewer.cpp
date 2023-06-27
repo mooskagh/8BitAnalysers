@@ -122,6 +122,9 @@ void FFrameTraceViewer::RestoreFrame(const FCpcFrameTrace& frame)
 
 void FFrameTraceViewer::Draw()
 {
+	// sam. todo
+	return;
+
 	if (ImGui::ArrowButton("##left", ImGuiDir_Left))
 		ShowFrame = std::max(--ShowFrame, 0);
 
@@ -132,7 +135,6 @@ void FFrameTraceViewer::Draw()
 
 	ImGui::SameLine();
 	int frameNo = 0;
-	return;
 
 	if (ImGui::SliderInt("Backwards Offset", &ShowFrame, 0, kNoFramesInTrace - 1))
 	{

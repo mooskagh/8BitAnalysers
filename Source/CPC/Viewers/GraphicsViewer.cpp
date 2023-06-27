@@ -107,12 +107,12 @@ void DrawMemoryAsGraphicsColumn(FGraphicsViewerState &state,uint16_t startAddr, 
 // Viewer to view cpc graphics
 void DrawGraphicsViewer(FGraphicsViewerState &state)
 {
+// todo get this working
+#if 0
 	if (ImGui::Begin("Graphics View"))
 	{
 	}
 	ImGui::End();
-// todo get this working
-#if 0
 	FCpcGraphicsView *pGraphicsView = state.pGraphicsView;	
 
 	int byteOff = 0;
