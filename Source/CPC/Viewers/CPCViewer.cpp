@@ -19,24 +19,16 @@ void FCpcViewer::Init(FCpcEmu* pEmu)
 {
 	pCpcEmu = pEmu;
 
-	/*
-	* this is how we used to do it in cpcemu::init(). dbg_display_width no longer exists
-	const size_t pixelBufferSize = AM40010_DBG_DISPLAY_WIDTH * AM40010_DBG_DISPLAY_HEIGHT * 4;
-	FrameBuffer = new unsigned char[pixelBufferSize * 2];
-
-	// setup texture
-	Texture = ImGui_CreateTextureRGBA(FrameBuffer, AM40010_DISPLAY_WIDTH, AM40010_DISPLAY_HEIGHT);*/
-
 	// setup texture
 	chips_display_info_t dispInfo = cpc_display_info(&pEmu->CpcEmuState);
 
 	// setup pixel buffer
-	size_t w = dispInfo.frame.dim.width;
-	size_t h = dispInfo.frame.dim.height;
+	size_t w = dispInfo.frame.dim.width; // 1024
+	size_t h = dispInfo.frame.dim.height; // 312
+
 	const size_t pixelBufferSize = w * h;
 	FrameBuffer = new uint32_t[pixelBufferSize * 2];
-	//ScreenTexture = ImGui_CreateTextureRGBA(FrameBuffer, dispInfo.frame.dim.width, dispInfo.frame.dim.height); // 1024 x 312
-	ScreenTexture = ImGui_CreateTextureRGBA(FrameBuffer, w, h); // 1024 x 312
+	ScreenTexture = ImGui_CreateTextureRGBA(FrameBuffer, w, h);
 }
 
 void FCpcViewer::Draw()
@@ -121,26 +113,29 @@ void FCpcViewer::Draw()
 
 	ImGui_UpdateTextureRGBA(ScreenTexture, FrameBuffer);
 
-	static uint16_t dispw = 512;
-	static uint16_t disph = 312;
-	static float uv1w = 1.0f;
-	static float uv1h = 1.0f;
-
-	ImGui::PushItemWidth(60);
+	static float uv0w = 0.0f;
+	static float uv0h = 0.0f;
+	static float uv1w = (float)AM40010_DISPLAY_WIDTH / (float)AM40010_FRAMEBUFFER_WIDTH;
+	static float uv1h = (float)AM40010_DISPLAY_HEIGHT / (float)AM40010_FRAMEBUFFER_HEIGHT;
+	static uint16_t dispw = 384;
+	static uint16_t disph = 272;
+#if 0
 	ImGui::InputScalar("width", ImGuiDataType_U16, &dispw, NULL, NULL, "%u", ImGuiInputTextFlags_CharsDecimal); ImGui::SameLine();
-	ImGui::InputScalar("height", ImGuiDataType_U16, &disph, NULL, NULL, "%u", ImGuiInputTextFlags_CharsDecimal); ImGui::SameLine();
-	ImGui::InputScalar("uv1w", ImGuiDataType_Float, &uv1w, NULL, NULL, "%u", ImGuiInputTextFlags_CharsDecimal); ImGui::SameLine();
-	ImGui::InputScalar("uv1h", ImGuiDataType_Float, &uv1h, NULL, NULL, "%u", ImGuiInputTextFlags_CharsDecimal);
-	ImGui::PopItemWidth();
+	ImGui::InputScalar("height", ImGuiDataType_U16, &disph, NULL, NULL, "%u", ImGuiInputTextFlags_CharsDecimal);// ImGui::SameLine();
+	ImGui::InputScalar("uv1w", ImGuiDataType_Float, &uv1w, NULL, NULL, "%f", ImGuiInputTextFlags_CharsDecimal); ImGui::SameLine();
+	ImGui::InputScalar("uv1h", ImGuiDataType_Float, &uv1h, NULL, NULL, "%f", ImGuiInputTextFlags_CharsDecimal); ImGui::SameLine();
+	ImGui::InputScalar("uv0w", ImGuiDataType_Float, &uv0w, NULL, NULL, "%f", ImGuiInputTextFlags_CharsDecimal); ImGui::SameLine();
+	ImGui::InputScalar("uv0h", ImGuiDataType_Float, &uv0h, NULL, NULL, "%f", ImGuiInputTextFlags_CharsDecimal);
+	
+	ImGui::SliderFloat("uv1w", &uv1w, 0.0f, 1.0f);
+	ImGui::SliderFloat("uv1h", &uv1h, 0.0f, 1.0f);
+	ImGui::SliderFloat("uv0w", &uv0w, 0.0f, 1.0f);
+	ImGui::SliderFloat("uv0h", &uv0h, 0.0f, 1.0f);
+#endif
 
-	// sam. fix this up
-	const ImVec2 pos = ImGui::GetCursorScreenPos();					// get the position of the texture
-	const int textureWidth = AM40010_DISPLAY_WIDTH / 2;
-	const int textureHeight = AM40010_DISPLAY_HEIGHT;
-	ImVec2 uv0(0, 0);
+	const ImVec2 pos = ImGui::GetCursorScreenPos(); // get the position of the texture
+	ImVec2 uv0(uv0w, uv0h);
 	ImVec2 uv1(uv1w, uv1h);
-	//ImVec2 uv1(textureWidth / disp.frame.dim.width, 1.0f); // DISPLAY_WIDTH / FRAMEBUFFER_WIDTH
-	//ImGui::Image(ScreenTexture, ImVec2(textureWidth, textureHeight), uv0, uv1);
 	ImGui::Image(ScreenTexture, ImVec2(dispw, disph), uv0, uv1);
 
 	// work out the position and size of the logical cpc screen based on the crtc registers.
