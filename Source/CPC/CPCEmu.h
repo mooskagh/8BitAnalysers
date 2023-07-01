@@ -166,7 +166,7 @@ public:
 	FCpcViewer				CpcViewer;
 	FFrameTraceViewer		FrameTraceViewer;
 	FGraphicsViewerState	GraphicsViewer;
-	FCodeAnalysisState	CodeAnalysis;
+	FCodeAnalysisState		CodeAnalysis;
 	FIOAnalysis				IOAnalysis;
 	FDiffTool				DiffTool;
 

@@ -801,7 +801,7 @@ bool FCpcEmu::Init(const FCpcConfig& config)
 	// Set up code analysis
 	// initialise code analysis pages
 
-#//if 0
+//if 0
 	// Low ROM 0x0000 - 0x3fff
 	ROMBanks[ROM_OS] = CodeAnalysis.CreateBank("ROM OS", 16, CpcEmuState.rom_os, true);
 	CodeAnalysis.GetBank(ROMBanks[ROM_OS])->PrimaryMappedPage = 0;
@@ -1616,11 +1616,13 @@ void FCpcEmu::DrawUI()
 	}
 	ImGui::End();
 
+	// sam. get this working.
+	/*
 	if (ImGui::Begin("Frame Trace"))
 	{
 		FrameTraceViewer.Draw();
 	}
-	ImGui::End();
+	ImGui::End();*/
 
 	DrawGraphicsViewer(GraphicsViewer);
 	DrawMemoryTools();
