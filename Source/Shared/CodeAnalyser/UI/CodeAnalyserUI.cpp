@@ -964,8 +964,9 @@ void DoItemContextMenu(FCodeAnalysisState& state, const FCodeAnalysisItem &item)
 			if (ImGui::Selectable("Toggle Exec Breakpoint"))
 				state.ToggleExecBreakpointAtAddress(item.AddressRef);
 		}
-				
-		if (ImGui::Selectable("View in graphics viewer"))
+			
+		// sam. temporarily disabled this
+		/*if (ImGui::Selectable("View in graphics viewer"))
 		{
 			FDataInfo* pDataItem = state.GetReadDataInfoForAddress(item.AddressRef);
 			int byteSize = 1;
@@ -974,7 +975,7 @@ void DoItemContextMenu(FCodeAnalysisState& state, const FCodeAnalysisItem &item)
 				byteSize = pDataItem->ByteSize;
 			}
 			state.CPUInterface->GraphicsViewerSetView(item.AddressRef, byteSize);
-		}
+		}*/
 
 		ImGui::EndPopup();
 	}
@@ -1496,7 +1497,7 @@ void DrawLabelList(FCodeAnalysisState &state, FCodeAnalysisViewState& viewState,
 					ShowCodeAccessorActivity(state, item.AddressRef);
 				else
 					ShowDataItemActivity(state, item.AddressRef);
-								
+				
 				if (ImGui::Selectable("##labellistitem", viewState.GetCursorItem().Item == pLabelInfo))
 				{
 					viewState.GoToAddress(item.AddressRef, true);
@@ -1540,8 +1541,8 @@ void DrawFormatTab(FCodeAnalysisState& state, FCodeAnalysisViewState& viewState)
 	//ImGui::InputInt("End Address", &formattingOptions.EndAddress, 1, 100, inputFlags);
 	ImGui::PopID();
 
-	
-	const char* dataTypes[] = { "Byte", "Word", "Bitmap", "Char Map", "Col Attr", "Text"};
+	// sam. temporarily disabled char map and col attr data types
+	const char* dataTypes[] = { "Byte", "Word", "Bitmap", /*"Char Map", "Col Attr",*/ "Text"};
 	static int dataTypeIndex = 0; // Here we store our selection data as an index.
 	const char* combo_preview_value = dataTypes[dataTypeIndex];  // Pass in the preview value visible before opening the combo (it could be anything)
 	if (ImGui::BeginCombo("Data Type", combo_preview_value, 0))
@@ -1584,7 +1585,8 @@ void DrawFormatTab(FCodeAnalysisState& state, FCodeAnalysisViewState& viewState)
 			//ImGui::InputInt("Item Size", &formattingOptions.ItemSize);
 		}
 		break;
-	case 3:
+	// sam. temporarily disabled these. don't merge this code back into master.
+	/*case 3:
 		formattingOptions.DataType = EDataType::CharacterMap;
 		{
 			static int size[2];
@@ -1606,8 +1608,8 @@ void DrawFormatTab(FCodeAnalysisState& state, FCodeAnalysisViewState& viewState)
 		formattingOptions.DataType = EDataType::ColAttr;
 		ImGui::InputInt("Item Size", &formattingOptions.ItemSize);
 		ImGui::InputInt("Item Count", &formattingOptions.NoItems);
-		break;
-	case 5:
+		break;*/
+	case 3:
 		formattingOptions.DataType = EDataType::Text;
 		ImGui::InputInt("Item Size", &formattingOptions.ItemSize);
 		break;
