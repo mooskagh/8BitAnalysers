@@ -164,7 +164,10 @@ void DrawAddressLabel(FCodeAnalysisState &state, FCodeAnalysisViewState& viewSta
 		if (ImGui::IsItemHovered())
 		{
 			// Bring up snippet in tool tip
+			const int indentBkp = viewState.JumpLineIndent;
+			viewState.JumpLineIndent = 0;
 			DrawSnippetToolTip(state, viewState, addr);
+			viewState.JumpLineIndent = indentBkp;
 
 			ImGuiIO& io = ImGui::GetIO();
 			if (io.KeyShift && ImGui::IsMouseDoubleClicked(0))
@@ -325,6 +328,46 @@ void ShowCodeAccessorActivity(FCodeAnalysisState& state, const FAddressRef acces
 	}
 }
 
+void DrawJumpIndicator(int nDirection)
+{
+	ImGui::SameLine();
+	ImVec2 pos = ImGui::GetCursorScreenPos();
+	ImGui::Text("");
+
+	const float lineHeight = ImGui::GetTextLineHeight();
+	const ImU32 col = 0xffffffff;
+
+	const float ahh = 5.0f; // arrow head height
+	const float ahw = 4.0f; // arrow head width
+	const float vth = 4.0f; // vertical tail height
+	const float htw = 6.0f; // horizontal tail width
+
+	ImDrawList* dl = ImGui::GetWindowDrawList();
+
+	// pos is the tip of the arrow
+
+	pos.x += 4.0f;
+
+	if (nDirection > 0) // up arrow
+	{
+		pos.y += 2.0f;
+		dl->AddTriangleFilled(ImVec2(pos.x + ahw, pos.y + ahh), ImVec2(pos.x - ahw, pos.y + ahh), pos, col);
+		dl->AddRectFilled(ImVec2(pos.x - 1.0f, pos.y + ahh), ImVec2(pos.x + 1.0f, pos.y + ahh + vth), col); // vertical tail
+		dl->AddRectFilled(ImVec2(pos.x - htw, pos.y + ahh + vth - 1.0f), ImVec2(pos.x + 1.0f, pos.y + ahh + vth + 1.0f), col); // horizontal tail
+	}
+	else if (nDirection < 0) // down arrow
+	{
+		pos.y += lineHeight - 1.0f;
+		dl->AddTriangleFilled(ImVec2(pos.x - ahw, pos.y - ahh), ImVec2(pos.x + ahw, pos.y - ahh), pos, col);
+		dl->AddRectFilled(ImVec2(pos.x - 1.0f, pos.y - ahh), ImVec2(pos.x + 1.0f, pos.y - ahh - vth), col); // vertical tail
+		dl->AddRectFilled(ImVec2(pos.x - htw, pos.y - ahh - vth - 1.0f), ImVec2(pos.x + 1.0f, pos.y - ahh - vth + 1.0f), col); // horizontal tail
+	}
+	else // left arrow 
+	{
+		// todo
+	}
+}
+
 // this assumes that the code item is mapped into physical memory
 void DrawCodeInfo(FCodeAnalysisState &state, FCodeAnalysisViewState& viewState, const FCodeAnalysisItem& item)
 {
@@ -335,6 +378,8 @@ void DrawCodeInfo(FCodeAnalysisState &state, FCodeAnalysisViewState& viewState, 
 	const float glyph_width = ImGui::CalcTextSize("F").x;
 	const float cell_width = 3 * glyph_width;
 	const uint16_t physAddress = item.AddressRef.Address;
+	ImDrawList* dl = ImGui::GetWindowDrawList();
+	const ImVec2 pos = ImGui::GetCursorScreenPos();
 
 	ShowCodeAccessorActivity(state, item.AddressRef);
 
@@ -345,8 +390,6 @@ void DrawCodeInfo(FCodeAnalysisState &state, FCodeAnalysisViewState& viewState, 
 		const ImU32 bp_enabled_color = 0xFF0000FF;
 		const ImU32 bp_disabled_color = 0xFF000088;
 		const ImU32 brd_color = 0xFF000000;
-		ImDrawList* dl = ImGui::GetWindowDrawList();
-		const ImVec2 pos = ImGui::GetCursorScreenPos();
 		const float lh2 = (float)(int)(line_height / 2);
 		const ImVec2 mid(pos.x, pos.y + lh2);
 		
@@ -438,6 +481,37 @@ void DrawCodeInfo(FCodeAnalysisState &state, FCodeAnalysisViewState& viewState, 
 	if (pCodeInfo->OperandType == EOperandType::JumpAddress && pCodeInfo->JumpAddress.IsValid())
 	{
 		DrawAddressLabel(state, viewState, pCodeInfo->JumpAddress);
+
+		DrawJumpIndicator(pCodeInfo->JumpAddress.Address == physAddress ? 0 : pCodeInfo->JumpAddress.Address > physAddress ? -1 : 1);
+		// draw arrow to jump dest
+#if 0
+		float ypos;
+		if (viewState.GetYPosForAddress(pCodeInfo->JumpAddress, ypos))
+		{
+			ImVec2 lineStart = pos;
+			lineStart.x += viewState.JumpLineIndent * 4.0f;
+			lineStart.y += line_height * 0.5f;
+
+			ImVec2 lineEnd = lineStart;
+			lineEnd.y = ypos + line_height * 0.5f;
+
+			viewState.JumpLineIndent++;
+
+			ImU32 lineCol = 0xffffffff;
+			if (viewState.HighlightAddress == pCodeInfo->JumpAddress)
+				lineCol = 0xff00ff00;
+
+			dl->AddLine(lineStart, { lineStart.x + 12, lineStart.y }, lineCol);	// -
+			dl->AddLine(lineStart, lineEnd, lineCol);							// |
+			dl->AddLine(lineEnd, { lineEnd.x + 4, lineEnd.y }, lineCol);		// -
+
+			// arrow
+			ImVec2 a = { lineEnd.x + 4, lineEnd.y -4};
+			ImVec2 b = { lineEnd.x + 4, lineEnd.y +4};
+			ImVec2 c = { lineEnd.x + 12, lineEnd.y };
+			dl->AddTriangleFilled(a,b,c, lineCol);
+		}
+#endif
 	}
 	else if (pCodeInfo->OperandType == EOperandType::Pointer && pCodeInfo->PointerAddress.IsValid())
 	{
@@ -456,6 +530,11 @@ void DrawCodeDetails(FCodeAnalysisState& state, FCodeAnalysisViewState& viewStat
 
 	if (DrawOperandTypeCombo("Operand Type", pCodeInfo->OperandType))
 		pCodeInfo->Text.clear();	// clear for a rewrite
+
+	if (state.Config.bShowBanks && pCodeInfo->OperandType == EOperandType::Pointer)
+	{
+		DrawBankInput(state, "Bank", pCodeInfo->PointerAddress.BankId);
+	}
 
 	if (ImGui::Checkbox("NOP out instruction", &pCodeInfo->bNOPped))
 	{
@@ -1275,10 +1354,18 @@ void DrawItemList(FCodeAnalysisState& state, FCodeAnalysisViewState& viewState, 
 
 	while (clipper.Step())
 	{
+		viewState.JumpLineIndent = 0;
+		std::vector<FAddressCoord> newList;
+
 		for (int i = clipper.DisplayStart; i < clipper.DisplayEnd; i++)
 		{
+			const ImVec2 coord = ImGui::GetCursorScreenPos();
+			if(itemList[i].Item->Type == EItemType::Code || itemList[i].Item->Type == EItemType::Data)
+				newList.push_back({ itemList[i].AddressRef,coord.y });
 			DrawCodeAnalysisItem(state, viewState, itemList[i]);
 		}
+
+		viewState.AddressCoords = newList;
 	}
 }
 
@@ -1837,15 +1924,18 @@ const char* GetBankText(FCodeAnalysisState& state, int16_t bankId)
 	return pBank->Name.c_str();
 }
 
-bool DrawBankInput(FCodeAnalysisState& state, const char* label, int16_t& bankId)
+bool DrawBankInput(FCodeAnalysisState& state, const char* label, int16_t& bankId, bool bAllowNone)
 {
 	bool bBankChanged = false;
 	if (ImGui::BeginCombo("Bank", GetBankText(state, bankId)))
 	{
-		if (ImGui::Selectable(GetBankText(state, -1), bankId == -1))
+		if (bAllowNone)
 		{
-			bankId = -1;
-			bBankChanged = true;
+			if (ImGui::Selectable(GetBankText(state, -1), bankId == -1))
+			{
+				bankId = -1;
+				bBankChanged = true;
+			}
 		}
 
 		const auto& banks = state.GetBanks();
