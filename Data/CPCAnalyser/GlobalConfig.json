@@ -1,9 +1,9 @@
 {
     "EnableAudio": false,
-    "LastGame": "starwars",
+    "LastGame": "laser_squad_scenario_1",
     "NumberMode": 2,
-    "ShowOpcodeValues": false,
-    "SnapshotFolder": "./Games/",
+    "ShowOpcodeValues": true,
+    "SnapshotFolder": "c:/dev/cpcanalyser_projects/Games/",
     "SnapshotFolder128": "./Games128/",
-    "WorkspaceRoot": "./"
+    "WorkspaceRoot": "c:/dev/cpcanalyser_projects/Data/"
 }
