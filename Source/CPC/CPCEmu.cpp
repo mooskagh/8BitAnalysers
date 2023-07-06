@@ -1302,6 +1302,7 @@ void FCpcEmu::DrawOptionsMenu()
 		ImGui::MenuItem("Show Opcode Values", 0, &CodeAnalysis.Config.bShowOpcodeValues);
 
 #ifndef NDEBUG
+		ImGui::MenuItem("Show Config", 0, &CodeAnalysis.Config.bShowConfigWindow)
 		ImGui::MenuItem("ImGui Demo", 0, &bShowImGuiDemo);
 		ImGui::MenuItem("ImPlot Demo", 0, &bShowImPlotDemo);
 #endif // NDEBUG
@@ -1623,6 +1624,16 @@ void FCpcEmu::DrawUI()
 		FrameTraceViewer.Draw();
 	}
 	ImGui::End();*/
+
+#ifndef NDEBUG
+	// config
+	if (CodeAnalysis.Config.bShowConfigWindow)
+	{
+		if (ImGui::Begin("Configuration", &CodeAnalysis.Config.bShowConfigWindow))
+			DrawCodeAnalysisConfigWindow(CodeAnalysis);
+		ImGui::End();
+	}
+#endif
 
 	DrawGraphicsViewer(GraphicsViewer);
 	DrawMemoryTools();
