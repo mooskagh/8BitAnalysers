@@ -203,7 +203,7 @@ void DrawComment(const FItem *pItem, float offset)
 	{
 		ImGui::SameLine(offset);
 		ImGui::PushStyleColor(ImGuiCol_Text, 0xff008000);
-		ImGui::Text("\t// %s", pItem->Comment.c_str());
+		ImGui::Text("\t; %s", pItem->Comment.c_str());
 		ImGui::PopStyleColor();
 	}
 }
@@ -228,6 +228,7 @@ void DrawLabelInfo(FCodeAnalysisState &state, FCodeAnalysisViewState& viewState,
 	}
 	else
 	{
+		ImGui::SameLine(state.Config.LabelPos);
 		ImGui::TextColored(labelColour, "%s: ", pLabelInfo->Name.c_str());
 	}
 
@@ -422,9 +423,10 @@ void DrawCodeInfo(FCodeAnalysisState &state, FCodeAnalysisViewState& viewState, 
 	}
 
 	// draw instruction address
-	ImGui::Text("\t%s", NumStr(physAddress));
-	const float line_start_x = ImGui::GetCursorPosX();
-	ImGui::SameLine(line_start_x + cell_width * 4 + glyph_width * 2);
+	const float lineStartX = ImGui::GetCursorPosX();
+	ImGui::SameLine(lineStartX + state.Config.AddressPos);
+	ImGui::Text("%s", NumStr(physAddress));
+	ImGui::SameLine(lineStartX + state.Config.AddressPos + state.Config.AddressSpace);
 
 	// grey out NOPed code
 	if(pCodeInfo->bNOPped)
@@ -484,32 +486,66 @@ void DrawCodeInfo(FCodeAnalysisState &state, FCodeAnalysisViewState& viewState, 
 
 		DrawJumpIndicator(pCodeInfo->JumpAddress.Address == physAddress ? 0 : pCodeInfo->JumpAddress.Address > physAddress ? -1 : 1);
 		// draw arrow to jump dest
-#if 0
-		float ypos;
-		if (viewState.GetYPosForAddress(pCodeInfo->JumpAddress, ypos))
+#if 1
+		// TODO: this needs to be a function
+		if (pCodeInfo->bIsCall == false)
 		{
-			ImVec2 lineStart = pos;
-			lineStart.x += viewState.JumpLineIndent * 4.0f;
-			lineStart.y += line_height * 0.5f;
-
-			ImVec2 lineEnd = lineStart;
-			lineEnd.y = ypos + line_height * 0.5f;
-
-			viewState.JumpLineIndent++;
-
-			ImU32 lineCol = 0xffffffff;
+			ImU32 lineCol = 0xff7f7f7f;	// grey
 			if (viewState.HighlightAddress == pCodeInfo->JumpAddress)
-				lineCol = 0xff00ff00;
+				lineCol = 0xff007f00;	// green
+			float ypos;
+			if (viewState.GetYPosForAddress(pCodeInfo->JumpAddress, ypos))
+			{
+				const float distance = fabsf(ypos - pos.y);
+				const float xEnd = pos.x + state.Config.AddressPos - 2.0f;
+				ImVec2 lineStart = pos;
+				const int noLines = static_cast<int>(distance / line_height);
+				const int maxIndent = state.Config.BranchMaxIndent;
+				const int indentAmount = maxIndent - std::min(noLines / state.Config.BranchLinesPerIndent, maxIndent);
 
-			dl->AddLine(lineStart, { lineStart.x + 12, lineStart.y }, lineCol);	// -
-			dl->AddLine(lineStart, lineEnd, lineCol);							// |
-			dl->AddLine(lineEnd, { lineEnd.x + 4, lineEnd.y }, lineCol);		// -
+				lineStart.x += indentAmount * state.Config.BranchSpacing;
+				lineStart.y += line_height * 0.5f;	// middle
 
-			// arrow
-			ImVec2 a = { lineEnd.x + 4, lineEnd.y -4};
-			ImVec2 b = { lineEnd.x + 4, lineEnd.y +4};
-			ImVec2 c = { lineEnd.x + 12, lineEnd.y };
-			dl->AddTriangleFilled(a,b,c, lineCol);
+				ImVec2 lineEnd = lineStart;
+				lineEnd.y = ypos + line_height * 0.5f;// middle
+
+				viewState.JumpLineIndent++;
+
+				dl->AddLine(lineStart, { xEnd, lineStart.y }, lineCol);	// -
+				dl->AddLine(lineStart, lineEnd, lineCol);				// |
+				dl->AddLine(lineEnd, { xEnd, lineEnd.y }, lineCol);		// -
+
+				// arrow
+				const ImVec2 a = { xEnd - 6, lineEnd.y - 3 };
+				const ImVec2 b = { xEnd - 6, lineEnd.y + 3 };
+				const ImVec2 c = { xEnd, lineEnd.y };
+				dl->AddTriangleFilled(a, b, c, lineCol);
+			}
+			else // do off-screen lines
+			{
+				const int thisIndex = GetItemIndexForAddress(state, item.AddressRef);
+				const int jumpIndex = GetItemIndexForAddress(state, pCodeInfo->JumpAddress);
+				const int noLines = abs(thisIndex - jumpIndex);
+				const int maxIndent = state.Config.BranchMaxIndent;
+				const int indentAmount = maxIndent - std::min(noLines / 5, maxIndent);
+
+				const bool bDirectionUp = pCodeInfo->JumpAddress.Address < item.AddressRef.Address;
+				ImVec2 lineStart = pos;
+				lineStart.x += indentAmount * state.Config.BranchSpacing;
+				lineStart.y += line_height * 0.5f;// middle
+
+				const float xEnd = pos.x + state.Config.AddressPos;
+				dl->AddLine(lineStart, { xEnd, lineStart.y }, lineCol);	// -
+				if (bDirectionUp)
+				{
+					dl->AddLine(lineStart, { lineStart.x,0 }, lineCol);				// |
+				}
+				else
+				{
+					const float yPos = ImGui::GetWindowPos().y + ImGui::GetWindowHeight();
+					dl->AddLine(lineStart, { lineStart.x,yPos }, lineCol);				// |
+				}
+			}
 		}
 #endif
 	}
@@ -588,6 +624,7 @@ void DrawCommentLine(FCodeAnalysisState& state, const FCommentLine* pCommentLine
 {
 	ImGui::SameLine();
 	ImGui::PushStyleColor(ImGuiCol_Text, 0xff008000);
+	ImGui::SameLine(state.Config.CommentLinePos);
 	ImGui::Text("; %s", pCommentLine->Comment.c_str());
 	ImGui::PopStyleColor();
 }
@@ -1351,11 +1388,11 @@ void DrawItemList(FCodeAnalysisState& state, FCodeAnalysisViewState& viewState, 
 
 	// draw clipped list
 	ImGuiListClipper clipper((int)itemList.size(), lineHeight);
+	std::vector<FAddressCoord> newList;
 
 	while (clipper.Step())
 	{
 		viewState.JumpLineIndent = 0;
-		std::vector<FAddressCoord> newList;
 
 		for (int i = clipper.DisplayStart; i < clipper.DisplayEnd; i++)
 		{
@@ -1365,8 +1402,8 @@ void DrawItemList(FCodeAnalysisState& state, FCodeAnalysisViewState& viewState, 
 			DrawCodeAnalysisItem(state, viewState, itemList[i]);
 		}
 
-		viewState.AddressCoords = newList;
 	}
+	viewState.AddressCoords = newList;
 }
 
 void DrawCodeAnalysisData(FCodeAnalysisState &state, int windowId)
@@ -1953,4 +1990,20 @@ bool DrawBankInput(FCodeAnalysisState& state, const char* label, int16_t& bankId
 	}
 
 	return bBankChanged;
+}
+
+// Config Window - Debug?
+
+void DrawCodeAnalysisConfigWindow(FCodeAnalysisState& state)
+{
+	FCodeAnalysisConfig& config = state.Config;
+
+	ImGui::SliderFloat("Label Pos", &config.LabelPos, 0, 200.0f);
+	ImGui::SliderFloat("Comment Pos", &config.CommentLinePos, 0, 200.0f);
+	ImGui::SliderFloat("Address Pos", &config.AddressPos, 0, 200.0f);
+	ImGui::SliderFloat("Address Space", &config.AddressSpace, 0, 200.0f);
+
+	ImGui::SliderFloat("Branch Line Start", &config.BranchLineIndentStart, 0, 200.0f);
+	ImGui::SliderFloat("Branch Line Spacing", &config.BranchSpacing, 0, 20.0f);
+	ImGui::SliderInt("Branch Line No Indents", &config.BranchMaxIndent,1,10);
 }
