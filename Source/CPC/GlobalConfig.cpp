@@ -45,6 +45,11 @@ bool LoadGlobalConfig(const char* fileName)
 	//if (jsonConfigFile.contains("PokesFolder"))
 	//	config.PokesFolder = jsonConfigFile["PokesFolder"];
 	
+	if (jsonConfigFile.contains("Font"))
+		config.Font = jsonConfigFile["Font"];
+	if (jsonConfigFile.contains("FontSizePixels"))
+		config.FontSizePixels = jsonConfigFile["FontSizePixels"];
+
 	if(config.WorkspaceRoot.back() != '/')
 		config.WorkspaceRoot += "/";
 	if (config.SnapshotFolder.back() != '/')
@@ -70,7 +75,8 @@ bool SaveGlobalConfig(const char* fileName)
 	jsonConfigFile["WorkspaceRoot"] = config.WorkspaceRoot;
 	jsonConfigFile["SnapshotFolder"] = config.SnapshotFolder;
 	jsonConfigFile["SnapshotFolder128"] = config.SnapshotFolder128;
-
+	jsonConfigFile["Font"] = config.Font;
+	jsonConfigFile["FontSizePixels"] = config.FontSizePixels;
 	//jsonConfigFile["PokesFolder"] = config.PokesFolder;
 	
 	std::ofstream outFileStream(fileName);

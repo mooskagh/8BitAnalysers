@@ -1,5 +1,7 @@
 {
     "EnableAudio": false,
+    "Font": "Cousine-Regular.ttf",
+    "FontSizePixels": 20,
     "LastGame": "laser_squad_scenario_1",
     "NumberMode": 2,
     "ShowOpcodeValues": true,

@@ -27,6 +27,8 @@
 #endif
 
 #include "../CPCEmu.h"
+#include "../GlobalConfig.h"
+#include "Debug/DebugLog.h"
 
 #define SOKOL_IMPL
 #include <sokol_audio.h>
@@ -163,6 +165,16 @@ int main(int argc, char** argv)
     config.ParseCommandline(argc, argv);
     FCpcEmu* pCpcEmulator = new FCpcEmu;
     pCpcEmulator->Init(config);
+
+    FGlobalConfig& globalConfig = GetGlobalConfig();
+    if (!globalConfig.Font.empty())
+    {
+        std::string fontPath = "./Fonts/" + globalConfig.Font;
+        if (!io.Fonts->AddFontFromFileTTF(fontPath.c_str(), (float)globalConfig.FontSizePixels))
+        {
+            LOGWARNING("Could not load font '%s'", fontPath.c_str());
+        }
+    }
 
     // Main loop
     while (!glfwWindowShouldClose(appState.MainWindow))

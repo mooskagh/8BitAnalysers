@@ -1302,7 +1302,7 @@ void FCpcEmu::DrawOptionsMenu()
 		ImGui::MenuItem("Show Opcode Values", 0, &CodeAnalysis.Config.bShowOpcodeValues);
 
 #ifndef NDEBUG
-		ImGui::MenuItem("Show Config", 0, &CodeAnalysis.Config.bShowConfigWindow)
+		ImGui::MenuItem("Show Config", 0, &CodeAnalysis.Config.bShowConfigWindow);
 		ImGui::MenuItem("ImGui Demo", 0, &bShowImGuiDemo);
 		ImGui::MenuItem("ImPlot Demo", 0, &bShowImPlotDemo);
 #endif // NDEBUG
