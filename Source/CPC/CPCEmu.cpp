@@ -1119,53 +1119,69 @@ void FCpcEmu::DrawFileMenu()
 	{
 		if (ImGui::BeginMenu("New Game from Snapshot File"))
 		{
-			for (int gameNo = 0; gameNo < GamesList.GetNoGames(); gameNo++)
+			const int numGames = GamesList.GetNoGames();
+			if (!numGames)
 			{
-				const FGameSnapshot& game = GamesList.GetGame(gameNo);
-
-				if (ImGui::MenuItem(game.DisplayName.c_str()))
+				const std::string snapFolder = CpcEmuState.type == CPC_TYPE_6128 ? GetGlobalConfig().SnapshotFolder128 : GetGlobalConfig().SnapshotFolder;
+				ImGui::Text("No snapshots found in snapshot directory:\n\n'%s'.\n\nSnapshot directory is set in GlobalConfig.json", snapFolder.c_str());
+			}
+			else
+			{
+				for (int gameNo = 0; gameNo < GamesList.GetNoGames(); gameNo++)
 				{
-					bool bGameExists = false;
+					const FGameSnapshot& game = GamesList.GetGame(gameNo);
 
-					// does the game config exist?
-					for (const auto& pGameConfig : GetGameConfigs())
+					if (ImGui::MenuItem(game.DisplayName.c_str()))
 					{
-						if (pGameConfig->SnapshotFile == game.DisplayName)
-							bGameExists = true;
-					}
-					if (bGameExists)
-					{
-						bReplaceGamePopup = true;
-						ReplaceGameSnapshotIndex = gameNo;
-					}
-					else
-					{
-						NewGameFromSnapshot(gameNo);
+						bool bGameExists = false;
+
+						// does the game config exist?
+						for (const auto& pGameConfig : GetGameConfigs())
+						{
+							if (pGameConfig->SnapshotFile == game.DisplayName)
+								bGameExists = true;
+						}
+						if (bGameExists)
+						{
+							bReplaceGamePopup = true;
+							ReplaceGameSnapshotIndex = gameNo;
+						}
+						else
+						{
+							NewGameFromSnapshot(gameNo);
+						}
 					}
 				}
 			}
-
 			ImGui::EndMenu();
 		}
 
 		if (ImGui::BeginMenu("Open Game"))
 		{
-			for (const auto& pGameConfig : GetGameConfigs())
+			if (GetGameConfigs().empty())
 			{
-				if (ImGui::MenuItem(pGameConfig->Name.c_str()))
+				ImGui::Text("No games found.\n\nFirst, create a game via the 'New Game from Snapshot File' menu.");
+			}
+			else
+			{
+				for (const auto& pGameConfig : GetGameConfigs())
 				{
-					const std::string snapFolder = CpcEmuState.type == CPC_TYPE_6128 ? GetGlobalConfig().SnapshotFolder128 : GetGlobalConfig().SnapshotFolder;
-					const std::string gameFile = snapFolder + pGameConfig->SnapshotFile;
-
-					if(GamesList.LoadGame(gameFile.c_str()))
+					if (ImGui::MenuItem(pGameConfig->Name.c_str()))
 					{
-						StartGame(pGameConfig);
+						const std::string snapFolder = CpcEmuState.type == CPC_TYPE_6128 ? GetGlobalConfig().SnapshotFolder128 : GetGlobalConfig().SnapshotFolder;
+						const std::string gameFile = snapFolder + pGameConfig->SnapshotFile;
+
+						if (GamesList.LoadGame(gameFile.c_str()))
+						{
+							StartGame(pGameConfig);
+						}
 					}
 				}
 			}
 
 			ImGui::EndMenu();
 		}
+
 
 		if (ImGui::MenuItem("Save Game Data"))
 		{
