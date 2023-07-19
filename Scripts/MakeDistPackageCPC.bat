@@ -21,11 +21,11 @@ mkdir ..\Package\Loose\Fonts
 
 rem Add some files to describe what to put in the empty directories
 @echo>"..\Package\Loose\Games\464 snapshots go here in sna format"
-@echo>"..\Package\Loose\RZX\fonts go here in ttf format"
+@echo>"..\Package\Loose\Fonts\fonts go here in ttf format"
 
 copy ..\Source\CPC\build\Release\CPCAnalyser.exe ..\Package\Loose\
 copy ..\Data\CPCAnalyser\imgui.ini ..\Package\Loose\
-copy ..\Data\CPCAnalyser\CPCLogo.png ..\Package\Loose\
+copy ..\Data\CPCAnalyser\CPCALogo.png ..\Package\Loose\
 copy ..\Docs\*.* ..\Package\Loose\Docs\
 
 rem Make a batch file to run the 128k version
