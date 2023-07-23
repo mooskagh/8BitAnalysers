@@ -5,7 +5,7 @@
     "LastGame": "laser_squad_scenario_1",
     "NumberMode": 2,
     "ShowOpcodeValues": true,
-    "SnapshotFolder": "c:/dev/cpcanalyser_projects/Games/",
+    "SnapshotFolder": "c:/dev/cpcanalyserprojects/Games/",
     "SnapshotFolder128": "./Games128/",
-    "WorkspaceRoot": "c:/dev/cpcanalyser_projects/Data/"
+    "WorkspaceRoot": "c:/dev/cpcanalyserprojects/Data/"
 }
