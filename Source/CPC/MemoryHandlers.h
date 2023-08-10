@@ -148,11 +148,14 @@ public:
 	virtual void Find(const FSearchOptions& opt) override
 	{
 		LastValue = SearchValue;
+		SearchBytes[1] = static_cast<uint8_t>(SearchValue >> 8);
+		SearchBytes[0] = static_cast<uint8_t>(SearchValue);
 		FFinder::Find(opt);
 	}
 	virtual const char* GetValueString(uint16_t addr, ENumberDisplayMode numberMode) const override;
 	virtual void RemoveUnchangedResults() override;
 	uint16_t SearchValue = 0;
+	uint8_t SearchBytes[2];
 	uint16_t LastValue = 0;
 };
 

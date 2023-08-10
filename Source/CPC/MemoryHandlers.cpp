@@ -380,25 +380,6 @@ void FDataFindTool::Reset()
 	TextFinder.Reset();
 }
 
-bool FindWord(ICPUInterface* pCPUInterface, uint16_t data, uint16_t offset, uint16_t& outAddr)
-{
-	uint16_t address = offset;
-
-	do
-	{
-		const uint16_t word = pCPUInterface->ReadWord(address);
-		if (word == data)
-		{
-			outAddr = static_cast<uint16_t>(address);
-			return true;
-		}
-
-		address++;
-	} while (address != 0);	// 16 bit address overflow
-
-	return false;
-}
-
 // todo:
 //   use findmemorypattern for 16 bit search
 //   search all memory banks - not just address range
@@ -746,7 +727,7 @@ void FByteFinder::RemoveUnchangedResults()
 
 bool FWordFinder::FindNextMatch(uint16_t offset, uint16_t& outAddr)
 {
-	return FindWord(pCpcEmu, SearchValue, offset, outAddr);
+	return pCpcEmu->CodeAnalysis.FindMemoryPattern(SearchBytes, 2, offset, outAddr);
 }
 
 bool FWordFinder::HasValueChanged(uint16_t addr) const
