@@ -86,6 +86,124 @@ private:
 	FCpcEmu* pCpcEmu = nullptr;
 };
 
+enum ESearchMemoryType
+{
+	Data = 0,		// search data only
+	Code,			// search code only
+	CodeAndData,	// search code and data
+};
+
+struct FSearchOptions
+{
+	ESearchMemoryType memoryType = ESearchMemoryType::CodeAndData;
+	bool bSearchUnreferenced = true;
+	bool bSearchUnaccessed = true;
+};
+
+class FFinder
+{
+public:
+	void Init(FCpcEmu* pEmu)
+	{
+		pCpcEmu = pEmu;
+	}
+	virtual void Reset();
+	virtual bool FindNextMatch(uint16_t offset, uint16_t& outAddr) = 0;
+	virtual bool HasValueChanged(uint16_t addr) const;
+	virtual void Find(const FSearchOptions& opt);
+	virtual const char* GetValueString(uint16_t addr, ENumberDisplayMode numberMode) const = 0;
+	virtual void RemoveUnchangedResults() {}
+
+	std::vector<uint16_t> SearchResults;
+
+protected:	
+	FCpcEmu* pCpcEmu = nullptr;
+};
+
+class FDataFinder : public FFinder
+{
+};
+
+class FByteFinder : public FDataFinder
+{
+public:
+	virtual bool FindNextMatch(uint16_t offset, uint16_t& outAddr) override;
+	virtual bool HasValueChanged(uint16_t addr) const override;
+	virtual void Find(const FSearchOptions& opt) override
+	{
+		LastValue = SearchValue;
+		FFinder::Find(opt);
+	}
+	virtual const char* GetValueString(uint16_t addr, ENumberDisplayMode numberMode) const override;
+	virtual void RemoveUnchangedResults() override;
+	uint8_t SearchValue = 0;
+	uint8_t LastValue = 0;
+};
+
+class FWordFinder : public FDataFinder
+{
+public:
+	virtual bool FindNextMatch(uint16_t offset, uint16_t& outAddr) override;
+	virtual bool HasValueChanged(uint16_t addr) const override;
+	virtual void Find(const FSearchOptions& opt) override
+	{
+		LastValue = SearchValue;
+		FFinder::Find(opt);
+	}
+	virtual const char* GetValueString(uint16_t addr, ENumberDisplayMode numberMode) const override;
+	virtual void RemoveUnchangedResults() override;
+	uint16_t SearchValue = 0;
+	uint16_t LastValue = 0;
+};
+
+class FTextFinder : public FFinder
+{
+public:
+	virtual bool FindNextMatch(uint16_t offset, uint16_t& outAddr) override;
+	virtual const char* GetValueString(uint16_t addr, ENumberDisplayMode numberMode) const override { return ""; }
+	std::string SearchText;
+};
+
+enum ESearchType
+{
+	Value,
+	Text,
+};
+
+enum ESearchDataType
+{
+	Byte = 0,
+	Word,
+};
+
+
+class FDataFindTool
+{
+public:
+	void Init(FCpcEmu* pEmu);
+	void DrawUI();
+	void Reset();
+
+private:
+	ESearchType SearchType = ESearchType::Value;
+	ESearchDataType DataSize = ESearchDataType::Byte;
+	ESearchMemoryType MemoryType = ESearchMemoryType::CodeAndData;
+	
+	bool bDecimal = true;
+
+	bool bSearchCode = false;
+	bool bSearchUnreferenced = true;
+	bool bSearchUnaccessed = true;
+
+	FFinder* pCurFinder = nullptr;
+	
+	FByteFinder ByteFinder;
+	FWordFinder WordFinder;
+	FTextFinder TextFinder;
+
+	FCpcEmu* pCpcEmu = nullptr;
+};
+
 int MemoryHandlerTrapFunction(uint16_t pc, int ticks, uint64_t pins, FCpcEmu* pEmu);
 
 void AnalyseMemory(FMemoryStats &memStats);

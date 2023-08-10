@@ -364,3 +364,417 @@ void FDiffTool::DrawUI()
 	ImGui::EndChild();
 }
 
+void FDataFindTool::Init(FCpcEmu* pEmu)
+{
+	pCpcEmu = pEmu;
+	pCurFinder = &ByteFinder;
+	ByteFinder.Init(pEmu);
+	WordFinder.Init(pEmu);
+	TextFinder.Init(pEmu);
+}
+
+void FDataFindTool::Reset()
+{
+	ByteFinder.Reset();
+	WordFinder.Reset();
+	TextFinder.Reset();
+}
+
+bool FindWord(ICPUInterface* pCPUInterface, uint16_t data, uint16_t offset, uint16_t& outAddr)
+{
+	uint16_t address = offset;
+
+	do
+	{
+		const uint16_t word = pCPUInterface->ReadWord(address);
+		if (word == data)
+		{
+			outAddr = static_cast<uint16_t>(address);
+			return true;
+		}
+
+		address++;
+	} while (address != 0);	// 16 bit address overflow
+
+	return false;
+}
+
+// todo:
+//   use findmemorypattern for 16 bit search
+//   search all memory banks - not just address range
+//	 investigate getwritedata when displaying accessor indicator
+//   does data item indicator work for word data? it should
+//	 use table
+//   unacessed memory tooltip incorrect
+void FDataFindTool::DrawUI()
+{
+
+	FCodeAnalysisViewState& viewState = pCpcEmu->CodeAnalysis.GetFocussedViewState();
+	const ESearchType lastSearchType = SearchType;
+	const ESearchDataType lastDataSize = DataSize;
+
+	if (ImGui::RadioButton("Decimal Value", SearchType == ESearchType::Value && bDecimal == true))
+	{
+		SearchType = ESearchType::Value;
+		bDecimal = true;
+	}
+	ImGui::SameLine();
+	if (ImGui::RadioButton("Hexadecimal Value", SearchType == ESearchType::Value && bDecimal == false))
+	{
+		SearchType = ESearchType::Value;
+		bDecimal = false;
+	}
+	ImGui::SameLine();
+	if (ImGui::RadioButton("Text", SearchType == ESearchType::Text))
+	{
+		SearchType = ESearchType::Text;
+	}
+	if (ImGui::RadioButton("Byte", DataSize == ESearchDataType::Byte))
+	{
+		DataSize = ESearchDataType::Byte;
+	}
+	ImGui::SameLine();
+	if (ImGui::RadioButton("Word", DataSize == ESearchDataType::Word))
+	{
+		DataSize = ESearchDataType::Word;
+	}
+ 
+	if (lastSearchType != SearchType || lastDataSize != DataSize)
+	{
+		if (SearchType == ESearchType::Text)
+			pCurFinder = &TextFinder;
+		else
+			pCurFinder = DataSize == ESearchDataType::Byte ? (FFinder*)&ByteFinder : &WordFinder;
+	}
+
+#if 0
+	if (SearchType == ESearchType::Value)
+	{
+		const char* dataTypes[] = { "Byte", "Word" };
+		const char* combo_preview_value = dataTypes[DataSize];  // Pass in the preview value visible before opening the combo (it could be anything)
+		if (ImGui::BeginCombo("Data Type", combo_preview_value, 0))
+		{
+			// todo: clear results if change drop down?
+
+			for (int n = 0; n < IM_ARRAYSIZE(dataTypes); n++)
+			{
+				const bool isSelected = (DataSize == n);
+				if (ImGui::Selectable(dataTypes[n], isSelected))
+					DataSize = (ESearchDataType)n;
+
+				// Set the initial focus when opening the combo (scrolling + keyboard navigation focus)
+				if (isSelected)
+					ImGui::SetItemDefaultFocus();
+			}
+			ImGui::EndCombo();
+		}
+	}
+#endif
+
+	//if (ImGui::TreeNodeEx("Search Options"), ImGuiTreeNodeFlags_DefaultOpen)
+	ImGui::SetNextItemOpen(true, ImGuiCond_Once);
+	if (ImGui::TreeNode("Search Options"))
+	{
+		if (SearchType == ESearchType::Value)
+		{
+			if (ImGui::RadioButton("Data", MemoryType == ESearchMemoryType::Data))
+			{
+				MemoryType = ESearchMemoryType::Data;
+			}
+			ImGui::SameLine();
+			
+			if (ImGui::IsItemHovered(ImGuiHoveredFlags_DelayNormal))
+			{
+				ImGui::SetTooltip("Search Data tooltip todo.");
+			}
+			
+			if (ImGui::RadioButton("Code", MemoryType == ESearchMemoryType::Code))
+			{
+				MemoryType = ESearchMemoryType::Code;
+			}
+			ImGui::SameLine();
+			
+			if (ImGui::IsItemHovered(ImGuiHoveredFlags_DelayNormal))
+			{
+				ImGui::SetTooltip("Search Code tooltip todo.");
+			}
+			
+			if (ImGui::RadioButton("Search Code & Data", MemoryType == ESearchMemoryType::CodeAndData))
+			{
+				MemoryType = ESearchMemoryType::CodeAndData;
+			}
+			
+			if (ImGui::IsItemHovered(ImGuiHoveredFlags_DelayNormal))
+			{
+				ImGui::SetTooltip("Search Code & Data tooltip todo.");
+			}
+		}
+
+		ImGui::Checkbox("Search Unaccessed Memory", &bSearchUnaccessed);
+		if (ImGui::IsItemHovered(ImGuiHoveredFlags_DelayNormal))
+		{
+			// todo this can return results when emulator not run. does it load accesses from disk?
+			ImGui::SetTooltip("Include search results from memory locations that have not been accessed this session.");
+		}
+
+		ImGui::Checkbox("Search Memory With No References", &bSearchUnreferenced);
+		if (ImGui::IsItemHovered(ImGuiHoveredFlags_DelayNormal))
+		{
+			ImGui::SetTooltip("Include search results from memory locations that have no references.");
+		}
+		ImGui::TreePop();
+	}
+	
+	bool bPressedEnter = false;
+	if (SearchType == ESearchType::Value)
+	{
+		const char* formatStr = bDecimal ? "%u" : "%x";
+		ImGuiInputTextFlags flags = bDecimal ? ImGuiInputTextFlags_CharsDecimal : ImGuiInputTextFlags_CharsHexadecimal;
+
+		ImGui::Text("Search Value");
+		ImGui::SameLine();
+
+		ImGui::SetNextItemWidth(ImGui::GetFontSize() * 8);
+		if (DataSize == ESearchDataType::Byte)
+		{ 
+			ImGui::InputScalar("##bytevalue", ImGuiDataType_U8, &ByteFinder.SearchValue, NULL, NULL, formatStr, flags);
+		}
+		else
+		{
+			ImGui::InputScalar("##wordvalue", ImGuiDataType_U16, &WordFinder.SearchValue, NULL, NULL, formatStr, flags);
+		}
+	}
+	else if (SearchType == ESearchType::Text)
+	{
+		ImGui::Text("Search Text");
+		ImGui::SameLine();
+		ImGui::SetNextItemWidth(ImGui::GetFontSize() * 16);
+		ImGui::InputText("##searchtext", &TextFinder.SearchText);
+	}
+
+	// sam. I wanted to use ImGuiInputTextFlags_EnterReturnsTrue here to do the search when enter is pressed but
+	// I ran into a bug where when clicking away from the input box would revert the value. 
+	// https://github.com/ocornut/imgui/issues/6284
+	// Doing this as a workaround:
+	if (ImGui::IsItemFocused())
+	{
+		if (ImGui::IsKeyPressed(ImGuiKey_Enter, false) || ImGui::IsKeyPressed(ImGuiKey_KeypadEnter, false))
+		{
+			bPressedEnter = true;
+		}
+	}
+
+	ImGui::SameLine();
+	if (ImGui::Button("Find") || bPressedEnter)
+	{
+		FSearchOptions opt;
+		opt.memoryType = MemoryType;
+		opt.bSearchUnaccessed = bSearchUnaccessed;
+		opt.bSearchUnreferenced = bSearchUnreferenced;
+		pCurFinder->Find(opt);
+	}
+
+	ImGuiWindowFlags window_flags = ImGuiWindowFlags_HorizontalScrollbar;
+	ImVec2 childSize = ImVec2(0, -ImGui::GetFrameHeightWithSpacing() * (SearchType==ESearchType::Value ? 2.0f : 1.0f)); // Leave room for 1 or 2 lines below us
+	if (ImGui::BeginChild("SearchResults", childSize, true, window_flags)) 
+	{
+		if (pCurFinder->SearchResults.size())
+		{
+			const float lineHeight = ImGui::GetTextLineHeight();
+			ImGuiListClipper clipper((int)pCurFinder->SearchResults.size(), lineHeight);
+
+			bool bUserPrefersHexAitch = GetNumberDisplayMode() == ENumberDisplayMode::HexAitch;
+			const ENumberDisplayMode numberMode = bDecimal ? ENumberDisplayMode::Decimal : bUserPrefersHexAitch ? ENumberDisplayMode::HexAitch : ENumberDisplayMode::HexDollar;
+			while (clipper.Step())
+			{
+				for (int i = clipper.DisplayStart; i < clipper.DisplayEnd; i++)
+				{
+					const uint16_t resultAddr = pCurFinder->SearchResults[i];
+					ImGui::PushID(resultAddr);
+
+					// what if this location doesnt have writedata?
+					if (const FDataInfo* pWriteDataInfo = pCpcEmu->CodeAnalysis.GetWriteDataInfoForAddress(resultAddr))
+					{
+						ShowDataItemActivity(pCpcEmu->CodeAnalysis, pCpcEmu->CodeAnalysis.AddressRefFromPhysicalAddress(resultAddr));
+					}
+
+					bool bValueChanged = pCurFinder->HasValueChanged(resultAddr);
+					if (bValueChanged)
+					{
+						ImGui::PushStyleColor(ImGuiCol_Text, IM_COL32(255, 255, 0, 255));
+					}
+					
+					if (SearchType == ESearchType::Value)
+					{ 
+						ImGui::Text("    %s\t%s", NumStr(resultAddr), pCurFinder->GetValueString(resultAddr, numberMode));
+					}
+					else if (SearchType == ESearchType::Text)
+					{
+						ImGui::Text("    %s", NumStr(resultAddr));
+					}
+					ImGui::SameLine();
+					DrawAddressLabel(pCpcEmu->CodeAnalysis, viewState, resultAddr);
+
+					if (bValueChanged)
+						ImGui::PopStyleColor();
+					
+					if (const FDataInfo* pWriteDataInfo = pCpcEmu->CodeAnalysis.GetWriteDataInfoForAddress(resultAddr))
+					{
+						// what if this is code?
+						DrawComment(pWriteDataInfo);
+					}
+					ImGui::PopID();
+				}
+			}
+		}
+	} 
+	ImGui::EndChild();
+	ImGui::Text("%d results found", pCurFinder->SearchResults.size());
+
+	if (SearchType == ESearchType::Value)
+	{
+		if (ImGui::Button("Remove Unchanged Results"))
+		{
+			pCurFinder->RemoveUnchangedResults();
+		}
+
+		if (ImGui::IsItemHovered(ImGuiHoveredFlags_DelayNormal))
+		{
+			ImGui::SetTooltip("Remove unchanged results todo.");
+		}
+	}
+}
+
+void FFinder::Reset()
+{
+	SearchResults.clear();
+}
+
+bool FFinder::HasValueChanged(uint16_t addr) const
+{
+	return false;
+}
+
+void FFinder::Find(const FSearchOptions& opt)
+{
+	SearchResults.clear();
+
+	uint16_t curSearchAddr = 0;
+
+	while (FindNextMatch(curSearchAddr, curSearchAddr))
+	{
+		bool bAddResult = true;
+		if (opt.memoryType != ESearchMemoryType::CodeAndData)
+		{
+			const FDataInfo* pAnyDataInfo = nullptr;
+			const FCodeInfo* pCodeInfo = pCpcEmu->CodeAnalysis.GetCodeInfoForAddress(curSearchAddr);
+			{
+				const FDataInfo* pWriteDataInfo = pCpcEmu->CodeAnalysis.GetWriteDataInfoForAddress(curSearchAddr);
+				const FDataInfo* pReadDataInfo = pCpcEmu->CodeAnalysis.GetReadDataInfoForAddress(curSearchAddr);
+				pAnyDataInfo = pWriteDataInfo ? pWriteDataInfo : pReadDataInfo;
+			}
+			const bool bIsCode = pCodeInfo || (pAnyDataInfo && pAnyDataInfo->DataType == EDataType::InstructionOperand);
+			
+			if (opt.memoryType == ESearchMemoryType::Code)
+			{
+				bAddResult = bIsCode;
+			}
+			else if (opt.memoryType == ESearchMemoryType::Data)
+			{
+				bAddResult = !bIsCode;
+			}
+
+			if (bAddResult)
+			{
+				if (pAnyDataInfo)
+				{
+					if (!opt.bSearchUnaccessed)
+					{
+						if (pAnyDataInfo->LastFrameRead == -1 && pAnyDataInfo->LastFrameWritten == -1)
+							bAddResult = false;
+					}
+
+					if (!opt.bSearchUnreferenced)
+					{
+						if (pAnyDataInfo->Reads.IsEmpty() && pAnyDataInfo->Writes.IsEmpty())
+						{
+							bAddResult = false;
+						}
+					}
+				}
+			}
+		}
+
+		if (bAddResult)
+		{
+			SearchResults.push_back(curSearchAddr);
+		}
+		curSearchAddr++;
+		if (curSearchAddr == 0)
+			break;
+	}
+}
+
+bool FByteFinder::FindNextMatch(uint16_t offset, uint16_t& outAddr)
+{
+	return pCpcEmu->CodeAnalysis.FindMemoryPattern(&SearchValue, 1, offset, outAddr);
+}
+
+bool FByteFinder::HasValueChanged(uint16_t addr) const
+{
+	const uint8_t curValue = pCpcEmu->ReadWritableByte(addr);
+	return curValue != LastValue;
+}
+
+const char* FByteFinder::GetValueString(uint16_t addr, ENumberDisplayMode numberMode) const
+{
+	const uint8_t value = pCpcEmu->ReadWritableByte(addr);
+	return NumStr(value, numberMode);
+}
+
+void FByteFinder::RemoveUnchangedResults()
+{
+	for (auto it = SearchResults.begin(); it != SearchResults.end(); )
+	{
+		const uint8_t value = pCpcEmu->ReadWritableByte(*it);
+		if (value == LastValue)
+			it = SearchResults.erase(it);
+		else
+			++it;
+	}
+}
+
+bool FWordFinder::FindNextMatch(uint16_t offset, uint16_t& outAddr)
+{
+	return FindWord(pCpcEmu, SearchValue, offset, outAddr);
+}
+
+bool FWordFinder::HasValueChanged(uint16_t addr) const
+{
+	const uint16_t curValue = pCpcEmu->ReadWritableWord(addr);
+	return curValue != LastValue;
+}
+
+const char* FWordFinder::GetValueString(uint16_t addr, ENumberDisplayMode numberMode) const
+{
+	const uint16_t value = pCpcEmu->ReadWritableWord(addr);
+	return NumStr(value, numberMode);
+}
+
+void FWordFinder::RemoveUnchangedResults()
+{
+	for (auto it = SearchResults.begin(); it != SearchResults.end(); )
+	{
+		const uint16_t value = pCpcEmu->ReadWritableWord(*it);
+		if (value == LastValue)
+			it = SearchResults.erase(it);
+		else
+			++it;
+	}
+}
+
+bool FTextFinder::FindNextMatch(uint16_t offset, uint16_t& outAddr)
+{
+	return pCpcEmu->CodeAnalysis.FindMemoryPattern((uint8_t*)SearchText.c_str(), SearchText.size(), offset, outAddr);
+}
+

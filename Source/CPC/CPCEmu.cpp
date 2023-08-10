@@ -159,6 +159,11 @@ uint16_t FCpcEmu::ReadWord(uint16_t address) const
 	return ReadByte(address) | (ReadByte(address + 1) << 8);
 }
 
+uint16_t FCpcEmu::ReadWritableWord(uint16_t address) const
+{
+	return ReadWritableByte(address) | (ReadWritableByte(address + 1) << 8);
+}
+
 const uint8_t* FCpcEmu::GetMemPtr(uint16_t address) const 
 {
 	const int bank = address >> 14;
@@ -694,6 +699,7 @@ bool FCpcEmu::Init(const FCpcConfig& config)
 	FGlobalConfig& globalConfig = GetGlobalConfig();
 	SetNumberDisplayMode(globalConfig.NumberDisplayMode);
 	CodeAnalysis.Config.bShowOpcodeValues = globalConfig.bShowOpcodeValues;
+	CodeAnalysis.Config.BranchLinesDisplayMode = globalConfig.BranchLinesDisplayMode;
 	CodeAnalysis.Config.bShowBanks = config.Model == ECpcModel::CPC_6128;
 #if SPECCY
 	CodeAnalysis.Config.CharacterColourLUT = FZXGraphicsView::GetColourLUT();
@@ -793,6 +799,7 @@ bool FCpcEmu::Init(const FCpcConfig& config)
 	InitGraphicsViewer(GraphicsViewer);
 	IOAnalysis.Init(this);
 	DiffTool.Init(this);
+	DataFindTool.Init(this);
 	CpcViewer.Init(this);
 	CodeAnalysis.ViewState[0].Enabled = true;	// always have first view enabled
 
@@ -911,6 +918,7 @@ void FCpcEmu::Shutdown()
 
 	config.NumberDisplayMode = GetNumberDisplayMode();
 	config.bShowOpcodeValues = CodeAnalysis.Config.bShowOpcodeValues;
+	config.BranchLinesDisplayMode = CodeAnalysis.Config.BranchLinesDisplayMode;
 
 	SaveGlobalConfig(kGlobalConfigFilename);
 }
@@ -921,6 +929,7 @@ void FCpcEmu::StartGame(FGameConfig* pGameConfig, bool bLoadGameData /* =  true*
 	MemoryAccessHandlers.clear();	// remove old memory handlers
 	ResetMemoryStats(MemStats);
 	FrameTraceViewer.Reset();
+	DataFindTool.Reset();
 
 	const std::string memStr = CpcEmuState.type == CPC_TYPE_6128 ? " (CPC 6128)" : " (CPC 464)";
 	const std::string windowTitle = kAppTitle + " - " + pGameConfig->Name + memStr;
@@ -1309,14 +1318,31 @@ void FCpcEmu::DrawOptionsMenu()
 		}
 
 		ImGui::MenuItem("Enable Audio", 0, &config.bEnableAudio);
+		ImGui::MenuItem("Edit Mode", 0, &CodeAnalysis.bAllowEditing);
 #if SPECCY
 		ImGui::MenuItem("Scan Line Indicator", 0, &config.bShowScanLineIndicator);
-		ImGui::MenuItem("Edit Mode", 0, &CodeAnalysis.bAllowEditing);
 		if(pActiveGame!=nullptr)
 			ImGui::MenuItem("Save Snapshot with game", 0, &pActiveGame->pConfig->WriteSnapshot);
 #endif
 		ImGui::MenuItem("Show Opcode Values", 0, &CodeAnalysis.Config.bShowOpcodeValues);
 
+		if (ImGui::BeginMenu("Display Branch Lines"))
+		{
+			if (ImGui::MenuItem("Off", 0, CodeAnalysis.Config.BranchLinesDisplayMode == 0))
+			{
+				CodeAnalysis.Config.BranchLinesDisplayMode = 0;
+			}
+			if (ImGui::MenuItem("Minimal", 0, CodeAnalysis.Config.BranchLinesDisplayMode == 1))
+			{
+				CodeAnalysis.Config.BranchLinesDisplayMode = 1;
+			}
+			if (ImGui::MenuItem("Full", 0, CodeAnalysis.Config.BranchLinesDisplayMode == 2))
+			{
+				CodeAnalysis.Config.BranchLinesDisplayMode = 2;
+			}
+
+			ImGui::EndMenu();
+		}
 #ifndef NDEBUG
 		ImGui::MenuItem("Show Config", 0, &CodeAnalysis.Config.bShowConfigWindow);
 		ImGui::MenuItem("ImGui Demo", 0, &bShowImGuiDemo);
@@ -1573,6 +1599,12 @@ void FCpcEmu::DrawMemoryTools()
 		if (ImGui::BeginTabItem("IO Analysis"))
 		{
 			IOAnalysis.DrawUI();
+			ImGui::EndTabItem();
+		}
+
+		if (ImGui::BeginTabItem("Find"))
+		{
+			DataFindTool.DrawUI();
 			ImGui::EndTabItem();
 		}
 

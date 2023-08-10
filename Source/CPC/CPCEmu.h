@@ -134,9 +134,10 @@ public:
 	void*		GetCPUEmulator(void) const override;
 	//ICPUInterface End
 	
-	// Read a byte from writable memory. i.e. RAM
+	// Read a byte/word from writable memory. i.e. RAM
 	// In the case of RAM behind ROM this will always return a byte from RAM - unlike ReadByte() which will return ROM.
-	uint8_t	ReadWritableByte(uint16_t address) const;
+	uint8_t		ReadWritableByte(uint16_t address) const;
+	uint16_t	ReadWritableWord(uint16_t address) const;
 
 	//void SetROMBank(int bankNo);
 	void SetROMBankLo(int bankNo);
@@ -169,6 +170,7 @@ public:
 	FCodeAnalysisState		CodeAnalysis;
 	FIOAnalysis				IOAnalysis;
 	FDiffTool				DiffTool;
+	FDataFindTool			DataFindTool;
 
 	static const int	kNoBankPages = 16;	// no of pages per physical address slot (16k)
 	static const int	kNoRAMPages = 128;

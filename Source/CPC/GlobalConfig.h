@@ -9,6 +9,7 @@ struct FGlobalConfig
 	bool				bShowScanLineIndicator = false;
 	bool				bShowOpcodeValues = false;
 	ENumberDisplayMode	NumberDisplayMode = ENumberDisplayMode::HexAitch;
+	int					BranchLinesDisplayMode = 2;
 	std::string			LastGame;
 
 	std::string			WorkspaceRoot = "./";
