@@ -389,7 +389,6 @@ void FDataFindTool::Reset()
 //   unacessed memory tooltip incorrect
 void FDataFindTool::DrawUI()
 {
-
 	FCodeAnalysisViewState& viewState = pCpcEmu->CodeAnalysis.GetFocussedViewState();
 	const ESearchType lastSearchType = SearchType;
 	const ESearchDataType lastDataSize = DataSize;
@@ -452,7 +451,6 @@ void FDataFindTool::DrawUI()
 	}
 #endif
 
-	//if (ImGui::TreeNodeEx("Search Options"), ImGuiTreeNodeFlags_DefaultOpen)
 	ImGui::SetNextItemOpen(true, ImGuiCond_Once);
 	if (ImGui::TreeNode("Search Options"))
 	{
@@ -466,7 +464,7 @@ void FDataFindTool::DrawUI()
 			
 			if (ImGui::IsItemHovered(ImGuiHoveredFlags_DelayNormal))
 			{
-				ImGui::SetTooltip("Search Data tooltip todo.");
+				ImGui::SetTooltip("Search only memory locations marked as data.");
 			}
 			
 			if (ImGui::RadioButton("Code", MemoryType == ESearchMemoryType::Code))
@@ -477,7 +475,7 @@ void FDataFindTool::DrawUI()
 			
 			if (ImGui::IsItemHovered(ImGuiHoveredFlags_DelayNormal))
 			{
-				ImGui::SetTooltip("Search Code tooltip todo.");
+				ImGui::SetTooltip("Search only memory locations marked as code.");
 			}
 			
 			if (ImGui::RadioButton("Search Code & Data", MemoryType == ESearchMemoryType::CodeAndData))
@@ -487,7 +485,7 @@ void FDataFindTool::DrawUI()
 			
 			if (ImGui::IsItemHovered(ImGuiHoveredFlags_DelayNormal))
 			{
-				ImGui::SetTooltip("Search Code & Data tooltip todo.");
+				ImGui::SetTooltip("Search all memory locations - both code and data.");
 			}
 		}
 
@@ -573,7 +571,7 @@ void FDataFindTool::DrawUI()
 					const uint16_t resultAddr = pCurFinder->SearchResults[i];
 					ImGui::PushID(resultAddr);
 
-					// what if this location doesnt have writedata?
+					// not sure this is right? what if this location doesnt have writedata? what if it is code?
 					if (const FDataInfo* pWriteDataInfo = pCpcEmu->CodeAnalysis.GetWriteDataInfoForAddress(resultAddr))
 					{
 						ShowDataItemActivity(pCpcEmu->CodeAnalysis, pCpcEmu->CodeAnalysis.AddressRefFromPhysicalAddress(resultAddr));

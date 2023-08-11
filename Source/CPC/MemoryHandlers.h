@@ -188,13 +188,13 @@ public:
 	void Reset();
 
 private:
+	FSearchOptions opt;
 	ESearchType SearchType = ESearchType::Value;
 	ESearchDataType DataSize = ESearchDataType::Byte;
 	ESearchMemoryType MemoryType = ESearchMemoryType::CodeAndData;
 	
 	bool bDecimal = true;
 
-	bool bSearchCode = false;
 	bool bSearchUnreferenced = true;
 	bool bSearchUnaccessed = true;
 
