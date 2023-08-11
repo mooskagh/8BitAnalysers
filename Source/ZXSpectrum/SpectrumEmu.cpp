@@ -12,9 +12,8 @@
 #include "GameViewers/StarquakeViewer.h"
 #include "GameViewers/MiscGameViewers.h"
 #include "Viewers/SpectrumViewer.h"
-#include "Viewers/GraphicsViewer.h"
 #include "Viewers/ZXGraphicsView.h"
-#include "Viewers/BreakpointViewer.h"
+//#include "Viewers/BreakpointViewer.h"
 #include "Viewers/OverviewViewer.h"
 #include "Util/FileUtil.h"
 
@@ -114,17 +113,18 @@ void* FSpectrumEmu::GetCPUEmulator(void) const
 }
 
 
-void FSpectrumEmu::GraphicsViewerSetView(FAddressRef address, int charWidth)
+void FSpectrumEmu::GraphicsViewerSetView(FAddressRef address)
 {
-	GraphicsViewerGoToAddress(address);
-	GraphicsViewerSetCharWidth(charWidth);
+	GraphicsViewer.GoToAddress(address);
+	//GraphicsViewerGoToAddress(address);
+	//GraphicsViewerSetCharWidth(charWidth);
 }
 
 
 void FSpectrumEmu::FormatSpectrumMemory(FCodeAnalysisState& state) 
 {
 	// Format screen pixel memory if it hasn't already been
-	if (state.GetLabelForAddress(kScreenPixMemStart) == nullptr)
+	if (state.GetLabelForPhysicalAddress(kScreenPixMemStart) == nullptr)
 	{
 		AddLabel(state, 0x4000, "ScreenPixels", ELabelType::Data);
 
@@ -135,12 +135,12 @@ void FSpectrumEmu::FormatSpectrumMemory(FCodeAnalysisState& state)
 	}
 
 	// Format attribute memory if it hasn't already
-	if (state.GetLabelForAddress(kScreenAttrMemStart) == nullptr)
+	if (state.GetLabelForPhysicalAddress(kScreenAttrMemStart) == nullptr)
 	{
 		AddLabel(state, 0x5800, "ScreenAttributes", ELabelType::Data);
 
 		FDataFormattingOptions format;
-		format.StartAddress = kScreenAttrMemStart;
+		format.StartAddress = state.AddressRefFromPhysicalAddress(kScreenAttrMemStart);
 		format.DataType = EDataType::ColAttr;
 		format.ItemSize = 32;
 		format.NoItems = 24;
@@ -649,8 +649,7 @@ bool FSpectrumEmu::Init(const FSpectrumConfig& config)
 		}
 	}
 
-	GraphicsViewer.pEmu = this;
-	InitGraphicsViewer(GraphicsViewer);
+	GraphicsViewer.Init(&CodeAnalysis);
 	IOAnalysis.Init(this);
 	SpectrumViewer.Init(this);
 	FrameTraceViewer.Init(this);
@@ -777,6 +776,8 @@ void FSpectrumEmu::Shutdown()
 	config.BranchLinesDisplayMode = CodeAnalysis.Config.BranchLinesDisplayMode;
 
 	SaveGlobalConfig(kGlobalConfigFilename);
+
+	GraphicsViewer.Shutdown();
 }
 
 void FSpectrumEmu::StartGame(FGameConfig *pGameConfig, bool bLoadGameData /* =  true*/)
@@ -785,6 +786,7 @@ void FSpectrumEmu::StartGame(FGameConfig *pGameConfig, bool bLoadGameData /* =  
 	MemoryAccessHandlers.clear();	// remove old memory handlers
 	ResetMemoryStats(MemStats);
 	FrameTraceViewer.Reset();
+	GraphicsViewer.Reset();
 
 	const std::string windowTitle = kAppTitle + " - " + pGameConfig->Name;
 	SetWindowTitle(windowTitle.c_str());
@@ -799,7 +801,6 @@ void FSpectrumEmu::StartGame(FGameConfig *pGameConfig, bool bLoadGameData /* =  
 	pNewGame->pConfig = pGameConfig;
 	pNewGame->pViewerConfig = pGameConfig->pViewerConfig;
 	assert(pGameConfig->pViewerConfig != nullptr);
-	GraphicsViewer.pGame = pNewGame;
 	pActiveGame = pNewGame;
 	pNewGame->pViewerData = pNewGame->pViewerConfig->pInitFunction(this, pGameConfig);
 	GenerateSpriteListsFromConfig(GraphicsViewer, pGameConfig);
@@ -826,6 +827,7 @@ void FSpectrumEmu::StartGame(FGameConfig *pGameConfig, bool bLoadGameData /* =  
 			romJsonFName = root + kRomInfo128JsonFile;
 
 		const std::string analysisJsonFName = root + "AnalysisJson/" + pGameConfig->Name + ".json";
+		const std::string graphicsSetsJsonFName = root + "GraphicsSets/" + pGameConfig->Name + ".json";
 		const std::string analysisStateFName = root + "AnalysisState/" + pGameConfig->Name + ".astate";
 		const std::string saveStateFName = root + "SaveStates/" + pGameConfig->Name + ".state";
 		if (FileExists(analysisJsonFName.c_str()))
@@ -835,6 +837,8 @@ void FSpectrumEmu::StartGame(FGameConfig *pGameConfig, bool bLoadGameData /* =  
 		}
 		else
 			LoadGameData(this, dataFName.c_str());	// Load the old one - this needs to go in time
+
+		GraphicsViewer.LoadGraphicsSets(graphicsSetsJsonFName.c_str());
 
 		LoadGameState(this, saveStateFName.c_str());
 
@@ -895,11 +899,13 @@ void FSpectrumEmu::SaveCurrentGameData()
 			const std::string configFName = root + "Configs/" + pGameConfig->Name + ".json";
 			const std::string dataFName = root + "GameData/" + pGameConfig->Name + ".bin";
 			const std::string analysisJsonFName = root + "AnalysisJson/" + pGameConfig->Name + ".json";
+			const std::string graphicsSetsJsonFName = root + "GraphicsSets/" + pGameConfig->Name + ".json";
 			const std::string analysisStateFName = root + "AnalysisState/" + pGameConfig->Name + ".astate";
 			const std::string saveStateFName = root + "SaveStates/" + pGameConfig->Name + ".state";
 			EnsureDirectoryExists(std::string(root + "Configs").c_str());
 			EnsureDirectoryExists(std::string(root + "GameData").c_str());
 			EnsureDirectoryExists(std::string(root + "AnalysisJson").c_str());
+			EnsureDirectoryExists(std::string(root + "GraphicsSets").c_str());
 			EnsureDirectoryExists(std::string(root + "AnalysisState").c_str());
 			EnsureDirectoryExists(std::string(root + "SaveStates").c_str());
 
@@ -921,6 +927,7 @@ void FSpectrumEmu::SaveCurrentGameData()
 			SaveGameState(this, saveStateFName.c_str());
 			ExportAnalysisJson(CodeAnalysis, analysisJsonFName.c_str());
 			ExportAnalysisState(CodeAnalysis, analysisStateFName.c_str());
+			GraphicsViewer.SaveGraphicsSets(graphicsSetsJsonFName.c_str());
 		}
 	}
 
@@ -1714,7 +1721,7 @@ void FSpectrumEmu::DrawUI()
 	}
 #endif
 
-	DrawGraphicsViewer(GraphicsViewer);
+	GraphicsViewer.Draw();
 	DrawMemoryTools();
 
 	// COde analysis views

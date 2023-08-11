@@ -33,9 +33,7 @@ public:
 	virtual FAddressRef	GetPC(void) = 0;
 	virtual uint16_t	GetSP(void) = 0;
 
-    // FIXME - no other implementation for the method - unable to instantiate abstract class
-    virtual void	GraphicsViewerSetView(FAddressRef address, int charWidth) {};
-	//virtual void	GraphicsViewerSetView(FAddressRef address, int charWidth) = 0;
+    virtual void	GraphicsViewerSetView(FAddressRef address) {};
 
 	virtual void*	GetCPUEmulator(void) const { return nullptr; }	// get pointer to emulator - a bit of a hack
 
@@ -60,7 +58,7 @@ enum class EKey
 	AddLabel,
 	Rename,
 	Comment,
-	AddCommentBlock,
+	CommentLegacy,
 
 	// Debugger
 	BreakContinue,
@@ -73,30 +71,40 @@ enum class EKey
 	Count
 };
 
+enum class EFunctionSortMode : int
+{
+	Location = 0,
+	Alphabetical,
+	CallFrequency
+};
+
 
 struct FDataFormattingOptions
 {
 	EDataType	DataType = EDataType::Byte;
-	int			StartAddress = 0;	// TODO: use Address Ref
+	//int			StartAddress = 0;	// TODO: use Address Ref
+	FAddressRef	StartAddress;
 	int			ItemSize = 1;
 	int			NoItems = 1;
 	FAddressRef	CharacterSet;
+	FAddressRef GraphicsSetRef;
 	uint8_t		EmptyCharNo = 0;
 	bool		ClearCodeInfo = false;
 	bool		ClearLabels = false;
 	bool		AddLabelAtStart = false;
+	std::string	LabelName;
 
 	bool		IsValid() const {	return NoItems > 0 && ItemSize > 0;	}
-	uint16_t	CalcEndAddress() const { return StartAddress + (NoItems * ItemSize) - 1; }
-	void		SetupForBitmap(uint16_t address, int xSize, int ySize)
+	uint16_t	CalcEndAddress() const { return StartAddress.Address + (NoItems * ItemSize) - 1; }
+	void		SetupForBitmap(FAddressRef address, int xSizePixels, int ySizePixels)
 	{
 		DataType = EDataType::Bitmap;
 		StartAddress = address;
-		ItemSize = xSize / 8;
-		NoItems = ySize;
+		ItemSize = xSizePixels / 8;
+		NoItems = ySizePixels;
 	}
 
-	void		SetupForCharmap(uint16_t address, int xSize, int ySize)
+	void		SetupForCharmap(FAddressRef address, int xSize, int ySize)
 	{
 		DataType = EDataType::CharacterMap;
 		StartAddress = address;
@@ -110,7 +118,7 @@ struct FLabelListFilter
 	std::string		FilterText;
 	uint16_t		MinAddress = 0x0000;
 	uint16_t		MaxAddress = 0xffff;
-	bool			bRAMOnly = false;
+	bool			bRAMOnly = true;
 };
 
 struct FCodeAnalysisItem
@@ -169,10 +177,12 @@ struct FCodeAnalysisViewState
 	int16_t			ViewingBankId = -1;
 	// for global Filters
 	bool						ShowROMLabels = false;
+	std::string					FilterText;
 	FLabelListFilter			GlobalDataItemsFilter;
 	std::vector<FCodeAnalysisItem>	FilteredGlobalDataItems;
 	FLabelListFilter				GlobalFunctionsFilter;
 	std::vector<FCodeAnalysisItem>	FilteredGlobalFunctions;
+	EFunctionSortMode				FunctionSortMode = EFunctionSortMode::Location;
 	std::vector< FAddressCoord>		AddressCoords;
 	int								JumpLineIndent;
 
@@ -308,6 +318,23 @@ public:
 	
 	FCodeAnalysisPage* GetPage(int16_t id) { return RegisteredPages[id]; }
 
+	// Advance an address ref by a number of bytes, may go to next bank in physical memory
+	bool AdvanceAddressRef(FAddressRef& addressRef, int amount)
+	{
+		const FCodeAnalysisBank* pBank = GetBank(addressRef.BankId);
+		if (addressRef.Address + amount < pBank->GetMappedAddress() + pBank->GetSizeBytes())
+		{
+			addressRef.Address += amount;
+			return true;
+		}
+		else
+		{
+			// we might come of the end here, find the bank that's physically mapped after?
+			addressRef = AddressRefFromPhysicalAddress(addressRef.Address + amount);
+		}
+		return addressRef.IsValid();
+	}
+
 	void	SetCodeAnalysisDirty(FAddressRef addrRef)
 	{
 		FCodeAnalysisBank* pBank = GetBank(addrRef.BankId);
@@ -360,7 +387,7 @@ public:
 	std::vector<FCodeAnalysisItem>	ItemList;
 
 	std::vector<FCodeAnalysisItem>	GlobalDataItems;
-	bool						bRebuildFilteredGlobalDataItems = true;
+	bool						bRebuildFilteredGlobalDataItems = true;	// should this be in the view 
 	
 	std::vector<FCodeAnalysisItem>	GlobalFunctions;
 	bool						bRebuildFilteredGlobalFunctions = true;
@@ -411,8 +438,8 @@ public:
 	}
 	const FCodeAnalysisPage* GetWritePage(uint16_t addr) const { return ((FCodeAnalysisState*)this)->GetWritePage(addr); }
 
-	const FLabelInfo* GetLabelForAddress(uint16_t addr) const { return GetReadPage(addr)->Labels[addr & kPageMask]; }
-	FLabelInfo* GetLabelForAddress(uint16_t addr) { return GetReadPage(addr)->Labels[addr & kPageMask]; }
+	const FLabelInfo* GetLabelForPhysicalAddress(uint16_t addr) const { return GetReadPage(addr)->Labels[addr & kPageMask]; }
+	FLabelInfo* GetLabelForPhysicalAddress(uint16_t addr) { return GetReadPage(addr)->Labels[addr & kPageMask]; }
 	FLabelInfo* GetLabelForAddress(FAddressRef addrRef)
 	{
 		const FCodeAnalysisBank* pBank = GetBank(addrRef.BankId);
@@ -426,7 +453,7 @@ public:
 			return nullptr;
 		}
 	}
-	void SetLabelForAddress(uint16_t addr, FLabelInfo* pLabel) 
+	void SetLabelForPhysicalAddress(uint16_t addr, FLabelInfo* pLabel)
 	{
 		if(pLabel != nullptr)	// ensure no name clashes
 			EnsureUniqueLabelName(pLabel->Name);
@@ -487,6 +514,15 @@ public:
 	}
 
 	void SetCodeInfoForAddress(uint16_t addr, FCodeInfo* pCodeInfo) { GetReadPage(addr)->CodeInfo[addr & kPageMask] = pCodeInfo; }
+	void SetCodeInfoForAddress(FAddressRef addrRef, FCodeInfo* pCodeInfo)
+	{ 
+		FCodeAnalysisBank* pBank = GetBank(addrRef.BankId);
+		if (pBank != nullptr)
+		{
+			const uint16_t bankAddr = addrRef.Address - (pBank->PrimaryMappedPage * FCodeAnalysisPage::kPageSize);
+			pBank->Pages[bankAddr >> FCodeAnalysisPage::kPageShift].CodeInfo[bankAddr & FCodeAnalysisPage::kPageMask] = pCodeInfo;
+		}
+	}
 
 	const FDataInfo* GetReadDataInfoForAddress(uint16_t addr) const { return &GetReadPage(addr)->DataInfo[addr & kPageMask]; }
 	FDataInfo* GetReadDataInfoForAddress(uint16_t addr) { return &GetReadPage(addr)->DataInfo[addr & kPageMask]; }
@@ -524,7 +560,8 @@ public:
 	FMachineState* GetMachineState(uint16_t addr) { return GetReadPage(addr)->MachineState[addr & kPageMask];}
 	void SetMachineStateForAddress(uint16_t addr, FMachineState* pMachineState) { GetReadPage(addr)->MachineState[addr & kPageMask] = pMachineState; }
 
-	bool FindMemoryPattern(uint8_t* pData, size_t dataSize, uint16_t offset, uint16_t& outAddr);
+	FAddressRef FindMemoryPattern(uint8_t* pData, size_t dataSize);
+	bool FindMemoryPatternInPhysicalMemory(uint8_t* pData, size_t dataSize, uint16_t offset, uint16_t& outAddr);
 
 	void FindAsciiStrings(uint16_t startAddress);
 

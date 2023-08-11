@@ -115,6 +115,7 @@ struct FCodeInfo : FItem
 	FAddressRef		JumpAddress;	// optional jump address
 	FAddressRef		PointerAddress;	// optional pointer address
 	int				FrameLastExecuted = -1;
+	int				ExecutionCount = 0;
 
 	union
 	{
@@ -186,8 +187,10 @@ struct FDataInfo : FItem
 		DataType = EDataType::Byte;
 		OperandType = EOperandType::Unknown;
 		Comment.clear();
+		ReadCount = 0;
 		LastFrameRead = -1;
 		Reads.Reset();
+		WriteCount = 0;
 		LastFrameWritten = -1;
 		Writes.Reset();
 	}
@@ -211,8 +214,9 @@ struct FDataInfo : FItem
 
 	union
 	{
-		FImageData* ImageData = nullptr;	// additional data for images
+		//FImageData* ImageData = nullptr;	// additional data for images
 		FAddressRef	CharSetAddress;	// address of character set
+		FAddressRef	GraphicsSetRef;	// for bitmap data
 		/*struct
 		{
 		};*/
@@ -220,8 +224,13 @@ struct FDataInfo : FItem
 	};
 	uint8_t		EmptyCharNo = 0;
 
+	// Reads
+	int						ReadCount = 0;
 	int						LastFrameRead = -1;
 	FItemReferenceTracker	Reads;	// address and counts of data access instructions
+
+	// Writes
+	int						WriteCount = 0;
 	int						LastFrameWritten = -1;
 	FItemReferenceTracker	Writes;	// address and counts of data access instructions
 	FAddressRef				LastWriter;

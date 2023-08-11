@@ -6,7 +6,6 @@
 #include "../SpectrumEmu.h"
 #include "../SpectrumConstants.h"
 #include <CodeAnalyser/UI/CodeAnalyserUI.h>
-#include "GraphicsViewer.h"
 #include "../GlobalConfig.h"
 
 #include <Util/Misc.h>
@@ -128,10 +127,10 @@ void FSpectrumViewer::Draw()
 		//ImGui::SameLine();
 		DrawAddressLabel(codeAnalysis, viewState, SelectAttrAddr);
 
-		if (CharDataFound)
+		if (FoundCharAddress.IsValid())
 		{
-			ImGui::Text("Found at: %s", NumStr(FoundCharDataAddress));
-			DrawAddressLabel(codeAnalysis, viewState, FoundCharDataAddress);
+			ImGui::Text("Found at: %s", NumStr(FoundCharAddress.Address));
+			DrawAddressLabel(codeAnalysis, viewState, FoundCharAddress);
 			//ImGui::SameLine();
 			bool bShowInGfxView = ImGui::Button("Show in GFX View");
 			ImGui::SameLine();
@@ -140,27 +139,27 @@ void FSpectrumViewer::Draw()
 			if (ImGui::Button("Format as Bitmap"))
 			{
 				FDataFormattingOptions formattingOptions;
-				formattingOptions.StartAddress = FoundCharDataAddress;
+				formattingOptions.StartAddress = FoundCharAddress;
 				formattingOptions.ItemSize = 1;
 				formattingOptions.NoItems = 8;
 				formattingOptions.DataType = EDataType::Bitmap;
 
 				FormatData(codeAnalysis, formattingOptions);
-				viewState.GoToAddress({ codeAnalysis.GetBankFromAddress(FoundCharDataAddress), FoundCharDataAddress }, false);
+				viewState.GoToAddress(FoundCharAddress, false);
 			}
 
 			if (bShowInGfxView)
 			{
 				if (!bJustSelectedChar)
 				{
-					bool bFound = codeAnalysis.FindMemoryPattern(CharData, 8, FoundCharDataAddress+8, FoundCharDataAddress);
+					bool bFound = codeAnalysis.FindMemoryPatternInPhysicalMemory(CharData, 8, FoundCharDataAddress+8, FoundCharDataAddress);
 					
 					// If we didn't find anything, then wraparound and look from the start of ram.
 					if (!bFound && bCharSearchWrap)
-						CharDataFound = codeAnalysis.FindMemoryPattern(CharData, 8, 0, FoundCharDataAddress);
+						CharDataFound = codeAnalysis.FindMemoryPatternInPhysicalMemory(CharData, 8, 0, FoundCharDataAddress);
 				}
 
-				pSpectrumEmu->GraphicsViewerGoToAddress(codeAnalysis.AddressRefFromPhysicalAddress(FoundCharDataAddress));
+				pSpectrumEmu->GraphicsViewer.GoToAddress(codeAnalysis.AddressRefFromPhysicalAddress(FoundCharDataAddress));
 			}
 		}
 	}
@@ -188,9 +187,9 @@ void FSpectrumViewer::Draw()
 
 				if (bContainsBits)
 				{
-					uint16_t foundCharDataAddress;
+					FAddressRef foundCharDataAddress = codeAnalysis.FindMemoryPattern(charData, 8);
 
-					if (codeAnalysis.FindMemoryPattern(charData, 8, 0x5800, foundCharDataAddress))
+					if (foundCharDataAddress.IsValid())
 					{
 						const FCodeInfo* pCodeInfo = codeAnalysis.GetCodeInfoForAddress(foundCharDataAddress);
 						if (pCodeInfo == nullptr || pCodeInfo->bDisabled)
@@ -358,7 +357,8 @@ bool FSpectrumViewer::OnHovered(const ImVec2& pos, FCodeAnalysisState& codeAnaly
 			// store pixel data for selected character
 			for (int charLine = 0; charLine < 8; charLine++)
 				CharData[charLine] = pSpectrumEmu->ReadByte(GetScreenPixMemoryAddress(xp & ~0x7, (yp & ~0x7) + charLine));
-			CharDataFound = codeAnalysis.FindMemoryPattern(CharData, 8, 0, FoundCharDataAddress);
+			CharDataFound = codeAnalysis.FindMemoryPatternInPhysicalMemory(CharData, 8, 0, FoundCharDataAddress);
+			FoundCharAddress = codeAnalysis.FindMemoryPattern(CharData, 8);
 			bJustSelectedChar = true;
 		}
 

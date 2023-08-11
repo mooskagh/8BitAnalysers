@@ -218,7 +218,7 @@ bool FCodeAnalysisState::RemoveLabelName(const std::string& labelName)
 }
 
 // Search memory space for a block of data
-bool FCodeAnalysisState::FindMemoryPattern(uint8_t* pData, size_t dataSize, uint16_t offset, uint16_t& outAddr)
+bool FCodeAnalysisState::FindMemoryPatternInPhysicalMemory(uint8_t* pData, size_t dataSize, uint16_t offset, uint16_t& outAddr)
 {
 	uint16_t address = offset;
 	ICPUInterface* pCPUInterface = CPUInterface;
@@ -227,7 +227,7 @@ bool FCodeAnalysisState::FindMemoryPattern(uint8_t* pData, size_t dataSize, uint
 	do
 	{
 		bool bFound = true;
-		for (int byteNo = 0; byteNo < 8; byteNo++)
+		for (int byteNo = 0; byteNo < dataSize; byteNo++)
 		{
 			const uint8_t byte = ReadByte(address + byteNo);
 			if (byte != pData[byteNo])
@@ -247,6 +247,35 @@ bool FCodeAnalysisState::FindMemoryPattern(uint8_t* pData, size_t dataSize, uint
 	} while (address != 0);	// 16 bit address overflow
 
 	return false;
+}
+
+FAddressRef FCodeAnalysisState::FindMemoryPattern(uint8_t* pData, size_t dataSize)
+{
+	// iterate through banks
+	for (auto& bank : Banks)
+	{
+		const int bankByteSize = bank.GetSizeBytes();
+		for (int bAddr = 0; bAddr < bankByteSize - dataSize; bAddr++)
+		{
+			bool bFound = true;
+			for (int byteNo = 0; byteNo < dataSize; byteNo++)
+			{
+				const uint8_t byte = bank.Memory[bAddr + byteNo];
+				if (byte != pData[byteNo])
+				{
+					bFound = false;
+					break;
+				}
+			}
+
+			if (bFound)
+			{
+				return FAddressRef(bank.Id, bAddr + bank.GetMappedAddress());
+			}
+		}
+	}
+
+	return FAddressRef();	// return invalid address
 }
 
 bool IsAscii(uint8_t byte)
@@ -531,7 +560,7 @@ bool AnalyseAtPC(FCodeAnalysisState &state, uint16_t& pc)
 	uint16_t jumpAddr;
 	if (CheckJumpInstruction(state, pc, &jumpAddr))
 	{
-		FLabelInfo* pLabel = state.GetLabelForAddress(jumpAddr);
+		FLabelInfo* pLabel = state.GetLabelForPhysicalAddress(jumpAddr);
 		if (pLabel != nullptr)
 			pLabel->References.RegisterAccess(state.AddressRefFromPhysicalAddress(pc));
 		if (pCodeInfo != nullptr)
@@ -546,7 +575,7 @@ bool AnalyseAtPC(FCodeAnalysisState &state, uint16_t& pc)
 	uint16_t ptr;
 	if (CheckPointerRefInstruction(state, pc, &ptr))
 	{
-		FLabelInfo* pLabel = state.GetLabelForAddress(ptr);
+		FLabelInfo* pLabel = state.GetLabelForPhysicalAddress(ptr);
 		if (pLabel != nullptr)
 			pLabel->References.RegisterAccess(state.AddressRefFromPhysicalAddress(pc));
 		if (pCodeInfo != nullptr)
@@ -601,7 +630,10 @@ bool RegisterCodeExecuted(FCodeAnalysisState &state, uint16_t pc, uint16_t oldpc
 
 	FCodeInfo* pCodeInfo = state.GetCodeInfoForAddress(pc);
 	if (pCodeInfo != nullptr)
+	{
 		pCodeInfo->FrameLastExecuted = state.CurrentFrameNo;
+		pCodeInfo->ExecutionCount++;
+	}
 
 	if (state.CPUInterface->CPUType == ECPUType::Z80)
 		return RegisterCodeExecutedZ80(state, pc, oldpc);
@@ -628,6 +660,7 @@ void RegisterDataRead(FCodeAnalysisState& state, uint16_t pc, uint16_t dataAddr)
 	if (state.GetCodeInfoForAddress(dataAddr) == nullptr)	// don't register instruction data reads
 	{
 		FDataInfo* pDataInfo = state.GetReadDataInfoForAddress(dataAddr);
+		pDataInfo->ReadCount++;
 		pDataInfo->LastFrameRead = state.CurrentFrameNo;
 		pDataInfo->Reads.RegisterAccess(state.AddressRefFromPhysicalAddress(pc));
 	}
@@ -636,6 +669,7 @@ void RegisterDataRead(FCodeAnalysisState& state, uint16_t pc, uint16_t dataAddr)
 void RegisterDataWrite(FCodeAnalysisState &state, uint16_t pc,uint16_t dataAddr,uint8_t value)
 {
 	FDataInfo* pDataInfo = state.GetWriteDataInfoForAddress(dataAddr);
+	pDataInfo->WriteCount++;
 	pDataInfo->LastFrameWritten = state.CurrentFrameNo;
 	pDataInfo->Writes.RegisterAccess(state.AddressRefFromPhysicalAddress(pc));
 
@@ -701,7 +735,7 @@ void ResetReferenceInfo(FCodeAnalysisState &state)
 			pDataInfo->Writes.Reset();
 		}
 
-		FLabelInfo* pLabelInfo = state.GetLabelForAddress(i);
+		FLabelInfo* pLabelInfo = state.GetLabelForPhysicalAddress(i);
 		if (pLabelInfo != nullptr)
 		{
 			pLabelInfo->References.Reset();
@@ -711,11 +745,26 @@ void ResetReferenceInfo(FCodeAnalysisState &state)
 	}
 }
 
-
-
+// TODO: Phase this out
 FLabelInfo* AddLabel(FCodeAnalysisState &state, uint16_t address,const char *name,ELabelType type)
 {
 	FLabelInfo *pLabel = FLabelInfo::Allocate();
+	pLabel->Name = name;
+	pLabel->LabelType = type;
+	//pLabel->Address = address;
+	pLabel->ByteSize = 1;
+	pLabel->Global = type == ELabelType::Function;
+	state.SetLabelForPhysicalAddress(address, pLabel);
+
+	if (pLabel->Global)
+		GenerateGlobalInfo(state);
+
+	return pLabel;
+}
+
+FLabelInfo* AddLabel(FCodeAnalysisState& state, FAddressRef address, const char* name, ELabelType type)
+{
+	FLabelInfo* pLabel = FLabelInfo::Allocate();
 	pLabel->Name = name;
 	pLabel->LabelType = type;
 	//pLabel->Address = address;
@@ -871,8 +920,8 @@ void FCodeAnalysisState::Init(ICPUInterface* pCPUInterface)
 	KeyConfig[(int)EKey::ToggleItemBinary] = ImGuiKey_B;
 	KeyConfig[(int)EKey::AddLabel] = ImGuiKey_L;
 	KeyConfig[(int)EKey::Rename] = ImGuiKey_R;
-	KeyConfig[(int)EKey::Comment] = ImGuiKey_Slash; // '/'
-	KeyConfig[(int)EKey::AddCommentBlock] = ImGuiKey_Semicolon;	// ';'
+	KeyConfig[(int)EKey::Comment] = ImGuiKey_Semicolon; 
+	KeyConfig[(int)EKey::CommentLegacy] = ImGuiKey_Slash; // '/'
 	KeyConfig[(int)EKey::BreakContinue] = ImGuiKey_F5;
 	KeyConfig[(int)EKey::StepInto] = ImGuiKey_F11;
 	KeyConfig[(int)EKey::StepOver] = ImGuiKey_F10;
@@ -953,6 +1002,7 @@ void SetItemText(FCodeAnalysisState &state, const FCodeAnalysisItem& item)
 	}
 }
 
+#if 0
 void SetItemImage(FCodeAnalysisState& state, const FCodeAnalysisItem& item)
 {
 	FDataInfo* pDataItem = static_cast<FDataInfo*>(item.Item);
@@ -967,6 +1017,7 @@ void SetItemImage(FCodeAnalysisState& state, const FCodeAnalysisItem& item)
 		pDataItem->ByteSize = pDataItem->ImageData->SetSizeChars(1,1);
 	}
 }
+#endif
 
 FLabelInfo* AddLabelAtAddress(FCodeAnalysisState &state, FAddressRef address)
 {
@@ -1022,13 +1073,14 @@ void SetItemCommentText(FCodeAnalysisState &state, const FCodeAnalysisItem& item
 
 void FormatData(FCodeAnalysisState& state, const FDataFormattingOptions& options)
 {
-	uint16_t dataAddress = options.StartAddress;
+	//uint16_t dataAddress = options.StartAddress;
+	FAddressRef addressRef = options.StartAddress;// state.AddressRefFromPhysicalAddress(dataAddress);
 
 	// TODO: Register Character Maps here?
 	if (options.DataType == EDataType::CharacterMap)
 	{
 		FCharMapCreateParams charMapParams;
-		charMapParams.Address = state.AddressRefFromPhysicalAddress(dataAddress);
+		charMapParams.Address = addressRef;
 		charMapParams.CharacterSet = options.CharacterSet;
 		charMapParams.Width = options.ItemSize;
 		charMapParams.Height = options.NoItems;
@@ -1036,26 +1088,40 @@ void FormatData(FCodeAnalysisState& state, const FDataFormattingOptions& options
 		CreateCharacterMap(state, charMapParams);
 	}
 
-	if (options.AddLabelAtStart && state.GetLabelForAddress(dataAddress) == nullptr)	// only add label if one doesn't already exist
+	if (options.AddLabelAtStart)
 	{
-		char labelName[16];
-		const char* pPrefix = "data";
+		std::string labelText = options.LabelName;
 
-		if (options.DataType == EDataType::Bitmap)
-			pPrefix = "bitmap";
-		else if (options.DataType == EDataType::CharacterMap)
-			pPrefix = "charmap";
-		else if (options.DataType == EDataType::Text)
-			pPrefix = "text";
+		// generate label if none is supplied
+		if (labelText.empty())
+		{
+			char labelName[16];
+			const char* pPrefix = "data";
 
-		snprintf(labelName,16, "%s_%s",pPrefix,NumStr(dataAddress));
-		FLabelInfo* pLabel = AddLabel(state, dataAddress, labelName, ELabelType::Data);
+			if (options.DataType == EDataType::Bitmap)
+				pPrefix = "bitmap";
+			else if (options.DataType == EDataType::CharacterMap)
+				pPrefix = "charmap";
+			else if (options.DataType == EDataType::Text)
+				pPrefix = "text";
+
+			snprintf(labelName, 16, "%s_%s", pPrefix, NumStr(addressRef.Address));
+			labelText = labelName;
+		}
+
+		// Add or rename label
+		FLabelInfo* pLabel = state.GetLabelForAddress(addressRef);
+		if (pLabel == nullptr)
+			pLabel = AddLabel(state, addressRef, labelText.c_str(), ELabelType::Data);
+		else
+			SetLabelName(state, pLabel, labelText.c_str());
+		
 		pLabel->Global = true;
 	}
 
 	for (int itemNo = 0; itemNo < options.NoItems; itemNo++)
 	{
-		FDataInfo* pDataInfo = state.GetReadDataInfoForAddress(dataAddress);
+		FDataInfo* pDataInfo = state.GetReadDataInfoForAddress(addressRef);
 
 		pDataInfo->ByteSize = options.ItemSize;
 		pDataInfo->DataType = options.DataType;
@@ -1065,17 +1131,26 @@ void FormatData(FCodeAnalysisState& state, const FDataFormattingOptions& options
 			pDataInfo->CharSetAddress = options.CharacterSet;
 			pDataInfo->EmptyCharNo = options.EmptyCharNo;
 		}
+		else if (options.DataType == EDataType::Bitmap)
+		{
+			pDataInfo->GraphicsSetRef = options.GraphicsSetRef;
+		}
 
 		// iterate through each memory location
 		for (int i = 0; i < options.ItemSize;i++)
 		{
 			if (options.ClearCodeInfo)
-				state.SetCodeInfoForAddress(dataAddress, nullptr);
+				state.SetCodeInfoForAddress(addressRef, nullptr);
 			
-			if (options.ClearLabels && dataAddress != options.StartAddress)	// don't remove first label
-				RemoveLabelAtAddress(state, state.AddressRefFromPhysicalAddress(dataAddress));
+			if (options.ClearLabels && addressRef != options.StartAddress)	// don't remove first label
+				RemoveLabelAtAddress(state, addressRef);
 
-			dataAddress++;
+			if (state.AdvanceAddressRef(addressRef, 1) == false)
+			{
+				// TODO: report?
+				break;
+			}
+			//dataAddress++;
 		}
 	}
 }

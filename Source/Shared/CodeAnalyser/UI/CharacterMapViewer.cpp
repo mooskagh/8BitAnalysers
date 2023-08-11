@@ -60,7 +60,7 @@ void DrawColourInfoComboBox(EColourInfo* pValue)
 void DrawCharacterSetComboBox(FCodeAnalysisState& state, FAddressRef& addr)
 {
 	const FCharacterSet* pCharSet = addr.IsValid() ? GetCharacterSetFromAddress(addr) : nullptr;
-	const FLabelInfo* pLabel = pCharSet != nullptr ? state.GetLabelForAddress(addr.Address) : nullptr;	// TODO: fix
+	const FLabelInfo* pLabel = pCharSet != nullptr ? state.GetLabelForAddress(addr) : nullptr;
 
 	const char* pCharSetName = pLabel != nullptr ? pLabel->Name.c_str() : "None";
 
@@ -202,7 +202,7 @@ void DrawCharacterMap(FCharacterMapViewerUIState& uiState, FCodeAnalysisState& s
 		// Reformat Memory
 		FDataFormattingOptions formattingOptions;
 		formattingOptions.DataType = EDataType::CharacterMap;
-		formattingOptions.StartAddress = params.Address.Address;	// TODO
+		formattingOptions.StartAddress = params.Address;	
 		formattingOptions.ItemSize = params.Width;
 		formattingOptions.NoItems = params.Height;
 		formattingOptions.CharacterSet = params.CharacterSet;
