@@ -381,10 +381,8 @@ void FDataFindTool::Reset()
 }
 
 // todo:
-//   use findmemorypattern for 16 bit search
 //   search all memory banks - not just address range
 //	 investigate getwritedata when displaying accessor indicator
-//   does data item indicator work for word data? it should
 //	 use table
 //   unacessed memory tooltip incorrect
 void FDataFindTool::DrawUI()
@@ -696,7 +694,7 @@ void FFinder::Find(const FSearchOptions& opt)
 
 bool FByteFinder::FindNextMatch(uint16_t offset, uint16_t& outAddr)
 {
-	return pCpcEmu->CodeAnalysis.FindMemoryPattern(&SearchValue, 1, offset, outAddr);
+	return pCpcEmu->CodeAnalysis.FindMemoryPatternInPhysicalMemory(&SearchValue, 1, offset, outAddr);
 }
 
 bool FByteFinder::HasValueChanged(uint16_t addr) const
@@ -725,7 +723,7 @@ void FByteFinder::RemoveUnchangedResults()
 
 bool FWordFinder::FindNextMatch(uint16_t offset, uint16_t& outAddr)
 {
-	return pCpcEmu->CodeAnalysis.FindMemoryPattern(SearchBytes, 2, offset, outAddr);
+	return pCpcEmu->CodeAnalysis.FindMemoryPatternInPhysicalMemory(SearchBytes, 2, offset, outAddr);
 }
 
 bool FWordFinder::HasValueChanged(uint16_t addr) const
@@ -754,6 +752,6 @@ void FWordFinder::RemoveUnchangedResults()
 
 bool FTextFinder::FindNextMatch(uint16_t offset, uint16_t& outAddr)
 {
-	return pCpcEmu->CodeAnalysis.FindMemoryPattern((uint8_t*)SearchText.c_str(), SearchText.size(), offset, outAddr);
+	return pCpcEmu->CodeAnalysis.FindMemoryPatternInPhysicalMemory((uint8_t*)SearchText.c_str(), SearchText.size(), offset, outAddr);
 }
 
