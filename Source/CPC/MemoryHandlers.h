@@ -95,9 +95,10 @@ enum ESearchMemoryType
 
 struct FSearchOptions
 {
-	ESearchMemoryType memoryType = ESearchMemoryType::CodeAndData;
+	ESearchMemoryType MemoryType = ESearchMemoryType::CodeAndData;
 	bool bSearchUnreferenced = true;
 	bool bSearchUnaccessed = true;
+	bool bSearchGraphicsMem = false;
 };
 
 class FFinder
@@ -188,15 +189,11 @@ public:
 	void Reset();
 
 private:
-	FSearchOptions opt;
+	FSearchOptions Options;
 	ESearchType SearchType = ESearchType::Value;
 	ESearchDataType DataSize = ESearchDataType::Byte;
-	ESearchMemoryType MemoryType = ESearchMemoryType::CodeAndData;
-	
-	bool bDecimal = true;
 
-	bool bSearchUnreferenced = true;
-	bool bSearchUnaccessed = true;
+	bool bDecimal = true;
 
 	FFinder* pCurFinder = nullptr;
 	

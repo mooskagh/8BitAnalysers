@@ -281,7 +281,7 @@ void FDiffTool::DrawUI()
 	}
 
 	ImGui::SameLine();
-	ImGui::Checkbox("Include video memory", &bDiffVideoMem);
+	ImGui::Checkbox("Include Graphics Memory", &bDiffVideoMem);
 	ImGuiWindowFlags window_flags = ImGuiWindowFlags_HorizontalScrollbar;
 		
 	ImGui::Text("Address range");
@@ -383,7 +383,6 @@ void FDataFindTool::Reset()
 // todo:
 //   search all memory banks - not just address range
 //	 investigate getwritedata when displaying accessor indicator
-//	 use table
 //   unacessed memory tooltip incorrect
 void FDataFindTool::DrawUI()
 {
@@ -454,9 +453,9 @@ void FDataFindTool::DrawUI()
 	{
 		if (SearchType == ESearchType::Value)
 		{
-			if (ImGui::RadioButton("Data", MemoryType == ESearchMemoryType::Data))
+			if (ImGui::RadioButton("Data", Options.MemoryType == ESearchMemoryType::Data))
 			{
-				MemoryType = ESearchMemoryType::Data;
+				Options.MemoryType = ESearchMemoryType::Data;
 			}
 			ImGui::SameLine();
 			
@@ -465,9 +464,9 @@ void FDataFindTool::DrawUI()
 				ImGui::SetTooltip("Search only memory locations marked as data.");
 			}
 			
-			if (ImGui::RadioButton("Code", MemoryType == ESearchMemoryType::Code))
+			if (ImGui::RadioButton("Code", Options.MemoryType == ESearchMemoryType::Code))
 			{
-				MemoryType = ESearchMemoryType::Code;
+				Options.MemoryType = ESearchMemoryType::Code;
 			}
 			ImGui::SameLine();
 			
@@ -476,25 +475,27 @@ void FDataFindTool::DrawUI()
 				ImGui::SetTooltip("Search only memory locations marked as code.");
 			}
 			
-			if (ImGui::RadioButton("Search Code & Data", MemoryType == ESearchMemoryType::CodeAndData))
+			if (ImGui::RadioButton("Code & Data", Options.MemoryType == ESearchMemoryType::CodeAndData))
 			{
-				MemoryType = ESearchMemoryType::CodeAndData;
+				Options.MemoryType = ESearchMemoryType::CodeAndData;
 			}
 			
 			if (ImGui::IsItemHovered(ImGuiHoveredFlags_DelayNormal))
 			{
 				ImGui::SetTooltip("Search all memory locations - both code and data.");
 			}
+
+			ImGui::Checkbox("Search Graphics Memory", &Options.bSearchGraphicsMem);
 		}
 
-		ImGui::Checkbox("Search Unaccessed Memory", &bSearchUnaccessed);
+		ImGui::Checkbox("Search Unaccessed Memory", &Options.bSearchUnaccessed);
 		if (ImGui::IsItemHovered(ImGuiHoveredFlags_DelayNormal))
 		{
 			// todo this can return results when emulator not run. does it load accesses from disk?
 			ImGui::SetTooltip("Include search results from memory locations that have not been accessed this session.");
 		}
 
-		ImGui::Checkbox("Search Memory With No References", &bSearchUnreferenced);
+		ImGui::Checkbox("Search Memory With No References", &Options.bSearchUnreferenced);
 		if (ImGui::IsItemHovered(ImGuiHoveredFlags_DelayNormal))
 		{
 			ImGui::SetTooltip("Include search results from memory locations that have no references.");
@@ -544,64 +545,84 @@ void FDataFindTool::DrawUI()
 	ImGui::SameLine();
 	if (ImGui::Button("Find") || bPressedEnter)
 	{
-		FSearchOptions opt;
-		opt.memoryType = MemoryType;
-		opt.bSearchUnaccessed = bSearchUnaccessed;
-		opt.bSearchUnreferenced = bSearchUnreferenced;
-		pCurFinder->Find(opt);
+		pCurFinder->Find(Options);
 	}
 
 	ImGuiWindowFlags window_flags = ImGuiWindowFlags_HorizontalScrollbar;
-	ImVec2 childSize = ImVec2(0, -ImGui::GetFrameHeightWithSpacing() * (SearchType==ESearchType::Value ? 2.0f : 1.0f)); // Leave room for 1 or 2 lines below us
+	const ImVec2 childSize = ImVec2(0, -ImGui::GetFrameHeightWithSpacing() * (SearchType == ESearchType::Value ? 2.0f : 1.0f)); // Leave room for 1 or 2 lines below us
 	if (ImGui::BeginChild("SearchResults", childSize, true, window_flags)) 
 	{
 		if (pCurFinder->SearchResults.size())
 		{
-			const float lineHeight = ImGui::GetTextLineHeight();
-			ImGuiListClipper clipper((int)pCurFinder->SearchResults.size(), lineHeight);
+			static const float TEXT_BASE_WIDTH = ImGui::CalcTextSize("A").x;
+			static const float TEXT_BASE_HEIGHT = ImGui::GetTextLineHeightWithSpacing();
 
-			bool bUserPrefersHexAitch = GetNumberDisplayMode() == ENumberDisplayMode::HexAitch;
-			const ENumberDisplayMode numberMode = bDecimal ? ENumberDisplayMode::Decimal : bUserPrefersHexAitch ? ENumberDisplayMode::HexAitch : ENumberDisplayMode::HexDollar;
-			while (clipper.Step())
+			static ImGuiTableFlags flags = ImGuiTableFlags_Borders | ImGuiTableFlags_RowBg | ImGuiTableFlags_SizingFixedFit | ImGuiTableFlags_ScrollY;
+			const int numColumns = SearchType == ESearchType::Text ? 2 : 3;
+			if (ImGui::BeginTable("Events", numColumns, flags))
 			{
-				for (int i = clipper.DisplayStart; i < clipper.DisplayEnd; i++)
+				ImGui::TableSetupColumn("Address", ImGuiTableColumnFlags_WidthStretch);
+				if (SearchType == ESearchType::Value)
+					ImGui::TableSetupColumn("Value", ImGuiTableColumnFlags_WidthFixed, TEXT_BASE_WIDTH * 5);
+				ImGui::TableSetupColumn("Comment", ImGuiTableColumnFlags_WidthStretch);
+				ImGui::TableHeadersRow();
+
+				//const float lineHeight = ImGui::GetTextLineHeight(); // this breaks the clipper and makes it impossible to see the last few rows.
+				ImGuiListClipper clipper((int)pCurFinder->SearchResults.size()/*, lineHeight*/);
+
+				bool bUserPrefersHexAitch = GetNumberDisplayMode() == ENumberDisplayMode::HexAitch;
+				const ENumberDisplayMode numberMode = bDecimal ? ENumberDisplayMode::Decimal : bUserPrefersHexAitch ? ENumberDisplayMode::HexAitch : ENumberDisplayMode::HexDollar;
+				while (clipper.Step())
 				{
-					const uint16_t resultAddr = pCurFinder->SearchResults[i];
-					ImGui::PushID(resultAddr);
+					for (int i = clipper.DisplayStart; i < clipper.DisplayEnd; i++)
+					{
+						const uint16_t resultAddr = pCurFinder->SearchResults[i];
+						ImGui::PushID(i);
+						ImGui::TableNextRow();
 
-					// not sure this is right? what if this location doesnt have writedata? what if it is code?
-					if (const FDataInfo* pWriteDataInfo = pCpcEmu->CodeAnalysis.GetWriteDataInfoForAddress(resultAddr))
-					{
-						ShowDataItemActivity(pCpcEmu->CodeAnalysis, pCpcEmu->CodeAnalysis.AddressRefFromPhysicalAddress(resultAddr));
-					}
+						ImGui::TableNextColumn();
 
-					bool bValueChanged = pCurFinder->HasValueChanged(resultAddr);
-					if (bValueChanged)
-					{
-						ImGui::PushStyleColor(ImGuiCol_Text, IM_COL32(255, 255, 0, 255));
-					}
-					
-					if (SearchType == ESearchType::Value)
-					{ 
-						ImGui::Text("    %s\t%s", NumStr(resultAddr), pCurFinder->GetValueString(resultAddr, numberMode));
-					}
-					else if (SearchType == ESearchType::Text)
-					{
+						bool bValueChanged = pCurFinder->HasValueChanged(resultAddr);
+						if (bValueChanged)
+						{
+							ImGui::PushStyleColor(ImGuiCol_Text, IM_COL32(255, 255, 0, 255));
+						}
+
+						// Address
+						if (const FDataInfo* pWriteDataInfo = pCpcEmu->CodeAnalysis.GetWriteDataInfoForAddress(resultAddr))
+						{
+							ShowDataItemActivity(pCpcEmu->CodeAnalysis, pCpcEmu->CodeAnalysis.AddressRefFromPhysicalAddress(resultAddr));
+						}
+
 						ImGui::Text("    %s", NumStr(resultAddr));
-					}
-					ImGui::SameLine();
-					DrawAddressLabel(pCpcEmu->CodeAnalysis, viewState, resultAddr);
+						ImGui::SameLine();
+						DrawAddressLabel(pCpcEmu->CodeAnalysis, viewState, resultAddr);
 
-					if (bValueChanged)
-						ImGui::PopStyleColor();
-					
-					if (const FDataInfo* pWriteDataInfo = pCpcEmu->CodeAnalysis.GetWriteDataInfoForAddress(resultAddr))
-					{
-						// what if this is code?
-						DrawComment(pWriteDataInfo);
+						// Value
+						if (SearchType == ESearchType::Value)
+						{
+							ImGui::TableNextColumn();
+							if (SearchType == ESearchType::Value)
+							{
+								ImGui::Text ("%s", pCurFinder->GetValueString(resultAddr, numberMode));
+							}
+						}
+
+						// Comment
+						ImGui::TableNextColumn();
+						if (const FDataInfo* pWriteDataInfo = pCpcEmu->CodeAnalysis.GetWriteDataInfoForAddress(resultAddr))
+						{
+							// what if this is code?
+							DrawComment(pWriteDataInfo);
+						}
+						
+						if (bValueChanged)
+							ImGui::PopStyleColor();
+
+						ImGui::PopID();
 					}
-					ImGui::PopID();
 				}
+				ImGui::EndTable();
 			}
 		}
 	} 
@@ -641,44 +662,50 @@ void FFinder::Find(const FSearchOptions& opt)
 	while (FindNextMatch(curSearchAddr, curSearchAddr))
 	{
 		bool bAddResult = true;
-		if (opt.memoryType != ESearchMemoryType::CodeAndData)
+		const FDataInfo* pAnyDataInfo = nullptr;
+		const FCodeInfo* pCodeInfo = pCpcEmu->CodeAnalysis.GetCodeInfoForAddress(curSearchAddr);
 		{
-			const FDataInfo* pAnyDataInfo = nullptr;
-			const FCodeInfo* pCodeInfo = pCpcEmu->CodeAnalysis.GetCodeInfoForAddress(curSearchAddr);
-			{
-				const FDataInfo* pWriteDataInfo = pCpcEmu->CodeAnalysis.GetWriteDataInfoForAddress(curSearchAddr);
-				const FDataInfo* pReadDataInfo = pCpcEmu->CodeAnalysis.GetReadDataInfoForAddress(curSearchAddr);
-				pAnyDataInfo = pWriteDataInfo ? pWriteDataInfo : pReadDataInfo;
-			}
-			const bool bIsCode = pCodeInfo || (pAnyDataInfo && pAnyDataInfo->DataType == EDataType::InstructionOperand);
+			const FDataInfo* pWriteDataInfo = pCpcEmu->CodeAnalysis.GetWriteDataInfoForAddress(curSearchAddr);
+			const FDataInfo* pReadDataInfo = pCpcEmu->CodeAnalysis.GetReadDataInfoForAddress(curSearchAddr);
+			pAnyDataInfo = pWriteDataInfo ? pWriteDataInfo : pReadDataInfo;
+		}
+		const bool bIsCode = pCodeInfo || (pAnyDataInfo && pAnyDataInfo->DataType == EDataType::InstructionOperand);
 			
-			if (opt.memoryType == ESearchMemoryType::Code)
-			{
-				bAddResult = bIsCode;
-			}
-			else if (opt.memoryType == ESearchMemoryType::Data)
-			{
-				bAddResult = !bIsCode;
-			}
+		if (opt.MemoryType == ESearchMemoryType::Code)
+		{
+			bAddResult = bIsCode;
+		}
+		else if (opt.MemoryType == ESearchMemoryType::Data)
+		{
+			bAddResult = !bIsCode;
+		}
 
-			if (bAddResult)
+		if (bAddResult)
+		{
+			if (pAnyDataInfo)
 			{
-				if (pAnyDataInfo)
+				if (!opt.bSearchUnaccessed)
 				{
-					if (!opt.bSearchUnaccessed)
-					{
-						if (pAnyDataInfo->LastFrameRead == -1 && pAnyDataInfo->LastFrameWritten == -1)
-							bAddResult = false;
-					}
+					if (pAnyDataInfo->LastFrameRead == -1 && pAnyDataInfo->LastFrameWritten == -1)
+						bAddResult = false;
+				}
 
-					if (!opt.bSearchUnreferenced)
+				if (!opt.bSearchUnreferenced)
+				{
+					if (pAnyDataInfo->Reads.IsEmpty() && pAnyDataInfo->Writes.IsEmpty())
 					{
-						if (pAnyDataInfo->Reads.IsEmpty() && pAnyDataInfo->Writes.IsEmpty())
-						{
-							bAddResult = false;
-						}
+						bAddResult = false;
 					}
 				}
+			}
+		}
+
+		if (bAddResult)
+		{
+			if (!opt.bSearchGraphicsMem)
+			{
+				if (curSearchAddr >= pCpcEmu->GetScreenAddrStart() && curSearchAddr <= pCpcEmu->GetScreenAddrEnd())
+					bAddResult = false;
 			}
 		}
 
