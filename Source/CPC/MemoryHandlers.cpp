@@ -382,7 +382,7 @@ void FDataFindTool::Reset()
 
 // todo:
 //   search all memory banks - not just address range
-//	 investigate getwritedata when displaying accessor indicator
+//	 investigate use of GetWriteData(). needs refactor?
 //   unacessed memory tooltip incorrect
 void FDataFindTool::DrawUI()
 {
@@ -482,7 +482,7 @@ void FDataFindTool::DrawUI()
 			
 			if (ImGui::IsItemHovered(ImGuiHoveredFlags_DelayNormal))
 			{
-				ImGui::SetTooltip("Search all memory locations - both code and data.");
+				ImGui::SetTooltip("Search all memory locations - code and data.");
 			}
 
 			ImGui::Checkbox("Search Graphics Memory", &Options.bSearchGraphicsMem);
@@ -492,13 +492,13 @@ void FDataFindTool::DrawUI()
 		if (ImGui::IsItemHovered(ImGuiHoveredFlags_DelayNormal))
 		{
 			// todo this can return results when emulator not run. does it load accesses from disk?
-			ImGui::SetTooltip("Include search results from memory locations that have not been accessed this session.");
+			ImGui::SetTooltip("Include search results from memory locations that have not been accessed.");
 		}
 
 		ImGui::Checkbox("Search Memory With No References", &Options.bSearchUnreferenced);
 		if (ImGui::IsItemHovered(ImGuiHoveredFlags_DelayNormal))
 		{
-			ImGui::SetTooltip("Include search results from memory locations that have no references.");
+			ImGui::SetTooltip("Include search results from memory locations that have no code references.");
 		}
 		ImGui::TreePop();
 	}
@@ -555,7 +555,6 @@ void FDataFindTool::DrawUI()
 		if (pCurFinder->SearchResults.size())
 		{
 			static const float TEXT_BASE_WIDTH = ImGui::CalcTextSize("A").x;
-			static const float TEXT_BASE_HEIGHT = ImGui::GetTextLineHeightWithSpacing();
 
 			static ImGuiTableFlags flags = ImGuiTableFlags_Borders | ImGuiTableFlags_RowBg | ImGuiTableFlags_SizingFixedFit | ImGuiTableFlags_ScrollY;
 			const int numColumns = SearchType == ESearchType::Text ? 2 : 3;
@@ -563,7 +562,7 @@ void FDataFindTool::DrawUI()
 			{
 				ImGui::TableSetupColumn("Address", ImGuiTableColumnFlags_WidthStretch);
 				if (SearchType == ESearchType::Value)
-					ImGui::TableSetupColumn("Value", ImGuiTableColumnFlags_WidthFixed, TEXT_BASE_WIDTH * 5);
+					ImGui::TableSetupColumn("Value", ImGuiTableColumnFlags_WidthFixed, TEXT_BASE_WIDTH * 6);
 				ImGui::TableSetupColumn("Comment", ImGuiTableColumnFlags_WidthStretch);
 				ImGui::TableHeadersRow();
 
