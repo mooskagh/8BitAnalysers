@@ -249,11 +249,15 @@ bool FCodeAnalysisState::FindMemoryPatternInPhysicalMemory(uint8_t* pData, size_
 	return false;
 }
 
-FAddressRef FCodeAnalysisState::FindMemoryPattern(uint8_t* pData, size_t dataSize)
+std::vector<FAddressRef> FCodeAnalysisState::FindAllMemoryPatterns(uint8_t* pData, size_t dataSize, bool bROM)
 {
+	std::vector<FAddressRef> results;
 	// iterate through banks
 	for (auto& bank : Banks)
 	{
+		if (bank.bReadOnly && bROM == false)
+			continue;
+
 		const int bankByteSize = bank.GetSizeBytes();
 		for (int bAddr = 0; bAddr < bankByteSize - dataSize; bAddr++)
 		{
@@ -270,12 +274,12 @@ FAddressRef FCodeAnalysisState::FindMemoryPattern(uint8_t* pData, size_t dataSiz
 
 			if (bFound)
 			{
-				return FAddressRef(bank.Id, bAddr + bank.GetMappedAddress());
+				results.push_back(FAddressRef(bank.Id, bAddr + bank.GetMappedAddress()));
 			}
 		}
 	}
 
-	return FAddressRef();	// return invalid address
+	return results;	
 }
 
 bool IsAscii(uint8_t byte)
@@ -930,6 +934,7 @@ void FCodeAnalysisState::Init(ICPUInterface* pCPUInterface)
 	KeyConfig[(int)EKey::Breakpoint] = ImGuiKey_F9;
 
 	Debugger.Init(this);
+	MemoryAnalyser.Init(this);
 }
 
 void FCodeAnalysisState::OnFrameStart()
@@ -939,6 +944,7 @@ void FCodeAnalysisState::OnFrameStart()
 
 void FCodeAnalysisState::OnFrameEnd()
 {
+	MemoryAnalyser.FrameTick();
 	if (Debugger.FrameTick())
 	{
 		GetFocussedViewState().GoToAddress(CPUInterface->GetPC());

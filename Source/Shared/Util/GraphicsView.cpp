@@ -2,10 +2,15 @@
 #include "../CodeAnalyser/CodeAnalyser.h"
 #include <imgui.h>
 #include <ImGuiSupport/ImGuiTexture.h>
+#include <ImGuiSupport/ImGuiScaling.h>
 #include <cstdint>
 #include <vector>
 
-void DisplayTextureInspector(const ImTextureID texture, float width, float height, bool bScale = false, bool bMagnifier = true);
+// TODO: should probably have a separate file with all the STB impls in
+#define STB_IMAGE_WRITE_IMPLEMENTATION
+#include "stb/stb_image_write.h"
+
+void DisplayTextureInspector(const ImTextureID texture, float width, float height, bool bMagnifier = true);
 
 // speccy colour CLUT
 static const uint32_t g_SpeccyColourLUT[8] =
@@ -55,10 +60,10 @@ void FGraphicsView::Clear(const uint32_t col)
 		PixelBuffer[i] = col;
 }
 
-void FGraphicsView::Draw(float xSize, float ySize, bool bScale, bool bMagnifier)
+void FGraphicsView::Draw(float xSize, float ySize, bool bMagnifier)
 {
 	UpdateTexture();
-	DisplayTextureInspector(Texture, xSize, ySize, bScale, bMagnifier);
+	DisplayTextureInspector(Texture, xSize, ySize, bMagnifier);
 }
 
 void FGraphicsView::UpdateTexture(void)
@@ -68,7 +73,7 @@ void FGraphicsView::UpdateTexture(void)
 
 void FGraphicsView::Draw(bool bMagnifier)
 {
-	Draw((float)Width, (float)Height, false, bMagnifier);
+	Draw((float)Width, (float)Height, bMagnifier);
 }
 
 void FGraphicsView::DrawCharLine(uint8_t charLine, int xp, int yp, uint32_t inkCol, uint32_t paperCol)
@@ -119,18 +124,21 @@ void FGraphicsView::DrawBitImageChars(const uint8_t* pSrc, int xp, int yp, int w
 	}
 }
 
-
-void DisplayTextureInspector(const ImTextureID texture, float width, float height, bool bScale, bool bMagnifier)
+bool FGraphicsView::SavePNG(const char* pFName)
 {
-	const float imgScale = 1.0f;
-	ImVec2 pos = ImGui::GetCursorScreenPos();
-	ImVec2 size(width, height);
+	// TODO: we might need to flip the bytes
 
-	if (bScale)
-	{
-		const float scaledSize = ImGui::GetWindowContentRegionWidth() * imgScale;
-		size = ImVec2(scaledSize, scaledSize);
-	}
+	stbi_write_png(pFName, Width, Height, 4, PixelBuffer, Width * sizeof(uint32_t));
+
+	return true;
+}
+
+
+void DisplayTextureInspector(const ImTextureID texture, float width, float height, bool bMagnifier)
+{
+	const float imgScale = ImGui_GetScaling();
+	ImVec2 pos = ImGui::GetCursorScreenPos();
+	ImVec2 size(width * imgScale, height * imgScale);
 
 	ImGui::Image(texture, size);
 

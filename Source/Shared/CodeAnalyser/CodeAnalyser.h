@@ -10,6 +10,7 @@
 #include "CodeAnalyserTypes.h"
 #include "CodeAnalysisPage.h"
 #include "Debugger.h"
+#include "MemoryAnalyser.h"
 
 class FGraphicsView;
 class FCodeAnalysisState;
@@ -399,6 +400,7 @@ public:
 	FCodeAnalysisViewState& GetAltViewState() { return ViewState[FocussedWindowId ^ 1]; }
 	
 	FDebugger				Debugger;
+	FMemoryAnalyser			MemoryAnalyser;
 
 	FAddressRef				CopiedAddress;
 
@@ -560,7 +562,9 @@ public:
 	FMachineState* GetMachineState(uint16_t addr) { return GetReadPage(addr)->MachineState[addr & kPageMask];}
 	void SetMachineStateForAddress(uint16_t addr, FMachineState* pMachineState) { GetReadPage(addr)->MachineState[addr & kPageMask] = pMachineState; }
 
-	FAddressRef FindMemoryPattern(uint8_t* pData, size_t dataSize);
+	//FAddressRef FindMemoryPattern(uint8_t* pData, size_t dataSize);
+	std::vector<FAddressRef> FindAllMemoryPatterns(uint8_t* pData, size_t dataSize, bool bROM);
+
 	bool FindMemoryPatternInPhysicalMemory(uint8_t* pData, size_t dataSize, uint16_t offset, uint16_t& outAddr);
 
 	void FindAsciiStrings(uint16_t startAddress);

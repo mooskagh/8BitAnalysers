@@ -14,7 +14,7 @@ public:
 
 	void Clear(const uint32_t col = 0xff000000);
 	void UpdateTexture(void);
-	void Draw(float xSize, float ySize, bool bScale = false, bool bMagnifier = true);
+	void Draw(float xSize, float ySize, bool bMagnifier = true);
 	void Draw(bool bMagnifier = true);
 
 	void DrawCharLine(uint8_t charLine, int xp, int yp, uint32_t inkCol, uint32_t paperCol);
@@ -34,6 +34,9 @@ public:
 	int GetWidth() const { return Width; }
 	int GetHeight() const { return Height; }
 	const void* GetTexture() const { return Texture; }
+
+	bool SavePNG(const char* pFName);
+
 private:
 	int				Width = 0;
 	int				Height = 0;
