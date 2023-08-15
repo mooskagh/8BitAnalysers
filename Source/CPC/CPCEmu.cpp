@@ -355,7 +355,7 @@ uint64_t FCpcEmu::Z80Tick(int num, uint64_t pins)
 	}
 
 	// sam. need to do this somewhere better. like when the screen ram address gets set 
-	debugger.SetScreenMemoryArea(GetScreenAddrStart(), GetScreenAddrEnd());
+	CodeAnalysis.MemoryAnalyser.SetScreenMemoryArea(GetScreenAddrStart(), GetScreenAddrEnd());
 
 	debugger.CPUTick(pins);
 
@@ -901,7 +901,7 @@ bool FCpcEmu::Init(const FCpcConfig& config)
 	debugger.RegisterEventType((int)EEventType::CrtcRegisterWrite,		"CRTC Reg. Write",	0xffffff00, CRTCWriteEventShowAddress, CRTCWriteEventShowValue);
 	debugger.RegisterEventType((int)EEventType::KeyboardRead,			"Keyboard Read",	0xff808080, IOPortEventShowAddress, IOPortEventShowValue);
 	
-	debugger.SetScreenMemoryArea(GetScreenAddrStart(), GetScreenAddrEnd());
+	CodeAnalysis.MemoryAnalyser.SetScreenMemoryArea(GetScreenAddrStart(), GetScreenAddrEnd());
 
 	bInitialised = true;
 
