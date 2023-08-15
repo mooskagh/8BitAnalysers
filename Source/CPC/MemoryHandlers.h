@@ -95,27 +95,40 @@ enum ESearchMemoryType
 
 struct FSearchOptions
 {
-	ESearchMemoryType MemoryType = ESearchMemoryType::CodeAndData;
-	bool bSearchUnreferenced = true;
-	bool bSearchUnaccessed = true;
-	bool bSearchGraphicsMem = false;
+	ESearchMemoryType MemoryType = ESearchMemoryType::CodeAndData; // What type of memory locations to search?
+	bool bSearchUnreferenced = true; // Search locations with no references
+	bool bSearchUnaccessed = true;	 // Search locations that have not been written or read.
+	bool bSearchGraphicsMem = false; // Include graphics memory in the search?
+	bool bSearchAllBanks = false;	 // If true, will search the all memory banks, including ones paged out. If false, will search only physical memory.
+	bool bSearchROM = false;		 // Include ROM in the search?
 };
 
 class FFinder
 {
 public:
-	void Init(FCpcEmu* pEmu)
+	void Init(FCpcEmu* pEmu) // pass in codeanalysis state here
 	{
 		pCpcEmu = pEmu;
 	}
-	virtual void Reset();
-	virtual bool FindNextMatch(uint16_t offset, uint16_t& outAddr) = 0;
-	virtual bool HasValueChanged(uint16_t addr) const;
 	virtual void Find(const FSearchOptions& opt);
-	virtual const char* GetValueString(uint16_t addr, ENumberDisplayMode numberMode) const = 0;
+	virtual void Reset();
+	virtual void FindInAllBanks(const FSearchOptions& opt);
+	virtual void FindInPhysicalMemory(const FSearchOptions& opt);
+	virtual bool FindNextMatchInPhysicalMemory(uint16_t offset, uint16_t& outAddr) = 0;
+	virtual void ProcessMatch(FAddressRef addr, const FSearchOptions& opt);
+
+	virtual bool HasValueChanged(FAddressRef addr) const; // convert to addressref
+	virtual const char* GetValueString(FAddressRef addr, ENumberDisplayMode numberMode) const = 0;
 	virtual void RemoveUnchangedResults() {}
 
-	std::vector<uint16_t> SearchResults;
+	size_t GetNumResults() const { return SearchResults.size(); }
+	FAddressRef GetResult(size_t index) const { return SearchResults[index]; }
+
+protected:
+	virtual std::vector<FAddressRef> FindAllMatchesInBanks(const FSearchOptions& opt) = 0;
+
+protected:
+	std::vector<FAddressRef> SearchResults;
 
 protected:	
 	FCpcEmu* pCpcEmu = nullptr;
@@ -128,14 +141,15 @@ class FDataFinder : public FFinder
 class FByteFinder : public FDataFinder
 {
 public:
-	virtual bool FindNextMatch(uint16_t offset, uint16_t& outAddr) override;
-	virtual bool HasValueChanged(uint16_t addr) const override;
+	virtual bool FindNextMatchInPhysicalMemory(uint16_t offset, uint16_t& outAddr) override;
+	virtual bool HasValueChanged(FAddressRef addr) const override;
 	virtual void Find(const FSearchOptions& opt) override
 	{
 		LastValue = SearchValue;
 		FFinder::Find(opt);
 	}
-	virtual const char* GetValueString(uint16_t addr, ENumberDisplayMode numberMode) const override;
+	virtual std::vector<FAddressRef> FindAllMatchesInBanks(const FSearchOptions& opt) override;
+	virtual const char* GetValueString(FAddressRef addr, ENumberDisplayMode numberMode) const override;
 	virtual void RemoveUnchangedResults() override;
 	uint8_t SearchValue = 0;
 	uint8_t LastValue = 0;
@@ -144,8 +158,8 @@ public:
 class FWordFinder : public FDataFinder
 {
 public:
-	virtual bool FindNextMatch(uint16_t offset, uint16_t& outAddr) override;
-	virtual bool HasValueChanged(uint16_t addr) const override;
+	virtual bool FindNextMatchInPhysicalMemory(uint16_t offset, uint16_t& outAddr) override;
+	virtual bool HasValueChanged(FAddressRef addr) const override;
 	virtual void Find(const FSearchOptions& opt) override
 	{
 		LastValue = SearchValue;
@@ -153,7 +167,8 @@ public:
 		SearchBytes[0] = static_cast<uint8_t>(SearchValue);
 		FFinder::Find(opt);
 	}
-	virtual const char* GetValueString(uint16_t addr, ENumberDisplayMode numberMode) const override;
+	virtual std::vector<FAddressRef> FindAllMatchesInBanks(const FSearchOptions& opt) override;
+	virtual const char* GetValueString(FAddressRef addr, ENumberDisplayMode numberMode) const override;
 	virtual void RemoveUnchangedResults() override;
 	uint16_t SearchValue = 0;
 	uint8_t SearchBytes[2];
@@ -163,8 +178,9 @@ public:
 class FTextFinder : public FFinder
 {
 public:
-	virtual bool FindNextMatch(uint16_t offset, uint16_t& outAddr) override;
-	virtual const char* GetValueString(uint16_t addr, ENumberDisplayMode numberMode) const override { return ""; }
+	virtual bool FindNextMatchInPhysicalMemory(uint16_t offset, uint16_t& outAddr) override;
+	virtual std::vector<FAddressRef> FindAllMatchesInBanks(const FSearchOptions& opt) override;
+	virtual const char* GetValueString(FAddressRef addr, ENumberDisplayMode numberMode) const override { return ""; }
 	std::string SearchText;
 };
 
@@ -184,10 +200,12 @@ enum ESearchDataType
 class FDataFindTool
 {
 public:
-	void Init(FCpcEmu* pEmu);
+	void Init(FCpcEmu* pEmu); // pass in codeanalysisstate.
 	void DrawUI();
 	void Reset();
 
+	// need getphysicalbyte() getphysicalword() function here to read ram (not rom) that can be overloaded?
+	//virtual GetByte
 private:
 	FSearchOptions Options;
 	ESearchType SearchType = ESearchType::Value;

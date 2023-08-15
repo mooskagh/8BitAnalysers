@@ -382,6 +382,8 @@ void FDataFindTool::Reset()
 
 // todo:
 //   search all memory banks - not just address range
+//	 HasValueChanged() fixup for rom
+//	 address display when bank is paged out
 //	 investigate use of GetWriteData(). needs refactor?
 //   unacessed memory tooltip incorrect
 void FDataFindTool::DrawUI()
@@ -406,14 +408,18 @@ void FDataFindTool::DrawUI()
 	{
 		SearchType = ESearchType::Text;
 	}
-	if (ImGui::RadioButton("Byte", DataSize == ESearchDataType::Byte))
+
+	if (SearchType == ESearchType::Value)
 	{
-		DataSize = ESearchDataType::Byte;
-	}
-	ImGui::SameLine();
-	if (ImGui::RadioButton("Word", DataSize == ESearchDataType::Word))
-	{
-		DataSize = ESearchDataType::Word;
+		if (ImGui::RadioButton("Byte", DataSize == ESearchDataType::Byte))
+		{
+			DataSize = ESearchDataType::Byte;
+		}
+		ImGui::SameLine();
+		if (ImGui::RadioButton("Word", DataSize == ESearchDataType::Word))
+		{
+			DataSize = ESearchDataType::Word;
+		}
 	}
  
 	if (lastSearchType != SearchType || lastDataSize != DataSize)
@@ -488,6 +494,9 @@ void FDataFindTool::DrawUI()
 			ImGui::Checkbox("Search Graphics Memory", &Options.bSearchGraphicsMem);
 		}
 
+		ImGui::Checkbox("Search All Banks", &Options.bSearchAllBanks);
+		ImGui::Checkbox("Search ROM", &Options.bSearchROM);
+
 		ImGui::Checkbox("Search Unaccessed Memory", &Options.bSearchUnaccessed);
 		if (ImGui::IsItemHovered(ImGuiHoveredFlags_DelayNormal))
 		{
@@ -552,22 +561,23 @@ void FDataFindTool::DrawUI()
 	const ImVec2 childSize = ImVec2(0, -ImGui::GetFrameHeightWithSpacing() * (SearchType == ESearchType::Value ? 2.0f : 1.0f)); // Leave room for 1 or 2 lines below us
 	if (ImGui::BeginChild("SearchResults", childSize, true, window_flags)) 
 	{
-		if (pCurFinder->SearchResults.size())
+		if (pCurFinder->GetNumResults())
 		{
 			static const float TEXT_BASE_WIDTH = ImGui::CalcTextSize("A").x;
 
-			static ImGuiTableFlags flags = ImGuiTableFlags_Borders | ImGuiTableFlags_RowBg | ImGuiTableFlags_SizingFixedFit | ImGuiTableFlags_ScrollY;
-			const int numColumns = SearchType == ESearchType::Text ? 2 : 3;
-			if (ImGui::BeginTable("Events", numColumns, flags))
+			static ImGuiTableFlags flags = ImGuiTableFlags_Borders | ImGuiTableFlags_RowBg | ImGuiTableFlags_SizingFixedFit | ImGuiTableFlags_Resizable | ImGuiTableFlags_ScrollY;
+			const int numColumns = SearchType == ESearchType::Text ? 3 : 4;
+			if (ImGui::BeginTable("SearchResultsTable", numColumns, flags))
 			{
-				ImGui::TableSetupColumn("Address", ImGuiTableColumnFlags_WidthStretch);
+				ImGui::TableSetupColumn("Bank", ImGuiTableColumnFlags_WidthFixed, TEXT_BASE_WIDTH * 8);
+				ImGui::TableSetupColumn("Address", ImGuiTableColumnFlags_WidthFixed, TEXT_BASE_WIDTH * 40);
 				if (SearchType == ESearchType::Value)
 					ImGui::TableSetupColumn("Value", ImGuiTableColumnFlags_WidthFixed, TEXT_BASE_WIDTH * 6);
 				ImGui::TableSetupColumn("Comment", ImGuiTableColumnFlags_WidthStretch);
 				ImGui::TableHeadersRow();
 
 				//const float lineHeight = ImGui::GetTextLineHeight(); // this breaks the clipper and makes it impossible to see the last few rows.
-				ImGuiListClipper clipper((int)pCurFinder->SearchResults.size()/*, lineHeight*/);
+				ImGuiListClipper clipper((int)pCurFinder->GetNumResults()/*, lineHeight*/);
 
 				bool bUserPrefersHexAitch = GetNumberDisplayMode() == ENumberDisplayMode::HexAitch;
 				const ENumberDisplayMode numberMode = bDecimal ? ENumberDisplayMode::Decimal : bUserPrefersHexAitch ? ENumberDisplayMode::HexAitch : ENumberDisplayMode::HexDollar;
@@ -575,7 +585,7 @@ void FDataFindTool::DrawUI()
 				{
 					for (int i = clipper.DisplayStart; i < clipper.DisplayEnd; i++)
 					{
-						const uint16_t resultAddr = pCurFinder->SearchResults[i];
+						const FAddressRef resultAddr = pCurFinder->GetResult(i);
 						ImGui::PushID(i);
 						ImGui::TableNextRow();
 
@@ -587,13 +597,22 @@ void FDataFindTool::DrawUI()
 							ImGui::PushStyleColor(ImGuiCol_Text, IM_COL32(255, 255, 0, 255));
 						}
 
+						// Bank
+						std::string bankName = "Unknown";
+						if (FCodeAnalysisBank* pBank = pCpcEmu->CodeAnalysis.GetBank(resultAddr.BankId))
+						{
+							bankName = pBank->Name;
+						}
+						ImGui::Text("%s", bankName.c_str());
+
 						// Address
+						ImGui::TableNextColumn();
 						if (const FDataInfo* pWriteDataInfo = pCpcEmu->CodeAnalysis.GetWriteDataInfoForAddress(resultAddr))
 						{
-							ShowDataItemActivity(pCpcEmu->CodeAnalysis, pCpcEmu->CodeAnalysis.AddressRefFromPhysicalAddress(resultAddr));
+							ShowDataItemActivity(pCpcEmu->CodeAnalysis, resultAddr);
 						}
 
-						ImGui::Text("    %s", NumStr(resultAddr));
+						ImGui::Text("    %s", NumStr(resultAddr.Address));
 						ImGui::SameLine();
 						DrawAddressLabel(pCpcEmu->CodeAnalysis, viewState, resultAddr);
 
@@ -626,7 +645,7 @@ void FDataFindTool::DrawUI()
 		}
 	} 
 	ImGui::EndChild();
-	ImGui::Text("%d results found", pCurFinder->SearchResults.size());
+	ImGui::Text("%d results found", pCurFinder->GetNumResults());
 
 	if (SearchType == ESearchType::Value)
 	{
@@ -647,7 +666,7 @@ void FFinder::Reset()
 	SearchResults.clear();
 }
 
-bool FFinder::HasValueChanged(uint16_t addr) const
+bool FFinder::HasValueChanged(FAddressRef addr) const
 {
 	return false;
 }
@@ -656,116 +675,176 @@ void FFinder::Find(const FSearchOptions& opt)
 {
 	SearchResults.clear();
 
-	uint16_t curSearchAddr = 0;
-
-	while (FindNextMatch(curSearchAddr, curSearchAddr))
+	if (opt.bSearchAllBanks)
 	{
-		bool bAddResult = true;
-		const FDataInfo* pAnyDataInfo = nullptr;
-		const FCodeInfo* pCodeInfo = pCpcEmu->CodeAnalysis.GetCodeInfoForAddress(curSearchAddr);
-		{
-			const FDataInfo* pWriteDataInfo = pCpcEmu->CodeAnalysis.GetWriteDataInfoForAddress(curSearchAddr);
-			const FDataInfo* pReadDataInfo = pCpcEmu->CodeAnalysis.GetReadDataInfoForAddress(curSearchAddr);
-			pAnyDataInfo = pWriteDataInfo ? pWriteDataInfo : pReadDataInfo;
-		}
-		const bool bIsCode = pCodeInfo || (pAnyDataInfo && pAnyDataInfo->DataType == EDataType::InstructionOperand);
-			
-		if (opt.MemoryType == ESearchMemoryType::Code)
-		{
-			bAddResult = bIsCode;
-		}
-		else if (opt.MemoryType == ESearchMemoryType::Data)
-		{
-			bAddResult = !bIsCode;
-		}
+		FindInAllBanks(opt);
+	}
+	else
+	{
+		FindInPhysicalMemory(opt);
+	}
+}
 
-		if (bAddResult)
+// todo search rom option for physical memory
+void FFinder::ProcessMatch(FAddressRef addr, const FSearchOptions& opt)
+{
+	bool bAddResult = true;
+	const FDataInfo* pAnyDataInfo = nullptr;
+	const FCodeInfo* pCodeInfo = pCpcEmu->CodeAnalysis.GetCodeInfoForAddress(addr);
+	{
+		const FDataInfo* pWriteDataInfo = pCpcEmu->CodeAnalysis.GetWriteDataInfoForAddress(addr);
+		const FDataInfo* pReadDataInfo = pCpcEmu->CodeAnalysis.GetReadDataInfoForAddress(addr);
+		pAnyDataInfo = pWriteDataInfo ? pWriteDataInfo : pReadDataInfo;
+	}
+	const bool bIsCode = pCodeInfo || (pAnyDataInfo && pAnyDataInfo->DataType == EDataType::InstructionOperand);
+
+	if (opt.MemoryType == ESearchMemoryType::Code)
+	{
+		bAddResult = bIsCode;
+	}
+	else if (opt.MemoryType == ESearchMemoryType::Data)
+	{
+		bAddResult = !bIsCode;
+	}
+
+	if (bAddResult)
+	{
+		if (pAnyDataInfo)
 		{
-			if (pAnyDataInfo)
+			if (!opt.bSearchUnaccessed)
 			{
-				if (!opt.bSearchUnaccessed)
-				{
-					if (pAnyDataInfo->LastFrameRead == -1 && pAnyDataInfo->LastFrameWritten == -1)
-						bAddResult = false;
-				}
-
-				if (!opt.bSearchUnreferenced)
-				{
-					if (pAnyDataInfo->Reads.IsEmpty() && pAnyDataInfo->Writes.IsEmpty())
-					{
-						bAddResult = false;
-					}
-				}
-			}
-		}
-
-		if (bAddResult)
-		{
-			if (!opt.bSearchGraphicsMem)
-			{
-				if (curSearchAddr >= pCpcEmu->GetScreenAddrStart() && curSearchAddr <= pCpcEmu->GetScreenAddrEnd())
+				if (pAnyDataInfo->LastFrameRead == -1 && pAnyDataInfo->LastFrameWritten == -1)
 					bAddResult = false;
 			}
-		}
 
-		if (bAddResult)
-		{
-			SearchResults.push_back(curSearchAddr);
+			if (!opt.bSearchUnreferenced)
+			{
+				if (pAnyDataInfo->Reads.IsEmpty() && pAnyDataInfo->Writes.IsEmpty())
+				{
+					bAddResult = false;
+				}
+			}
 		}
+	}
+
+	if (bAddResult)
+	{
+		/*
+		if (!opt.bSearchGraphicsMem)
+		{
+			if (curSearchAddr >= pCpcEmu->GetScreenAddrStart() && curSearchAddr <= pCpcEmu->GetScreenAddrEnd())
+				bAddResult = false;
+		}*/
+	}
+
+	if (bAddResult)
+	{
+		SearchResults.push_back(addr);
+	}
+}
+
+void FFinder::FindInAllBanks(const FSearchOptions& opt)
+{
+	std::vector<FAddressRef> allMatches = FindAllMatchesInBanks(opt);
+
+	for (const FAddressRef& addr : allMatches)
+	{
+		ProcessMatch(addr, opt);
+	}
+}
+
+void FFinder::FindInPhysicalMemory(const FSearchOptions& opt)
+{
+	uint16_t curSearchAddr = 0;
+
+	while (FindNextMatchInPhysicalMemory(curSearchAddr, curSearchAddr))
+	{
+		const FAddressRef addr = pCpcEmu->CodeAnalysis.AddressRefFromPhysicalAddress(curSearchAddr);
+
+		ProcessMatch(addr, opt);
+		
 		curSearchAddr++;
 		if (curSearchAddr == 0)
 			break;
 	}
 }
 
-bool FByteFinder::FindNextMatch(uint16_t offset, uint16_t& outAddr)
+bool FByteFinder::FindNextMatchInPhysicalMemory(uint16_t offset, uint16_t& outAddr)
 {
 	return pCpcEmu->CodeAnalysis.FindMemoryPatternInPhysicalMemory(&SearchValue, 1, offset, outAddr);
 }
 
-bool FByteFinder::HasValueChanged(uint16_t addr) const
+std::vector<FAddressRef> FByteFinder::FindAllMatchesInBanks(const FSearchOptions& opt)
 {
-	const uint8_t curValue = pCpcEmu->ReadWritableByte(addr);
+	return pCpcEmu->CodeAnalysis.FindAllMemoryPatterns(&SearchValue, 1, opt.bSearchROM);
+}
+
+bool FByteFinder::HasValueChanged(FAddressRef addr) const
+{
+	// todo this needs to work for rom
+	// if searching all banks then should use FCodeAnalysisState::ReadByte(FAddressRef address)
+	// if searching physical memory, and rom is paged in, then what should we read? the ram or rom? how should the "search rom" flag affect
+	// the behaviour?
+	// 
+	// maybe it would be simpler to disable the "search rom" feature?
+	// on the speccy it should be simpler?
+	// maybe disable it on the cpc?
+	// 
+	// up to now, I have presumed we always want to read the RAM instead of rom (FCodeAnalysisState::ReadByte(uint16_t address) will read rom)
+	// this is because the cpc can have rom behind ram. but in the case of the spectrum, the rom is in the address space
+	
+	const uint8_t curValue = pCpcEmu->ReadWritableByte(addr.Address);
 	return curValue != LastValue;
 }
 
-const char* FByteFinder::GetValueString(uint16_t addr, ENumberDisplayMode numberMode) const
+const char* FByteFinder::GetValueString(FAddressRef addr, ENumberDisplayMode numberMode) const
 {
-	const uint8_t value = pCpcEmu->ReadWritableByte(addr);
+	const uint8_t value = pCpcEmu->ReadWritableByte(addr.Address);
 	return NumStr(value, numberMode);
 }
 
 void FByteFinder::RemoveUnchangedResults()
 {
-	for (auto it = SearchResults.begin(); it != SearchResults.end(); )
+	// use HasValueChanged()?
+
+	/*
+	for (auto it = SearchResultsPhysical.begin(); it != SearchResultsPhysical.end(); )
 	{
 		const uint8_t value = pCpcEmu->ReadWritableByte(*it);
 		if (value == LastValue)
-			it = SearchResults.erase(it);
+			it = SearchResultsPhysical.erase(it);
 		else
 			++it;
-	}
+	}*/
 }
 
-bool FWordFinder::FindNextMatch(uint16_t offset, uint16_t& outAddr)
+bool FWordFinder::FindNextMatchInPhysicalMemory(uint16_t offset, uint16_t& outAddr)
 {
 	return pCpcEmu->CodeAnalysis.FindMemoryPatternInPhysicalMemory(SearchBytes, 2, offset, outAddr);
 }
 
-bool FWordFinder::HasValueChanged(uint16_t addr) const
+std::vector<FAddressRef> FWordFinder::FindAllMatchesInBanks(const FSearchOptions& opt)
 {
-	const uint16_t curValue = pCpcEmu->ReadWritableWord(addr);
+	return pCpcEmu->CodeAnalysis.FindAllMemoryPatterns(SearchBytes, 2, opt.bSearchROM);
+}
+
+bool FWordFinder::HasValueChanged(FAddressRef addr) const
+{
+	// todo this needs to work for rom
+
+	const uint16_t curValue = pCpcEmu->ReadWritableWord(addr.Address);
 	return curValue != LastValue;
 }
 
-const char* FWordFinder::GetValueString(uint16_t addr, ENumberDisplayMode numberMode) const
+const char* FWordFinder::GetValueString(FAddressRef addr, ENumberDisplayMode numberMode) const
 {
-	const uint16_t value = pCpcEmu->ReadWritableWord(addr);
+	const uint16_t value = pCpcEmu->ReadWritableWord(addr.Address);
 	return NumStr(value, numberMode);
 }
 
 void FWordFinder::RemoveUnchangedResults()
 {
+	/*
 	for (auto it = SearchResults.begin(); it != SearchResults.end(); )
 	{
 		const uint16_t value = pCpcEmu->ReadWritableWord(*it);
@@ -773,11 +852,15 @@ void FWordFinder::RemoveUnchangedResults()
 			it = SearchResults.erase(it);
 		else
 			++it;
-	}
+	}*/
 }
 
-bool FTextFinder::FindNextMatch(uint16_t offset, uint16_t& outAddr)
+bool FTextFinder::FindNextMatchInPhysicalMemory(uint16_t offset, uint16_t& outAddr)
 {
 	return pCpcEmu->CodeAnalysis.FindMemoryPatternInPhysicalMemory((uint8_t*)SearchText.c_str(), SearchText.size(), offset, outAddr);
 }
 
+std::vector<FAddressRef> FTextFinder::FindAllMatchesInBanks(const FSearchOptions& opt)
+{
+	return pCpcEmu->CodeAnalysis.FindAllMemoryPatterns((uint8_t*)SearchText.c_str(), SearchText.size(), opt.bSearchROM);
+}
