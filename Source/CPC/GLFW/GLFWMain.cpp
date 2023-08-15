@@ -35,6 +35,7 @@
 
 #define STB_IMAGE_IMPLEMENTATION
 #include <stb/stb_image.h>
+#include <ImGuiSupport/ImGuiScaling.h>
 
 struct FAppState
 {
@@ -175,6 +176,8 @@ int main(int argc, char** argv)
             LOGWARNING("Could not load font '%s'", fontPath.c_str());
         }
     }
+
+    ImGui_InitScaling();
 
     // Main loop
     while (!glfwWindowShouldClose(appState.MainWindow))

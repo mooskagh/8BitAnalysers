@@ -1027,6 +1027,11 @@ void FCpcEmu::StartGame(FGameConfig* pGameConfig, bool bLoadGameData /* =  true*
 	CodeAnalysis.Debugger.Break();
 
 	CodeAnalysis.Debugger.RegisterNewStackPointer(CpcEmuState.cpu.sp, FAddressRef());
+
+#if SPECCY
+	FGlobalConfig& globalConfig = GetGlobalConfig();
+	GraphicsViewer.SetImagesRoot((globalConfig.WorkspaceRoot + "GraphicsSets/" + pGameConfig->Name + "/").c_str());
+#endif
 }
 
 bool FCpcEmu::StartGame(const char* pGameName)
@@ -1658,6 +1663,12 @@ void FCpcEmu::DrawUI()
 	if (ImGui::Begin("Debugger"))
 	{
 		CodeAnalysis.Debugger.DrawUI();
+	}
+	ImGui::End();
+
+	if (ImGui::Begin("Memory Analyser"))
+	{
+		CodeAnalysis.MemoryAnalyser.DrawUI();
 	}
 	ImGui::End();
 
