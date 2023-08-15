@@ -175,10 +175,12 @@ public:
 	static const int	kNoBankPages = 16;	// no of pages per physical address slot (16k)
 	static const int	kNoRAMPages = 128;
 	static const int	kNoROMBanks = 3;
-	static const int	kNoRAMBanks = 8;
+	static const int	kMaxNoRAMBanks = 8; // this is the max number of ram banks. in 64k mode we'll only use 4
+	static const int	kNoRAMBanks64k = 4;
+	static const int	kNoRAMBanks128k = 8; 
 
 	int16_t				ROMBanks[kNoROMBanks];
-	int16_t				RAMBanks[kNoRAMBanks];
+	int16_t				RAMBanks[kMaxNoRAMBanks];
 	//FCodeAnalysisPage	ROMPages[kNoROMPages];
 	//FCodeAnalysisPage	RAMPages[kNoRAMPages];
 	
