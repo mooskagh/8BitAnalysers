@@ -798,8 +798,6 @@ bool FCpcEmu::Init(const FCpcConfig& config)
 	GraphicsViewer.pEmu = this;
 	InitGraphicsViewer(GraphicsViewer);
 	IOAnalysis.Init(this);
-	DiffTool.Init(this);
-	DataFindTool.Init(this);
 	CpcViewer.Init(this);
 	CodeAnalysis.ViewState[0].Enabled = true;	// always have first view enabled
 
@@ -931,7 +929,6 @@ void FCpcEmu::StartGame(FGameConfig* pGameConfig, bool bLoadGameData /* =  true*
 	MemoryAccessHandlers.clear();	// remove old memory handlers
 	ResetMemoryStats(MemStats);
 	FrameTraceViewer.Reset();
-	DataFindTool.Reset();
 
 	const std::string memStr = CpcEmuState.type == CPC_TYPE_6128 ? " (CPC 6128)" : " (CPC 464)";
 	const std::string windowTitle = kAppTitle + " - " + pGameConfig->Name + memStr;
@@ -1597,21 +1594,10 @@ void FCpcEmu::DrawMemoryTools()
 			ImGui::EndTabItem();
 		}
 #endif
-		if (ImGui::BeginTabItem("Memory Diff"))
-		{
-			DiffTool.DrawUI();
-			ImGui::EndTabItem();
-		}
-
+		
 		if (ImGui::BeginTabItem("IO Analysis"))
 		{
 			IOAnalysis.DrawUI();
-			ImGui::EndTabItem();
-		}
-
-		if (ImGui::BeginTabItem("Find"))
-		{
-			DataFindTool.DrawUI();
 			ImGui::EndTabItem();
 		}
 

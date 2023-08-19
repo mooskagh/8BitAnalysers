@@ -169,8 +169,6 @@ public:
 	FGraphicsViewerState	GraphicsViewer;
 	FCodeAnalysisState		CodeAnalysis;
 	FIOAnalysis				IOAnalysis;
-	FDiffTool				DiffTool;
-	FDataFindTool			DataFindTool;
 
 	static const int	kNoBankPages = 16;	// no of pages per physical address slot (16k)
 	static const int	kNoRAMPages = 128;
