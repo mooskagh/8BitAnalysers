@@ -820,10 +820,8 @@ bool FCpcEmu::Init(const FCpcConfig& config)
 	CodeAnalysis.GetBank(ROMBanks[ROM_BASIC])->PrimaryMappedPage = 48;
 //#endif
 
-	int numBanks = config.Model == ECpcModel::CPC_464 ? kNoRAMBanks64k : kNoRAMBanks128k;
-
 	// create & register RAM banks
-	for (int bankNo = 0; bankNo < numBanks; bankNo++)
+	for (int bankNo = 0; bankNo < kNoRAMBanks; bankNo++)
 	{
 		char bankName[32];
 		sprintf(bankName, "RAM %d", bankNo);
