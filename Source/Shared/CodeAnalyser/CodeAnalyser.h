@@ -11,6 +11,7 @@
 #include "CodeAnalysisPage.h"
 #include "Debugger.h"
 #include "MemoryAnalyser.h"
+#include "IOAnalyser.h"
 
 class FGraphicsView;
 class FCodeAnalysisState;
@@ -140,6 +141,7 @@ struct FAddressCoord
 	FAddressRef		Address;
 	float			YPos;
 };
+
 
 // view state for code analysis window
 struct FCodeAnalysisViewState
@@ -401,6 +403,7 @@ public:
 	
 	FDebugger				Debugger;
 	FMemoryAnalyser			MemoryAnalyser;
+	FIOAnalyser				IOAnalyser;
 
 	FAddressRef				CopiedAddress;
 
@@ -563,9 +566,10 @@ public:
 	void SetMachineStateForAddress(uint16_t addr, FMachineState* pMachineState) { GetReadPage(addr)->MachineState[addr & kPageMask] = pMachineState; }
 
 	//FAddressRef FindMemoryPattern(uint8_t* pData, size_t dataSize);
-	std::vector<FAddressRef> FindAllMemoryPatterns(uint8_t* pData, size_t dataSize, bool bROM);
+	std::vector<FAddressRef> FindAllMemoryPatterns(uint8_t* pData, size_t dataSize, bool bROM, bool bPhysicalOnly);
+	std::vector<FFoundString> FindAllStrings(bool bROM, bool bPhysicalOnly);
 
-	bool FindMemoryPatternInPhysicalMemory(uint8_t* pData, size_t dataSize, uint16_t offset, uint16_t& outAddr);
+	//bool FindMemoryPatternInPhysicalMemory(uint8_t* pData, size_t dataSize, uint16_t offset, uint16_t& outAddr);
 
 	void FindAsciiStrings(uint16_t startAddress);
 
