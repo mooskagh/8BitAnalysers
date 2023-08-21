@@ -269,8 +269,8 @@ bool WriteDataInfoToJson(uint16_t addr, const FDataInfo* pDataInfo, json& jsonDo
 		dataInfoJson["DataType"] = (int)pDataInfo->DataType;
 	if (pDataInfo->DataType == EDataType::InstructionOperand)
 		dataInfoJson["InstructionAddressRef"] = pDataInfo->InstructionAddress.Val;
-	if (pDataInfo->OperandType != EOperandType::Unknown)
-		dataInfoJson["OperandType"] = pDataInfo->OperandType;
+	if (pDataInfo->DisplayType != EDataItemDisplayType::Unknown)
+		dataInfoJson["DisplayType"] = pDataInfo->DisplayType;
 	if (pDataInfo->ByteSize != 1)
 		dataInfoJson["ByteSize"] = pDataInfo->ByteSize;
 	if (pDataInfo->Flags != 0)
@@ -443,8 +443,10 @@ void LoadDataInfoFromJson(FCodeAnalysisState& state, FDataInfo* pDataInfo, const
 {
 	if (dataInfoJson.contains("DataType"))
 		pDataInfo->DataType = (EDataType)(int)dataInfoJson["DataType"];
-	if (dataInfoJson.contains("OperandType"))
-		pDataInfo->OperandType = (EOperandType)(int)dataInfoJson["OperandType"];
+	if (dataInfoJson.contains("OperandType"))	// old field
+		pDataInfo->DisplayType = (EDataItemDisplayType)(int)dataInfoJson["OperandType"];
+	if (dataInfoJson.contains("DisplayType"))
+		pDataInfo->DisplayType = (EDataItemDisplayType)(int)dataInfoJson["DisplayType"];
 	if (dataInfoJson.contains("InstructionAddress"))
 		pDataInfo->InstructionAddress = state.AddressRefFromPhysicalAddress(dataInfoJson["InstructionAddress"]);
 	if (dataInfoJson.contains("InstructionAddressRef"))
@@ -456,26 +458,6 @@ void LoadDataInfoFromJson(FCodeAnalysisState& state, FDataInfo* pDataInfo, const
 	if (dataInfoJson.contains("Comment"))
 		pDataInfo->Comment = dataInfoJson["Comment"];
 
-	// Moved to binary file
-	/*
-	if (dataInfoJson.contains("Reads"))
-	{
-		for (const auto& read : dataInfoJson["Reads"])
-		{
-			pDataInfo->Reads.RegisterAccess(read);
-		}
-	}
-	if (dataInfoJson.contains("Writes"))
-	{
-		for (const auto& write : dataInfoJson["Writes"])
-		{
-			pDataInfo->Writes.RegisterAccess(write);
-		}
-	}
-
-	if (dataInfoJson.contains("LastWriter"))
-		pDataInfo->LastWriter = dataInfoJson["LastWriter"];
-*/
 // Charmap specific
 	if (pDataInfo->DataType == EDataType::CharacterMap)
 	{
@@ -490,6 +472,9 @@ void LoadDataInfoFromJson(FCodeAnalysisState& state, FDataInfo* pDataInfo, const
 	{
 		if (dataInfoJson.contains("GraphicsSetRef"))
 			pDataInfo->GraphicsSetRef.Val = dataInfoJson["GraphicsSetRef"];
+
+		if (pDataInfo->DisplayType == EDataItemDisplayType::Unknown)	// load fixup
+			pDataInfo->DisplayType = EDataItemDisplayType::Bitmap;
 	}
 }
 

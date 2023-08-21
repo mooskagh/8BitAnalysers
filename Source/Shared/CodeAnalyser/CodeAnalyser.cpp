@@ -47,10 +47,12 @@ int16_t	FCodeAnalysisState::CreateBank(const char* bankName, int noKb,uint8_t* p
 }
 
 // Set bank to memory pages starting at pageNo
-bool FCodeAnalysisState::MapBank(int16_t bankId, int startPageNo)
+bool FCodeAnalysisState::MapBank(int16_t bankId, int startPageNo, EBankAccess access)
 {
 	FCodeAnalysisBank* pBank = GetBank(bankId);
-	if (pBank == nullptr || MappedBanks[startPageNo] == bankId)	// not found or already mapped to this locatiom
+
+	// TODO: this needs proper logic
+	if (pBank == nullptr || MappedReadBanks[startPageNo] == bankId)	// not found or already mapped to this locatiom
 		return false;
 
 	if (pBank->PrimaryMappedPage == -1 )	// Newly mapped?
@@ -68,7 +70,10 @@ bool FCodeAnalysisState::MapBank(int16_t bankId, int startPageNo)
 		//else
 		SetCodeAnalysisRWPage(startPageNo + bankPageNo, &pBank->Pages[bankPageNo], &pBank->Pages[bankPageNo]);	// Read/Write
 
-		MappedBanks[startPageNo + bankPageNo] = bankId;
+		if(access == EBankAccess::Read || access == EBankAccess::ReadWrite)
+			MappedReadBanks[startPageNo + bankPageNo] = bankId;
+		if (access == EBankAccess::Write || access == EBankAccess::ReadWrite)
+			MappedWriteBanks[startPageNo + bankPageNo] = bankId;
 	}
 	bMemoryRemapped = true;
 
@@ -78,14 +83,21 @@ bool FCodeAnalysisState::MapBank(int16_t bankId, int startPageNo)
 	return true;
 }
 
-bool FCodeAnalysisState::UnMapBank(int16_t bankId, int startPageNo)
+bool FCodeAnalysisState::UnMapBank(int16_t bankId, int startPageNo, EBankAccess access)
 {
 	FCodeAnalysisBank* pBank = GetBank(bankId);
-	if (pBank == nullptr || MappedBanks[startPageNo] != bankId)
+
+	// TODO: this needs proper logic
+	if (pBank == nullptr || MappedReadBanks[startPageNo] != bankId)
 		return false;
 
 	for (int bankPage = 0; bankPage < pBank->NoPages; bankPage++)
-		MappedBanks[startPageNo + bankPage] = -1;
+	{
+		if (access == EBankAccess::Read || access == EBankAccess::ReadWrite)
+			MappedReadBanks[startPageNo + bankPage] = -1;
+		if (access == EBankAccess::Write || access == EBankAccess::ReadWrite)
+			MappedWriteBanks[startPageNo + bankPage] = -1;
+	}
 
 	// erase from mapped pages - better way?
 	auto it = pBank->MappedPages.begin();
@@ -105,7 +117,9 @@ bool FCodeAnalysisState::IsBankIdMapped(int16_t bankId) const
 {
 	for (int bankIdx = 0; bankIdx < kNoPagesInAddressSpace; bankIdx++)
 	{
-		if (MappedBanks[bankIdx] == bankId)
+		if (MappedReadBanks[bankIdx] == bankId)
+			return true;
+		if (MappedWriteBanks[bankIdx] == bankId)
 			return true;
 	}
 
@@ -129,17 +143,19 @@ bool FCodeAnalysisState::MapBankForAnalysis(FCodeAnalysisBank& bank)
 	for (int i = 0; i < kNoPagesInAddressSpace; i++)
 	{
 #ifdef _DEBUG
-		const FCodeAnalysisBank* pMappedBank = GetBank(MappedBanks[i]);
+		const FCodeAnalysisBank* pMappedBank = GetBank(MappedReadBanks[i]);
 		assert(pMappedBank->PrimaryMappedPage != -1);
 #endif
-		MappedBanksBackup[i] = MappedBanks[i];
+		MappedReadBanksBackup[i] = MappedReadBanks[i];
+		MappedWriteBanksBackup[i] = MappedWriteBanks[i];
 	}
 
 	const int startPageNo = bank.PrimaryMappedPage;
 	assert(startPageNo != -1);
 	for (int bankPageNo = 0; bankPageNo < bank.NoPages; bankPageNo++)
 	{
-		MappedBanks[startPageNo + bankPageNo] = bank.Id;
+		MappedReadBanks[startPageNo + bankPageNo] = bank.Id;
+		MappedWriteBanks[startPageNo + bankPageNo] = bank.Id;
 		MappedMem[startPageNo + bankPageNo] = &bank.Memory[bankPageNo * FCodeAnalysisPage::kPageSize];
 		SetCodeAnalysisRWPage(startPageNo + bankPageNo, &bank.Pages[bankPageNo], &bank.Pages[bankPageNo]);	// Read/Write
 	}
@@ -151,8 +167,9 @@ void FCodeAnalysisState::UnMapAnalysisBanks()
 {
 	for (int i = 0; i < kNoPagesInAddressSpace; i++)
 	{
-		MappedBanks[i] = MappedBanksBackup[i];
-		const FCodeAnalysisBank* pMappedBank = GetBank(MappedBanks[i]);
+		MappedReadBanks[i] = MappedReadBanksBackup[i];
+		MappedWriteBanks[i] = MappedWriteBanksBackup[i];
+		const FCodeAnalysisBank* pMappedBank = GetBank(MappedReadBanks[i]);
 		assert(pMappedBank->PrimaryMappedPage != -1);
 		if (MappedMem[i] != nullptr)
 		{
@@ -318,9 +335,21 @@ bool IsVowel(char c)
 	return false;
 }
 
-bool IsValidStringStartChar(char c)
+bool IsPunctuation(char c)
 {
-	return IsLetter(c);
+	const char punctuation[] = { ' ',',','!','.','?','\'','`','"','@','$','-'};
+	for (int i = 0; i < sizeof(punctuation); i++)
+	{
+		if (c == punctuation[i])
+			return true;
+	}
+
+	return false;
+}
+
+bool IsValidStringChar(char c)
+{
+	return IsAlphanumeric(c) || IsPunctuation(c);
 }
 
 std::vector<FFoundString> FCodeAnalysisState::FindAllStrings(bool bROM, bool bPhysicalOnly)
@@ -341,17 +370,13 @@ std::vector<FFoundString> FCodeAnalysisState::FindAllStrings(bool bROM, bool bPh
 		std::string foundString;
 
 		const int bankByteSize = bank.GetSizeBytes();
-		for (int bAddr = 0; bAddr < bankByteSize; bAddr++)
+		int stringStartBankPos = 0;
+		
+		for(int bAddr = 0; bAddr < bankByteSize;bAddr++)
 		{
 			FAddressRef addressRef(bank.Id, bank.GetMappedAddress() + bAddr);
 			char c = bank.Memory[bAddr];
 			bool bTerminated = false;
-
-			if (c & (1 << 7))	// high bit terminated strings
-			{
-				c = c & ~(1 << 7);
-				bTerminated = true;
-			}
 
 			// Check for code & skip
 			const FCodeInfo* pCodeInfo = GetCodeInfoForAddress(addressRef);
@@ -359,42 +384,50 @@ std::vector<FFoundString> FCodeAnalysisState::FindAllStrings(bool bROM, bool bPh
 				continue;
 
 			// check data
-			const FDataInfo* pDataInfo = GetReadDataInfoForAddress(addressRef);
-			if (pDataInfo->DataType != EDataType::Byte)
+			const FDataInfo* pDataInfo = GetDataInfoForAddress(addressRef);
+			if (pDataInfo->DataType != EDataType::Byte && pDataInfo->DataType != EDataType::Text)
 				continue;
 			if (pDataInfo->LastFrameWritten != -1)
 				continue;
 
-			if (stringStart.IsValid() == false)	// string start
+			if (c & (1 << 7))	// high bit terminated strings
 			{
-				if (IsValidStringStartChar(c))
+				c = c & ~(1 << 7);
+				bTerminated = true;
+			}
+
+			if(IsValidStringChar(c))
+			{
+				if (stringStart.IsValid() == false)	// string start
 				{
 					stringStart = addressRef;
-					stringLength = 1;
-					foundString.push_back(c);
+					stringStartBankPos = bAddr;
+					stringLength = 0;
 				}
-			}
-			else if(IsAlphanumeric(c))
-			{
+
 				stringLength++;
 				if (IsVowel(c))
 					vowelCount++;
 				foundString.push_back(c);
 
-				if (stringLength == 4 && vowelCount == 0)	// string of 4 chars must have a vowel
-					bTerminated = true;
+				//if (stringLength == 4 && vowelCount == 0)	// string of 4 chars must have a vowel
+				//	bTerminated = true;
 			}
 			else
 			{
 				bTerminated = true;
 			}
 
-			if(bTerminated)
+			if(bTerminated && foundString.empty() == false)
 			{
 				// Run through (simple) acceptance filter
-				if (stringLength > 4 && vowelCount > 1)
+				if (stringLength > 2 && vowelCount > 0)
 				{
 					results.push_back({ stringStart, foundString });
+				}
+				else
+				{
+					bAddr = stringStartBankPos;	// wind back to start of string
 				}
 				stringStart.SetInvalid();;
 				stringLength = 0;
@@ -518,7 +551,7 @@ bool CheckStopInstruction(FCodeAnalysisState& state, uint16_t pc)
 // this function assumes the text is mapped in
 std::string GetItemText(FCodeAnalysisState& state, FAddressRef address)
 {
-	FDataInfo* pDataInfo = state.GetReadDataInfoForAddress(address);
+	FDataInfo* pDataInfo = state.GetDataInfoForAddress(address);
 	std::string textString;
 
 	if (pDataInfo->DataType != EDataType::Text)
@@ -975,8 +1008,10 @@ FCodeAnalysisState::FCodeAnalysisState()
 	for (int i = 0; i < kNoPagesInAddressSpace; i++)
 	{
 		MappedMem[i] = nullptr;
-		MappedBanks[i] = -1;
-		MappedBanksBackup[i] = -1;
+		MappedReadBanks[i] = -1;
+		MappedWriteBanks[i] = -1;
+		MappedReadBanksBackup[i] = -1;
+		MappedWriteBanksBackup[i] = -1;
 		ReadPageTable[i] = nullptr;
 		WritePageTable[i] = nullptr;
 	}
@@ -1098,7 +1133,7 @@ void SetItemText(FCodeAnalysisState &state, const FCodeAnalysisItem& item)
 			pDataItem->ByteSize = 0;	// reset byte counter
 
 			FAddressRef charAddr = item.AddressRef;
-			FDataInfo* pDataInfo = state.GetReadDataInfoForAddress(charAddr);
+			FDataInfo* pDataInfo = state.GetDataInfoForAddress(charAddr);
 			while (pDataInfo != nullptr && pDataInfo->DataType == EDataType::Byte)
 			{
 				const uint8_t val = state.ReadByte(charAddr);
@@ -1154,7 +1189,7 @@ FLabelInfo* AddLabelAtAddress(FCodeAnalysisState &state, FAddressRef address)
 	if (state.GetLabelForAddress(address) == nullptr)
 	{
 		ELabelType labelType = ELabelType::Data;
-		const FDataInfo* pDataInfo = state.GetReadDataInfoForAddress(address);
+		const FDataInfo* pDataInfo = state.GetDataInfoForAddress(address);
 		if (pDataInfo && pDataInfo->DataType == EDataType::Text)
 			labelType = ELabelType::Text;
 		const FCodeInfo* pCodeInfo = state.GetCodeInfoForAddress(address);
@@ -1249,7 +1284,7 @@ void FormatData(FCodeAnalysisState& state, const FDataFormattingOptions& options
 
 	for (int itemNo = 0; itemNo < options.NoItems; itemNo++)
 	{
-		FDataInfo* pDataInfo = state.GetReadDataInfoForAddress(addressRef);
+		FDataInfo* pDataInfo = state.GetDataInfoForAddress(addressRef);
 
 		pDataInfo->ByteSize = options.ItemSize;
 		pDataInfo->DataType = options.DataType;

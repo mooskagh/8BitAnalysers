@@ -214,7 +214,7 @@ void DrawComment(const FItem *pItem, float offset)
 void DrawLabelInfo(FCodeAnalysisState &state, FCodeAnalysisViewState& viewState, const FCodeAnalysisItem& item)
 {
 	const FLabelInfo* pLabelInfo = static_cast<const FLabelInfo*>(item.Item);
-	const FDataInfo* pDataInfo = state.GetReadDataInfoForAddress(item.AddressRef);	// for self-modifying code
+	const FDataInfo* pDataInfo = state.GetDataInfoForAddress(item.AddressRef);	// for self-modifying code
 	const FCodeInfo* pCodeInfo = state.GetCodeInfoForAddress(item.AddressRef);
 	ImVec4 labelColour = ImVec4(0.5f, 0.5f, 0.5f, 1.0f);
 	if (viewState.HighlightAddress == item.AddressRef)
@@ -816,7 +816,7 @@ bool DrawNumberTypeCombo(const char *pLabel, ENumberDisplayMode& numberMode)
 bool DrawOperandTypeCombo(const char* pLabel, EOperandType& operandType)
 {
 	const int index = (int)operandType;
-	const char* operandTypes[] = { "Unknown", "Pointer", "JumpAddress", "Decimal", "Hex", "Binary"};
+	const char* operandTypes[] = { "Unknown", "Pointer", "JumpAddress", "Decimal", "Hex", "Binary" };
 	bool bChanged = false;
 
 	if (ImGui::BeginCombo(pLabel, operandTypes[index]))
@@ -827,6 +827,31 @@ bool DrawOperandTypeCombo(const char* pLabel, EOperandType& operandType)
 			if (ImGui::Selectable(operandTypes[n], isSelected))
 			{
 				operandType = (EOperandType)n;
+				bChanged = true;
+			}
+		}
+		ImGui::EndCombo();
+	}
+
+	return bChanged;
+}
+
+
+bool DrawDataDisplayTypeCombo(const char* pLabel, EDataItemDisplayType& displayType)
+{
+	const int index = (int)displayType;
+	const char* operandTypes[] = { "Unknown", "Pointer", "JumpAddress", "Decimal", "Hex", "Binary",
+									"Bitmap", "ColMap2Bpp", "ColMap4Bpp", "ColMap4Bpp_Twiddled" };
+	bool bChanged = false;
+
+	if (ImGui::BeginCombo(pLabel, operandTypes[index]))
+	{
+		for (int n = 0; n < IM_ARRAYSIZE(operandTypes); n++)
+		{
+			const bool isSelected = (index == n);
+			if (ImGui::Selectable(operandTypes[n], isSelected))
+			{
+				displayType = (EDataItemDisplayType)n;
 				bChanged = true;
 			}
 		}
