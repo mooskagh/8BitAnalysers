@@ -8,6 +8,7 @@
 #include "GlobalConfig.h"
 #include "GameConfig.h"
 #include "Util/FileUtil.h"
+#include "Util/GraphicsView.h"
 #include "CodeAnalyser/UI/CodeAnalyserUI.h"
 #include <CodeAnalyser/CodeAnalysisState.h>
 #include "CodeAnalyser/CodeAnalysisJson.h"
@@ -700,10 +701,11 @@ bool FCpcEmu::Init(const FCpcConfig& config)
 	SetNumberDisplayMode(globalConfig.NumberDisplayMode);
 	CodeAnalysis.Config.bShowOpcodeValues = globalConfig.bShowOpcodeValues;
 	CodeAnalysis.Config.BranchLinesDisplayMode = globalConfig.BranchLinesDisplayMode;
-	CodeAnalysis.Config.bShowBanks = config.Model == ECpcModel::CPC_6128;
-#if SPECCY
-	CodeAnalysis.Config.CharacterColourLUT = FZXGraphicsView::GetColourLUT();
-#endif
+	CodeAnalysis.Config.bShowBanks = true;
+
+	// temp hack to stop it crashing with a null pointer exception.
+	static const uint32_t ColourLUT[8] = { 0 };
+	CodeAnalysis.Config.CharacterColourLUT = ColourLUT;
 
 	// A class that deals with loading games.
 	GameLoader.Init(this);
@@ -803,6 +805,7 @@ bool FCpcEmu::Init(const FCpcConfig& config)
 
 	LoadGameConfigs(this);
 
+	GetCurrentPalette().SetColourCount(16);
 	// Set up code analysis
 	// initialise code analysis pages
 
@@ -1360,10 +1363,6 @@ void FCpcEmu::DrawToolsMenu()
 #ifndef NDEBUG
 	if (ImGui::BeginMenu("Tools"))
 	{
-		/*if (ImGui::MenuItem("Find Ascii Strings"))
-		{
-			CodeAnalysis.FindAsciiStrings(0x4000);
-		}*/
 		ImGui::EndMenu();
 	}
 #endif
@@ -1565,6 +1564,8 @@ void FCpcEmu::Tick()
 #if SPECCY
 	UpdateCharacterSets(CodeAnalysis);
 #endif
+	UpdatePalette();
+
 	DrawDockingView();
 }
 
@@ -1831,6 +1832,15 @@ bool FCpcEmu::GetScreenMemoryAddress(int x, int y, uint16_t& addr) const
 	const uint8_t w = CpcEmuState.crtc.h_displayed * 2;
 	addr = GetScreenAddrStart() + ((y / charHeight) * w) + ((y % charHeight) * 2048) + (x / 4);
 	return true;
+}
+
+void FCpcEmu::UpdatePalette()
+{
+	FPalette& palette = GetCurrentPalette();
+	for (int i = 0; i < palette.GetColourCount(); i++)
+	{
+		palette.SetColour(i, CpcEmuState.ga.hw_colors[CpcEmuState.ga.regs.ink[i]]);
+	}
 }
 
 uint8_t GetPixelsPerByte(int screenMode)

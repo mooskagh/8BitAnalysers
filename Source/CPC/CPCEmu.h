@@ -151,6 +151,8 @@ public:
 	uint16_t GetScreenMemSize() const;
 	bool GetScreenMemoryAddress(int x, int y, uint16_t& addr) const;
 
+	void UpdatePalette();
+
 	bool NewGameFromSnapshot(int snapshotIndex);
 
 	// Emulator 
