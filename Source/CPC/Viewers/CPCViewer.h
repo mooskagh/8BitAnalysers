@@ -6,6 +6,8 @@
 #include "Misc/InputEventHandler.h"
 
 class FCpcEmu;
+class FCodeAnalysisState;
+struct FCodeAnalysisViewState;
 
 class FCpcViewer
 {
@@ -20,12 +22,26 @@ public:
 	const ImTextureID GetScreenTexture() const { return ScreenTexture; }
 
 private:
+	bool	OnHovered(const ImVec2& pos, int scrEdgeL, int scrTop);
+
+	// Get the height of a character in pixels.
+	uint8_t GetCharacterHeight() const;
+	int GetScreenWidth() const;
+	int GetScreenHeight() const;
+private:
+
 	FCpcEmu* pCpcEmu = nullptr;
 
 	uint32_t* FrameBuffer;	// pixel buffer to store emu output
 	ImTextureID		ScreenTexture;		// texture
 
 	bool	bWindowFocused = false;
+	float textureWidth = 0;
+	float textureHeight = 0;
+
+#ifndef NDEBUG
+	bool	bClickWritesToScreen = false;
+#endif
 	// screen inspector
 	/*bool		bScreenCharSelected = false;
 	uint16_t	SelectPixAddr = 0;
