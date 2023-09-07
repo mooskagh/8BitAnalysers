@@ -6,7 +6,8 @@ class FCrtcViewer : public FViewerBase
 {
 public:
 			FCrtcViewer(FCpcEmu* pEmu) :FViewerBase(pEmu) { Name = "CRTC"; }
-	bool	Init(void) override { return true; }
+			bool	Init(void) override;
 	void	DrawUI() override;
+
 private:
 };
