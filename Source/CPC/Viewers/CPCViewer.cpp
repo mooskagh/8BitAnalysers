@@ -12,6 +12,7 @@
 #include <ImGuiSupport/ImGuiTexture.h>
 #include <ImGuiSupport/ImGuiScaling.h>
 #include <algorithm>
+#include <cassert>
 
 int CpcKeyFromImGuiKey(ImGuiKey key);
 
@@ -170,53 +171,37 @@ void FCpcViewer::Draw()
 	bool bJustSelectedChar = false;
 	if (ImGui::IsItemHovered())
 	{
-		bJustSelectedChar = OnHovered(pos, ScreenEdgeL, ScreenTop);
+		bJustSelectedChar = OnHovered(pos);
 	}
 
-	// draw an entire screen out of characters
-	//ImGui::BeginChild("dogdirt");
-	{
-		ImVec2 curPos = ImGui::GetCursorScreenPos();
-		const float xStart = curPos.x;
-
-		for (int y = 0; y < crtc.v_displayed; y++)
-		{
-			for (int x = 0; x < HorizCharCount; x++) // why the -1. because we're treating mode 0 as double width?
-			//for (int x = 0; x < crtc.h_displayed; x++) // why the -1. because we're treating mode 0 as double width?
-			//for (int x = crtc.h_displayed - 1; x < crtc.h_displayed; x++) // why the -1. because we're treating mode 0 as double width?
-			//for (int x = 0; x < 1; x++) // why the -1. because we're treating mode 0 as double width?
-			{
-				curPos.x += DrawScreenCharacter(x, y, scrMode, curPos.x, curPos.y, ScreenTop + y * 8);
-				//curPos.x += 40.0f;
-			}
-			curPos.x = xStart;
-			curPos.y += 40.0f;
-		}
-		ImGui::SetCursorScreenPos(ImVec2(curPos.x, curPos.y));
-	}
-	//ImGui::EndChild();
-	//ImGui::SliderFloat("Speed Scale", &pCpcEmu->ExecSpeedScale, 0.0f, 2.0f);
-	//ImGui::SameLine();
-	//if (ImGui::Button("Reset"))
-	//	pCpcEmu->ExecSpeedScale = 1.0f;
-	//ImGui::Text("Application average %.3f ms/frame (%.1f FPS)", 1000.0f / ImGui::GetIO().Framerate, ImGui::GetIO().Framerate);
+#ifndef NDEBUG
+	// draw an entire screen out of characters - to test the code for drawing a screen character
+	DrawTestScreen();
+#endif
+	
+	ImGui::SliderFloat("Speed Scale", &pCpcEmu->ExecSpeedScale, 0.0f, 2.0f);
+	ImGui::SameLine();
+	if (ImGui::Button("Reset"))
+		pCpcEmu->ExecSpeedScale = 1.0f;
+	ImGui::Text("Application average %.3f ms/frame (%.1f FPS)", 1000.0f / ImGui::GetIO().Framerate, ImGui::GetIO().Framerate);
 
 	bWindowFocused = ImGui::IsWindowFocused();
 }
 
-bool FCpcViewer::OnHovered(const ImVec2& pos, int scrEdgeL, int scrTop)
+// todo tidy this whole function up
+bool FCpcViewer::OnHovered(const ImVec2& pos)
 {
 	ImDrawList* dl = ImGui::GetWindowDrawList();
 	ImGuiIO& io = ImGui::GetIO();
 
 	// get mouse cursor coords in logical screen area space
-	const int xp = Clamp((int)(io.MousePos.x - pos.x - scrEdgeL), 0, ScreenWidth - 1);
-	const int yp = Clamp((int)(io.MousePos.y - pos.y - scrTop), 0, ScreenHeight - 1);
+	const int xp = Clamp((int)(io.MousePos.x - pos.x - ScreenEdgeL), 0, ScreenWidth - 1);
+	const int yp = Clamp((int)(io.MousePos.y - pos.y - ScreenTop), 0, ScreenHeight - 1);
 
 	// get the screen mode for the raster line the mouse is pointed at
 	// note: the logic doesn't always work and we sometimes end up with a negative scanline.
 	// for example, this can happen for demos that set the scanlines-per-character to 1.
-	const int scanline = scrTop + yp;
+	const int scanline = ScreenTop + yp;
 	// get the screen mode for this scan line
 	const int scrMode = scanline > 0 && scanline < AM40010_DISPLAY_HEIGHT ? pCpcEmu->ScreenModePerScanline[scanline] : -1;
 	const int charWidth = scrMode == 0 ? 16 : 8;
@@ -226,10 +211,12 @@ bool FCpcViewer::OnHovered(const ImVec2& pos, int scrEdgeL, int scrTop)
 	uint16_t scrAddress = 0;
 	if (pCpcEmu->GetScreenMemoryAddress(xp, yp, scrAddress))
 	{
-		const int charX = xp & ~(charWidth - 1);
+		// position (in pixels) of the start of the character
+		const int charX = xp & ~(charWidth - 1); 
 		const int charY = (yp / CharacterHeight) * CharacterHeight;
-		const float rx = Clamp(pos.x + scrEdgeL + charX, pos.x, pos.x + TextureWidth);
-		const float ry = Clamp(pos.y + scrTop + charY, pos.y, pos.y + TextureHeight);
+		const float rx = Clamp(pos.x + ScreenEdgeL + charX, pos.x, pos.x + TextureWidth);
+		const float ry = Clamp(pos.y + ScreenTop + charY, pos.y, pos.y + TextureHeight);
+		
 
 		// highlight the current character "square" (could actually be a rectangle if the char height is not 8)
 		dl->AddRect(ImVec2(rx, ry), ImVec2((float)rx + charWidth, (float)ry + CharacterHeight), 0xffffffff);
@@ -240,6 +227,7 @@ bool FCpcViewer::OnHovered(const ImVec2& pos, int scrEdgeL, int scrTop)
 #ifndef NDEBUG
 		if (ImGui::IsMouseClicked(0))
 		{
+			// this code tests GetScreenMemoryAddress() is working correctly.
 			if (bClickWritesToScreen)
 			{
 				const uint8_t numBytes = GetBitsPerPixel(scrMode);
@@ -263,9 +251,12 @@ bool FCpcViewer::OnHovered(const ImVec2& pos, int scrEdgeL, int scrTop)
 		const int divisor[4] = { 4, 2, 1, 2 };
 		const int x_adj = (xp * 2) / (scrMode == -1 ? 2 : divisor[scrMode]);
 
-		ImGui::Text("raw coords (%d,%d)", xp, yp);
+		const int charIndexX = charX / charWidth;
+		const int charIndexY = charY / CharacterHeight;
+		//ImGui::Text("raw coords (%d, %d)", rx, ry);
+		ImGui::Text("Character (%d, %d)", charIndexX, charIndexY);
 
-		ImGui::Text("Screen Pos (%d,%d)", x_adj, yp);
+		ImGui::Text("Screen Pos (%d, %d)", x_adj, yp);
 		ImGui::Text("Addr: %s", NumStr(scrAddress));
 
 		FCodeAnalysisViewState& viewState = codeAnalysis.GetFocussedViewState();
@@ -281,17 +272,11 @@ bool FCpcViewer::OnHovered(const ImVec2& pos, int scrEdgeL, int scrTop)
 		else
 			ImGui::Text("Screen Mode: %d", scrMode);
 		
-		//DrawScreenCharacter(xp, yp, scrMode, 413, 517);
-		//DrawScreenCharacter(xp+8, yp, scrMode, 413+80, 517);
-		//DrawScreenCharacter(xp+16, yp, scrMode, 413+160, 517);
-
-		//ImGui::Text("");
-		//ImGui::Text("");
-		//ImGui::Text("");
-		//ImGui::Text("");
+		const ImVec2 pos = ImGui::GetCursorScreenPos();
+		DrawScreenCharacter(charIndexX, charIndexY, pos.x, pos.y, 10.f);
+		ImGui::SetCursorScreenPos(ImVec2(pos.x, pos.y + 10.f * CharacterHeight));
 
 		ImGui::EndTooltip();
-		//}
 
 		if (ImGui::IsMouseDoubleClicked(0))
 			viewState.GoToAddress(lastPixWriter);
@@ -306,17 +291,21 @@ bool FCpcViewer::OnHovered(const ImVec2& pos, int scrEdgeL, int scrTop)
 //		canard
 //		amsbrique
 
-// coords need to be in character squares?
-// returns how much space it took
-float FCpcViewer::DrawScreenCharacter(int xChar, int yChar, int screenMode, float x, float y, int scanlineTEMP) const 
+// returns how much horizontal space it took
+float FCpcViewer::DrawScreenCharacter(int xChar, int yChar, float x, float y, float pixelHeight) const 
 {
 	// todo move this comment out of this function
 	// the x coord will be in mode 1 coordinates. [320 pixels]
 	// mode 0 will effectively use 2 mode 1 pixels.
 
+	const int scanLine = ScreenTop + yChar * CharacterHeight;
+	assert(scanLine > 0);
+	assert(scanLine < AM40010_DISPLAY_HEIGHT);
+	const int screenMode = pCpcEmu->ScreenModePerScanline[scanLine];
+
 	const FCodeAnalysisState& codeAnalysis = pCpcEmu->CodeAnalysis;
 	const int xMult = screenMode == 0 ? 2 : 1;
-	ImVec2 pixelSize = ImVec2(5.0f * (float)xMult, 5.0f);
+	ImVec2 pixelSize = ImVec2(pixelHeight * (float)xMult, pixelHeight);
 
 	ImDrawList* dl = ImGui::GetWindowDrawList();
 	ImVec2 pos = ImVec2((float)x, (float)y);
@@ -352,8 +341,8 @@ float FCpcViewer::DrawScreenCharacter(int xChar, int yChar, int screenMode, floa
 						break;
 					}
 
-					const ImU32 colour = pCpcEmu->PalettePerScanline[scanlineTEMP].GetColour(colourIndex);
-					//const ImU32 colour = GetCurrentPalette_Const().GetColour(colourIndex);
+					//const ImU32 colour = pCpcEmu->PalettePerScanline[scanlineTEMP].GetColour(colourIndex);
+					const ImU32 colour = GetCurrentPalette_Const().GetColour(colourIndex);
 					dl->AddRectFilled(rectMin, rectMax, colour);
 					//dl->AddRect(rectMin, rectMax, 0xffffffff);
 
@@ -389,9 +378,8 @@ float FCpcViewer::DrawScreenCharacter(int xChar, int yChar, int screenMode, floa
 						break;
 					}
 
-					const ImU32 colour = pCpcEmu->PalettePerScanline[scanlineTEMP].GetColour(colourIndex);
-					//const ImU32 colour = GetCurrentPalette_Const().GetColour(colourIndex);
-					//const ImU32 colour = GetCurrentPalette_Const().GetColour(colourIndex);
+					//const ImU32 colour = pCpcEmu->PalettePerScanline[scanlineTEMP].GetColour(colourIndex);
+					const ImU32 colour = GetCurrentPalette_Const().GetColour(colourIndex);
 					dl->AddRectFilled(rectMin, rectMax, colour);
 					//dl->AddRect(rectMin, rectMax, 0xffffffff);
 
@@ -430,7 +418,7 @@ void FCpcViewer::CalculateScreenProperties()
 	const int _vSyncOffset = (crtc.v_sync_pos - 30) * CharacterHeight;		// offset based on the default vert sync position (30 chars)
 	ScreenTop = crtc.v_displayed * CharacterHeight - _vSyncOffset + _scanLinesPerCharOffset - ScreenHeight + crtc.v_total_adjust + _vTotalOffset;
 
-	HorizCharCount = pCpcEmu->CpcEmuState.ga.video.mode == 0 ? crtc.h_displayed / 2 : crtc.h_displayed;
+	HorizCharCount = crtc.h_displayed;
 }
 
 void FCpcViewer::Tick(void)
@@ -455,6 +443,31 @@ void FCpcViewer::Tick(void)
 		}
 	}
 }
+
+#ifndef NDEBUG
+void FCpcViewer::DrawTestScreen()
+{
+	const mc6845_t& crtc = pCpcEmu->CpcEmuState.crtc;
+	ImVec2 curPos = ImGui::GetCursorScreenPos();
+	const float xStart = curPos.x;
+
+	int scanLine = ScreenTop;
+
+	for (int y = 0; y < crtc.v_displayed; y++)
+	{
+		const int scrMode = pCpcEmu->ScreenModePerScanline[scanLine];
+		const int charCount = scrMode == 0 ? HorizCharCount / 2 : HorizCharCount;
+		for (int x = 0; x < charCount; x++)
+		{
+			curPos.x += DrawScreenCharacter(x, y, curPos.x, curPos.y, 5.0f);
+		}
+		scanLine += 8;
+		curPos.x = xStart;
+		curPos.y += 40.0f;
+	}
+	ImGui::SetCursorScreenPos(ImVec2(curPos.x, curPos.y));
+}
+#endif
 
 int CpcKeyFromImGuiKey(ImGuiKey key)
 {

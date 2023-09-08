@@ -22,10 +22,13 @@ public:
 	const ImTextureID GetScreenTexture() const { return ScreenTexture; }
 
 private:
-	bool	OnHovered(const ImVec2& pos, int scrEdgeL, int scrTop);
-	float	DrawScreenCharacter(int xChar, int yChar, int screenMode, float x, float y, int scanlineTEMP) const;
-
+	bool	OnHovered(const ImVec2& pos);
+	float	DrawScreenCharacter(int xChar, int yChar, float x, float y, float pixelHeight) const;
 	void	CalculateScreenProperties();
+
+#ifndef NDEBUG
+	void DrawTestScreen();
+#endif
 private:
 
 	FCpcEmu* pCpcEmu = nullptr;
@@ -37,11 +40,17 @@ private:
 	float TextureWidth = 0;
 	float TextureHeight = 0;
 
+	// The x position of where the screen starts. Effectively this is the width of the left border.
 	int ScreenEdgeL = 0;
+	// The y position of where the screen starts. Effectively this is the width of the top border.
 	int ScreenTop = 0;
+	// The width of the screen in pixels. Note: this is currently using mode 1 coordinates. When in mode 0, you will need to divide this by 2.
 	int ScreenWidth = 0;
+	// The height of the screen in pixels.
 	int ScreenHeight = 0;
+	// The height in pixels of a cpc character "square". CPC can have non-square characters - even 1 pixel high if you wish.
 	int CharacterHeight = 0;
+	// Number of horizontal characters that can be displayed. Note: in mode 0 you will need to divide this by 2. This is possibly a bit poo.
 	int HorizCharCount = 0;
 
 #ifndef NDEBUG
