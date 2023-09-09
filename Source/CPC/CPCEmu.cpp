@@ -310,6 +310,9 @@ uint64_t FCpcEmu::Z80Tick(int num, uint64_t pins)
 	// sam. no idea if this is right or not
 	const uint16_t scanlinePos = CpcEmuState.ga.crt.v_pos;
 
+	if (scanlinePos == 0)	// clear scanline info on new frame
+		debugger.ResetScanlineEvents();
+
 	/* memory and IO requests */
 	if (pins & Z80_MREQ)
 	{
