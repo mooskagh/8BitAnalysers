@@ -25,6 +25,7 @@ private:
 	bool	OnHovered(const ImVec2& pos);
 	float	DrawScreenCharacter(int xChar, int yChar, float x, float y, float pixelHeight) const;
 	void	CalculateScreenProperties();
+	int		GetScreenModeForPixelLine(int yPos) const;
 
 #ifndef NDEBUG
 	void DrawTestScreen();
@@ -33,8 +34,8 @@ private:
 
 	FCpcEmu* pCpcEmu = nullptr;
 
-	uint32_t* FrameBuffer;	// pixel buffer to store emu output
-	ImTextureID		ScreenTexture;		// texture
+	uint32_t* FrameBuffer = 0;	// pixel buffer to store emu output
+	ImTextureID	ScreenTexture = 0;		// texture
 
 	bool bWindowFocused = false;
 	float TextureWidth = 0;
@@ -42,7 +43,7 @@ private:
 
 	// The x position of where the screen starts. Effectively this is the width of the left border.
 	int ScreenEdgeL = 0;
-	// The y position of where the screen starts. Effectively this is the width of the top border.
+	// The y position of where the screen starts. Effectively this is the height of the top border.
 	int ScreenTop = 0;
 	// The width of the screen in pixels. Note: this is currently using mode 1 coordinates. When in mode 0, you will need to divide this by 2.
 	int ScreenWidth = 0;

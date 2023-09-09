@@ -6,6 +6,7 @@
 #include "../CPCEmu.h"
 #include <CodeAnalyser/UI/CodeAnalyserUI.h>
 
+#include "Debug/DebugLog.h"
 #include "Util/Misc.h"
 #include "Util/GraphicsView.h"
 
@@ -65,7 +66,12 @@ void FCpcViewer::Draw()
 		const FGameSnapshot& game = pCpcEmu->GetGamesList().GetGame(gGameIndex);
 		ImGui::Text("(%d/%d) %s", gGameIndex+1, pCpcEmu->GetGamesList().GetNoGames(), game.DisplayName.c_str());
 		if (bLoadSnap)
+		{
+#ifndef NDEBUG
+			LOGINFO("Load game '%s'", game.DisplayName.c_str());
+#endif
 			pCpcEmu->GetGamesList().LoadGame(gGameIndex);
+		}
 	}
 #endif
 
@@ -145,7 +151,7 @@ void FCpcViewer::Draw()
 
 	ImDrawList* dl = ImGui::GetWindowDrawList();
 
-	// draw screen area.
+	// draw line around the screen area.
 	if (bDrawScreenExtents)
 	{
 		const float y_min = Clamp(pos.y + ScreenTop, pos.y, pos.y + TextureHeight);
@@ -163,6 +169,25 @@ void FCpcViewer::Draw()
 		{
 			const uint8_t scrMode = pCpcEmu->ScreenModePerScanline[s];
 			dl->AddLine(ImVec2(pos.x, pos.y + s), ImVec2(pos.x + TextureWidth, pos.y + s), scrMode == 0 ? 0x40ffff00 : 0x4000ffff);
+		}
+	}
+	
+	static int scanlineStart = 32;
+	//ImGui::InputInt("Scanline start", &scanlineStart);
+
+	// Draw a line at each scanline position for each debugger event
+	// cpc seems to have 312 scanlines
+	// AM40010_FRAMEBUFFER_HEIGHT is 312
+
+	FDebugger& debugger = pCpcEmu->CodeAnalysis.Debugger;
+	const uint8_t* scanlineEvents = debugger.GetScanlineEvents();
+	for (int scanlineNo = 0; scanlineNo < 320; scanlineNo++)
+	{
+		const int scanlineY = std::min(std::max(scanlineNo - scanlineStart, 0), AM40010_DISPLAY_HEIGHT);
+		if (scanlineEvents[scanlineNo] != (int)EEventType::None)
+		{
+			const uint32_t col = debugger.GetEventColour(scanlineEvents[scanlineNo]);
+			dl->AddLine(ImVec2(pos.x + (TextureWidth/* * scale*/), pos.y + (scanlineY/* * scale*/)), ImVec2(pos.x + (TextureWidth + 32)/* * scale*/, pos.y + (scanlineY/* * scale*/)), col);
 		}
 	}
 
@@ -201,9 +226,7 @@ bool FCpcViewer::OnHovered(const ImVec2& pos)
 	// get the screen mode for the raster line the mouse is pointed at
 	// note: the logic doesn't always work and we sometimes end up with a negative scanline.
 	// for example, this can happen for demos that set the scanlines-per-character to 1.
-	const int scanline = ScreenTop + yp;
-	// get the screen mode for this scan line
-	const int scrMode = scanline > 0 && scanline < AM40010_DISPLAY_HEIGHT ? pCpcEmu->ScreenModePerScanline[scanline] : -1;
+	const int scrMode = GetScreenModeForPixelLine(yp);
 	const int charWidth = scrMode == 0 ? 16 : 8;
 
 	// note: for screen mode 0 this will be in coord space of 320 x 200.
@@ -217,7 +240,6 @@ bool FCpcViewer::OnHovered(const ImVec2& pos)
 		const float rx = Clamp(pos.x + ScreenEdgeL + charX, pos.x, pos.x + TextureWidth);
 		const float ry = Clamp(pos.y + ScreenTop + charY, pos.y, pos.y + TextureHeight);
 		
-
 		// highlight the current character "square" (could actually be a rectangle if the char height is not 8)
 		dl->AddRect(ImVec2(rx, ry), ImVec2((float)rx + charWidth, (float)ry + CharacterHeight), 0xffffffff);
 
@@ -298,11 +320,8 @@ float FCpcViewer::DrawScreenCharacter(int xChar, int yChar, float x, float y, fl
 	// the x coord will be in mode 1 coordinates. [320 pixels]
 	// mode 0 will effectively use 2 mode 1 pixels.
 
-	const int scanLine = ScreenTop + yChar * CharacterHeight;
-	assert(scanLine > 0);
-	assert(scanLine < AM40010_DISPLAY_HEIGHT);
-	const int screenMode = pCpcEmu->ScreenModePerScanline[scanLine];
-
+	const int screenMode = GetScreenModeForPixelLine(yChar * CharacterHeight);
+	
 	const FCodeAnalysisState& codeAnalysis = pCpcEmu->CodeAnalysis;
 	const int xMult = screenMode == 0 ? 2 : 1;
 	ImVec2 pixelSize = ImVec2(pixelHeight * (float)xMult, pixelHeight);
@@ -409,16 +428,25 @@ void FCpcViewer::CalculateScreenProperties()
 	ScreenWidth = crtc.h_displayed * 8; // this is always in mode 1 coords. fix this?
 	ScreenHeight = crtc.v_displayed * CharacterHeight;
 
-	const int _hTotOffset = (crtc.h_total - 63) * 8;					// offset based on the default horiz total size (63 chars)
-	const int _hSyncOffset = (crtc.h_sync_pos - 46) * 8;				// offset based on the default horiz sync position (46 chars)
-	ScreenEdgeL = crtc.h_displayed * 8 - _hSyncOffset + 32 - ScreenWidth + _hTotOffset;
+	const int hTotOffset = (crtc.h_total - 63) * 8;					// offset based on the default horiz total size (63 chars)
+	const int hSyncOffset = (crtc.h_sync_pos - 46) * 8;				// offset based on the default horiz sync position (46 chars)
+	ScreenEdgeL = crtc.h_displayed * 8 - hSyncOffset + 32 - ScreenWidth + hTotOffset;
 
-	const int _scanLinesPerCharOffset = 37 - (8 - (crtc.max_scanline_addr + 1)) * 9;
-	const int _vTotalOffset = (crtc.v_total - 38) * CharacterHeight;		// offset based on the default vertical total size (38 chars)
-	const int _vSyncOffset = (crtc.v_sync_pos - 30) * CharacterHeight;		// offset based on the default vert sync position (30 chars)
-	ScreenTop = crtc.v_displayed * CharacterHeight - _vSyncOffset + _scanLinesPerCharOffset - ScreenHeight + crtc.v_total_adjust + _vTotalOffset;
+	const int scanLinesPerCharOffset = 37 - (8 - (crtc.max_scanline_addr + 1)) * 9;
+	const int vTotalOffset = (crtc.v_total - 38) * CharacterHeight;		// offset based on the default vertical total size (38 chars)
+	const int vSyncOffset = (crtc.v_sync_pos - 30) * CharacterHeight;	// offset based on the default vert sync position (30 chars)
+	ScreenTop = crtc.v_displayed * CharacterHeight - vSyncOffset + scanLinesPerCharOffset - ScreenHeight + crtc.v_total_adjust + vTotalOffset;
+
+	// not sure this is right?
+	ScreenTop = Clamp(ScreenTop, 0, AM40010_FRAMEBUFFER_HEIGHT);
 
 	HorizCharCount = crtc.h_displayed;
+}
+
+int FCpcViewer::GetScreenModeForPixelLine(int yPos) const
+{
+	const int scanline = ScreenTop + yPos;
+	return scanline > 0 && scanline < AM40010_DISPLAY_HEIGHT ? pCpcEmu->ScreenModePerScanline[scanline] : -1;
 }
 
 void FCpcViewer::Tick(void)
@@ -453,17 +481,18 @@ void FCpcViewer::DrawTestScreen()
 
 	int scanLine = ScreenTop;
 
+	const float pixelHeight = 5.0f;
 	for (int y = 0; y < crtc.v_displayed; y++)
 	{
 		const int scrMode = pCpcEmu->ScreenModePerScanline[scanLine];
 		const int charCount = scrMode == 0 ? HorizCharCount / 2 : HorizCharCount;
 		for (int x = 0; x < charCount; x++)
 		{
-			curPos.x += DrawScreenCharacter(x, y, curPos.x, curPos.y, 5.0f);
+			curPos.x += DrawScreenCharacter(x, y, curPos.x, curPos.y, pixelHeight);
 		}
-		scanLine += 8;
+		scanLine += CharacterHeight;
 		curPos.x = xStart;
-		curPos.y += 40.0f;
+		curPos.y += pixelHeight * CharacterHeight;
 	}
 	ImGui::SetCursorScreenPos(ImVec2(curPos.x, curPos.y));
 }
