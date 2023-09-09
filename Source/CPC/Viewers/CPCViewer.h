@@ -8,6 +8,7 @@
 class FCpcEmu;
 class FCodeAnalysisState;
 struct FCodeAnalysisViewState;
+struct FPalette;
 
 class FCpcViewer
 {
@@ -26,6 +27,7 @@ private:
 	float	DrawScreenCharacter(int xChar, int yChar, float x, float y, float pixelHeight) const;
 	void	CalculateScreenProperties();
 	int		GetScreenModeForPixelLine(int yPos) const;
+	const FPalette& GetPaletteForPixelLine(int yPos) const;
 
 #ifndef NDEBUG
 	void DrawTestScreen();

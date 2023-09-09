@@ -51,6 +51,7 @@
 #include "Viewers/GraphicsViewer.h"
 #include "MemoryHandlers.h"
 #include "IOAnalysis.h"
+#include "Util/GraphicsView.h"
 
 struct FGameViewerData;
 struct FGameConfig;
@@ -136,6 +137,7 @@ public:
 	
 	// Read a byte/word from writable memory. i.e. RAM
 	// In the case of RAM behind ROM this will always return a byte from RAM - unlike ReadByte() which will return ROM.
+	// TODO get rid of these
 	uint8_t		ReadWritableByte(uint16_t address) const;
 	uint16_t	ReadWritableWord(uint16_t address) const;
 
@@ -203,6 +205,7 @@ public:
 
 	// sam. put this somewhere else?
 	int ScreenModePerScanline[AM40010_DISPLAY_HEIGHT] = {-1 };
+	FPalette PalettePerScanline[AM40010_DISPLAY_HEIGHT];
 	int LastScanline = -1;
 
 private:

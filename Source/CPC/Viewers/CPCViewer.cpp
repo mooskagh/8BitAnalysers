@@ -16,6 +16,7 @@
 #include <cassert>
 
 int CpcKeyFromImGuiKey(ImGuiKey key);
+void DrawPalette(const FPalette& palette);
 
 template<typename T> static inline T Clamp(T v, T mn, T mx)
 { 
@@ -114,6 +115,15 @@ void FCpcViewer::Draw()
 		ImGui::Text("Screen mode: %d", scrMode);
 		ImGui::Text("Resolution: %d x %d", crtc.h_displayed * multiplier[scrMode], ScreenHeight);
 	}
+
+	int numPaletteChanges = false;
+	// see if palette changes occured during last frame
+	for (int p = 1; p < AM40010_DISPLAY_HEIGHT; p++)
+	{
+		if (pCpcEmu->PalettePerScanline[p - 1] != pCpcEmu->PalettePerScanline[p])
+			numPaletteChanges++;
+	}
+	ImGui::Text("Palette changes: %d", numPaletteChanges);
 
 	// draw the cpc display
 	chips_display_info_t disp = cpc_display_info(&pCpcEmu->CpcEmuState);
@@ -277,6 +287,7 @@ bool FCpcViewer::OnHovered(const ImVec2& pos)
 		const int charIndexY = charY / CharacterHeight;
 		//ImGui::Text("raw coords (%d, %d)", rx, ry);
 		ImGui::Text("Character (%d, %d)", charIndexX, charIndexY);
+		ImGui::Text("Scanline: %d", ScreenTop + yp);
 
 		ImGui::Text("Screen Pos (%d, %d)", x_adj, yp);
 		ImGui::Text("Addr: %s", NumStr(scrAddress));
@@ -288,6 +299,10 @@ bool FCpcViewer::OnHovered(const ImVec2& pos)
 			ImGui::SameLine();
 			DrawCodeAddress(codeAnalysis, viewState, lastPixWriter);
 		}
+		else
+		{
+			ImGui::Text("Pixel Writer: None");
+		}
 
 		if (scrMode == -1)
 			ImGui::Text("Screen Mode: unknown", scrMode);
@@ -298,6 +313,18 @@ bool FCpcViewer::OnHovered(const ImVec2& pos)
 		DrawScreenCharacter(charIndexX, charIndexY, pos.x, pos.y, 10.f);
 		ImGui::SetCursorScreenPos(ImVec2(pos.x, pos.y + 10.f * CharacterHeight));
 
+		bool bPaletteChanged = false;
+		const FPalette& thisScanlinePalette = GetPaletteForPixelLine(yp);
+		if (yp > 0)
+		{ 
+			const FPalette& lastScanlinePalette = GetPaletteForPixelLine(yp-1);
+
+			if (lastScanlinePalette != thisScanlinePalette)
+				bPaletteChanged = true;
+		}
+
+		ImGui::Text("Palette");
+		DrawPalette(thisScanlinePalette);
 		ImGui::EndTooltip();
 
 		if (ImGui::IsMouseDoubleClicked(0))
@@ -360,11 +387,8 @@ float FCpcViewer::DrawScreenCharacter(int xChar, int yChar, float x, float y, fl
 						break;
 					}
 
-					//const ImU32 colour = pCpcEmu->PalettePerScanline[scanlineTEMP].GetColour(colourIndex);
-					const ImU32 colour = GetCurrentPalette_Const().GetColour(colourIndex);
+					const ImU32 colour = GetPaletteForPixelLine(yChar * CharacterHeight).GetColour(colourIndex);
 					dl->AddRectFilled(rectMin, rectMax, colour);
-					//dl->AddRect(rectMin, rectMax, 0xffffffff);
-
 					pos.x += pixelSize.x;
 				}
 			}
@@ -397,11 +421,8 @@ float FCpcViewer::DrawScreenCharacter(int xChar, int yChar, float x, float y, fl
 						break;
 					}
 
-					//const ImU32 colour = pCpcEmu->PalettePerScanline[scanlineTEMP].GetColour(colourIndex);
-					const ImU32 colour = GetCurrentPalette_Const().GetColour(colourIndex);
+					const ImU32 colour = GetPaletteForPixelLine(yChar * CharacterHeight).GetColour(colourIndex);
 					dl->AddRectFilled(rectMin, rectMax, colour);
-					//dl->AddRect(rectMin, rectMax, 0xffffffff);
-
 					pos.x += pixelSize.x;
 				}
 			}
@@ -447,6 +468,13 @@ int FCpcViewer::GetScreenModeForPixelLine(int yPos) const
 {
 	const int scanline = ScreenTop + yPos;
 	return scanline > 0 && scanline < AM40010_DISPLAY_HEIGHT ? pCpcEmu->ScreenModePerScanline[scanline] : -1;
+}
+
+// todo possibly want to not return current palette?
+const FPalette& FCpcViewer::GetPaletteForPixelLine(int yPos) const
+{
+	const int scanline = ScreenTop + yPos;
+	return scanline > 0 && scanline < AM40010_DISPLAY_HEIGHT ? pCpcEmu->PalettePerScanline[scanline] : GetCurrentPalette_Const();
 }
 
 void FCpcViewer::Tick(void)
@@ -629,4 +657,20 @@ int CpcKeyFromImGuiKey(ImGuiKey key)
 	}
 
 	return cpcKey;
+}
+
+void DrawPalette(const FPalette& palette)
+{
+	// todo scale this
+	const ImVec2 size(24, 24);
+	for (int i = 0; i < palette.GetColourCount(); i++) 
+	{
+		ImGui::PushID(128 + i);
+		ImGui::ColorButton("##ink_color", ImColor(palette.GetColour(i)), ImGuiColorEditFlags_NoAlpha, size);
+		ImGui::PopID();
+		if (((i + 1) % 8) != 0) 
+		{
+			ImGui::SameLine();
+		}
+	}	
 }

@@ -292,6 +292,11 @@ void	FCpcEmu::OnInstructionExecuted(int ticks, uint64_t pins)
 	{
 		const uint8_t screenMode = CpcEmuState.ga.video.mode;
 		ScreenModePerScanline[curScanline] = screenMode;
+
+		FPalette& palette = PalettePerScanline[curScanline];
+		for (int i = 0; i < palette.GetColourCount(); i++)
+			palette.SetColour(i, CpcEmuState.ga.hw_colors[CpcEmuState.ga.regs.ink[i]]);
+
 		LastScanline = CpcEmuState.ga.crt.pos_y;
 	}
 }
@@ -654,7 +659,7 @@ const char* g_CRTCRegNames[18] =
 void CRTCWriteEventShowAddress(FCodeAnalysisState& state, const FEvent& event)
 {
 	int regIndex = event.Address & 0x1f;
-	ImGui::Text("Port %s: R%d %s", NumStr(event.Address), regIndex, regIndex <= 18 ? g_CRTCRegNames[regIndex] : "");
+	ImGui::Text("Port %s: R%d %s", NumStr(event.Address), regIndex, regIndex < 18 ? g_CRTCRegNames[regIndex] : "");
 }
 
 void CRTCWriteEventShowValue(FCodeAnalysisState& state, const FEvent& event)
@@ -694,6 +699,10 @@ void ScreenModeShowValue(FCodeAnalysisState& state, const FEvent& event)
 
 bool FCpcEmu::Init(const FCpcConfig& config)
 {
+#ifndef NDEBUG
+	LOGINFO("Init CPCEmu...");
+#endif
+
 	const std::string memStr = config.Model == ECpcModel::CPC_6128 ? " (CPC 6128)" : " (CPC 464)";
 	SetWindowTitle((std::string(kAppTitle) + memStr).c_str());
 	SetWindowIcon("CPCALogo.png");
@@ -907,6 +916,9 @@ bool FCpcEmu::Init(const FCpcConfig& config)
 
 	bInitialised = true;
 
+#ifndef NDEBUG
+	LOGINFO("Init CPCEmu...Done");
+#endif
 	return true;
 }
 
@@ -929,6 +941,10 @@ void FCpcEmu::Shutdown()
 
 void FCpcEmu::StartGame(FGameConfig* pGameConfig, bool bLoadGameData /* =  true*/)
 {
+#ifndef NDEBUG
+	LOGINFO("Start game '%s'", pGameConfig->Name.c_str());
+#endif
+
 	// reset systems
 	MemoryAccessHandlers.clear();	// remove old memory handlers
 	ResetMemoryStats(MemStats);
@@ -1823,6 +1839,7 @@ uint16_t FCpcEmu::GetScreenMemSize() const
 	return dispSize == 0x3 ? 0x8000 : 0x4000;
 }
 
+// values are in screen mode 1 coordinate system
 bool FCpcEmu::GetScreenMemoryAddress(int x, int y, uint16_t& addr) const
 {
 	// sam todo. return false if out of range
