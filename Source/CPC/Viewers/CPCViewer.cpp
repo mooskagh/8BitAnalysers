@@ -221,8 +221,14 @@ void FCpcViewer::Draw()
 				const int scrMode = GetScreenModeForPixelLine(yp);
 				pixelsToHighlight = scrMode == 0 ? 2 : 4;
 
-				ImU32 colour = 0xffffffff;
-				dl->AddRect(ImVec2((float)rx, (float)ry), ImVec2((float)rx + (pixelsToHighlight + 1/* * scale*/), (float)ry + (1/* * scale*/)), colour);	// TODO: flash?
+				// generate flash colour
+				ImU32 flashCol = 0xff000000;
+				const int flashCounter = FrameCounter >> 2;
+				if (flashCounter & 1) flashCol |= 0xff << 0;
+				if (flashCounter & 2) flashCol |= 0xff << 8;
+				if (flashCounter & 4) flashCol |= 0xff << 16;
+
+				dl->AddRect(ImVec2((float)rx, (float)ry), ImVec2((float)rx + (pixelsToHighlight + 1/* * scale*/), (float)ry + (1/* * scale*/)), flashCol);	// TODO: flash?
 				
 				//const float b = 5.f;
 				//colour = 0xff808080;
@@ -254,6 +260,7 @@ void FCpcViewer::Draw()
 	ImGui::Text("Application average %.3f ms/frame (%.1f FPS)", 1000.0f / ImGui::GetIO().Framerate, ImGui::GetIO().Framerate);
 
 	bWindowFocused = ImGui::IsWindowFocused();
+	FrameCounter++;
 }
 
 // todo tidy this whole function up
