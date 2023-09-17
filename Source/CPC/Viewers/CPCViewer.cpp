@@ -45,6 +45,7 @@ void FCpcViewer::Init(FCpcEmu* pEmu)
 void FCpcViewer::Draw()
 {		
 #ifndef NDEBUG
+
 	// debug code to manually iterate through all snaps in a directory
 	if (pCpcEmu->GetGamesList().GetNoGames())
 	{
@@ -202,6 +203,35 @@ void FCpcViewer::Draw()
 	}
 
 	// todo highlight hovered address in code analyser view
+	
+	// draw hovered address
+	const FCodeAnalysisViewState& viewState = pCpcEmu->CodeAnalysis.GetFocussedViewState();
+	if (viewState.HighlightAddress.IsValid())
+	{
+		ImDrawList* dl = ImGui::GetWindowDrawList();
+		if (viewState.HighlightAddress.Address >= pCpcEmu->GetScreenAddrStart() && viewState.HighlightAddress.Address <= pCpcEmu->GetScreenAddrEnd())
+		{
+			int xp=0, yp=0;
+			if (pCpcEmu->GetScreenAddressCoords(viewState.HighlightAddress.Address, xp, yp))
+			{
+				const int rx = static_cast<int>(pos.x + (ScreenEdgeL + xp)/* * scale*/);
+				const int ry = static_cast<int>(pos.y + (ScreenTop + yp)/* * scale*/);
+				// in screen mode 0, 1 byte will be 2 pixels. mode 1 will be 4 pixels 
+				int pixelsToHighlight = 4;
+				const int scrMode = GetScreenModeForPixelLine(yp);
+				pixelsToHighlight = scrMode == 0 ? 2 : 4;
+
+				ImU32 colour = 0xffffffff;
+				dl->AddRect(ImVec2((float)rx, (float)ry), ImVec2((float)rx + (pixelsToHighlight + 1/* * scale*/), (float)ry + (1/* * scale*/)), colour);	// TODO: flash?
+				
+				//const float b = 5.f;
+				//colour = 0xff808080;
+				//const ImVec2 min = ImVec2((float)rx - b - 1, (float)ry - b);
+				//const ImVec2 max = ImVec2((float)rx + (pixelsToHighlight + 1/* * scale*/) + b, (float)ry + (1/* * scale*/) + b);
+				//dl->AddRect(min, max, colour);	// TODO: flash?
+			}
+		}
+	}
 
 	bool bJustSelectedChar = false;
 	if (ImGui::IsItemHovered())
@@ -210,8 +240,11 @@ void FCpcViewer::Draw()
 	}
 
 #ifndef NDEBUG
+	static bool bDrawTestScreen = true;
+	ImGui::Checkbox("Draw test screen (DEBUG. SLOW!)", &bDrawTestScreen);
 	// draw an entire screen out of characters - to test the code for drawing a screen character
-	DrawTestScreen();
+	if (bDrawTestScreen)
+		DrawTestScreen();
 #endif
 	
 	ImGui::SliderFloat("Speed Scale", &pCpcEmu->ExecSpeedScale, 0.0f, 2.0f);
@@ -285,9 +318,10 @@ bool FCpcViewer::OnHovered(const ImVec2& pos)
 
 		const int charIndexX = charX / charWidth;
 		const int charIndexY = charY / CharacterHeight;
-		//ImGui::Text("raw coords (%d, %d)", rx, ry);
+#ifndef NDEBUG
 		ImGui::Text("Character (%d, %d)", charIndexX, charIndexY);
 		ImGui::Text("Scanline: %d", ScreenTop + yp);
+#endif
 
 		ImGui::Text("Screen Pos (%d, %d)", x_adj, yp);
 		ImGui::Text("Addr: %s", NumStr(scrAddress));

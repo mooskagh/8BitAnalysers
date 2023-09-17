@@ -57,6 +57,7 @@ struct FGameViewerData;
 struct FGameConfig;
 struct FViewerConfig;
 class FViewerBase;
+class FScreenPixMemDescGenerator;
 
 enum class ECpcModel
 {
@@ -152,6 +153,7 @@ public:
 	uint16_t GetScreenAddrEnd() const;
 	uint16_t GetScreenMemSize() const;
 	bool GetScreenMemoryAddress(int x, int y, uint16_t& addr) const;
+	bool GetScreenAddressCoords(uint16_t addr, int& x, int& y);
 
 	void UpdatePalette();
 
@@ -213,6 +215,8 @@ private:
 	FCpcGameLoader	GameLoader;
 
 	std::vector<FViewerBase*>	Viewers;
+
+	FScreenPixMemDescGenerator* pScreenMemDescGenerator = 0;
 
 	bool bReplaceGamePopup = false;
 	int ReplaceGameSnapshotIndex = 0;
