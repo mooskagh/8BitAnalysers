@@ -1930,10 +1930,14 @@ bool FCpcEmu::GetScreenMemoryAddress(int x, int y, uint16_t& addr) const
 */
 
 // should we pass in screen mode?
+// currently, it returns in mode 1 coords. 
 bool FCpcEmu::GetScreenAddressCoords(uint16_t addr, int& x, int& y)
 {
 	const uint16_t startAddr = GetScreenAddrStart();
 	if (addr < startAddr || addr >= GetScreenAddrEnd())
+		return false;
+
+	if (CpcEmuState.crtc.h_displayed == 0)
 		return false;
 
 	const uint16_t totOffset = addr - startAddr; // Get byte offset into screen ram

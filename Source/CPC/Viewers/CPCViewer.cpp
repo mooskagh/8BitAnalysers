@@ -92,6 +92,11 @@ void FCpcViewer::Draw()
 	ImGui::Checkbox("Write to screen on click", &bClickWritesToScreen);
 #endif
 
+	const float scale = ImGui_GetScaling();
+
+	//static float scale = 4.0f;
+	//ImGui::InputScalar("Scale", ImGuiDataType_Float, &scale, NULL, NULL, "%f", ImGuiInputTextFlags_CharsDecimal);
+
 	// see if mixed screen modes are used
 	int scrMode = pCpcEmu->CpcEmuState.ga.video.mode;
 	for (int s=0; s< AM40010_DISPLAY_HEIGHT; s++)
@@ -158,19 +163,20 @@ void FCpcViewer::Draw()
 	const ImVec2 pos = ImGui::GetCursorScreenPos(); // get the position of the texture
 	ImVec2 uv0(uv0w, uv0h);
 	ImVec2 uv1(uv1w, uv1h);
-	ImGui::Image(ScreenTexture, ImVec2(TextureWidth, TextureHeight), uv0, uv1);
+
+	ImGui::Image(ScreenTexture, ImVec2(TextureWidth * scale, TextureHeight * scale), uv0, uv1);
 
 	ImDrawList* dl = ImGui::GetWindowDrawList();
 
 	// draw line around the screen area.
 	if (bDrawScreenExtents)
 	{
-		const float y_min = Clamp(pos.y + ScreenTop, pos.y, pos.y + TextureHeight);
-		const float y_max = Clamp(pos.y + ScreenTop + ScreenHeight, pos.y, pos.y + TextureHeight);
-		const float x_min = Clamp(pos.x + ScreenEdgeL, pos.x, pos.x + TextureWidth);
-		const float x_max = Clamp(pos.x + ScreenEdgeL + ScreenWidth, pos.x, pos.x + TextureWidth);
+		const float x_min = Clamp(pos.x + (ScreenEdgeL * scale), pos.x, pos.x + (TextureWidth * scale));
+		const float x_max = Clamp(pos.x + (ScreenEdgeL * scale) + (ScreenWidth * scale), pos.x, pos.x + (TextureWidth * scale));
+		const float y_min = Clamp(pos.y + (ScreenTop * scale), pos.y, pos.y + (TextureHeight * scale));
+		const float y_max = Clamp(pos.y + (ScreenTop * scale) + (ScreenHeight * scale), pos.y, pos.y + (TextureHeight * scale));
 
-		dl->AddRect(ImVec2(x_min, y_min), ImVec2(x_max, y_max), scrRectAlpha << 24 | 0xffffff);
+		dl->AddRect(ImVec2(x_min, y_min), ImVec2(x_max, y_max), scrRectAlpha << 24 | 0xffffff, 0, 0, 1 * scale);
 	}
 
 	// colourize scanlines depending on the screen mode
@@ -179,7 +185,7 @@ void FCpcViewer::Draw()
 		for (int s=0; s< AM40010_DISPLAY_HEIGHT; s++)
 		{
 			const uint8_t scrMode = pCpcEmu->ScreenModePerScanline[s];
-			dl->AddLine(ImVec2(pos.x, pos.y + s), ImVec2(pos.x + TextureWidth, pos.y + s), scrMode == 0 ? 0x40ffff00 : 0x4000ffff);
+			dl->AddLine(ImVec2(pos.x, pos.y + (s * scale)), ImVec2(pos.x + (TextureWidth * scale), pos.y + (s * scale)), scrMode == 0 ? 0x40ffff00 : 0x4000ffff, 1 * scale);
 		}
 	}
 	
@@ -198,7 +204,9 @@ void FCpcViewer::Draw()
 		if (scanlineEvents[scanlineNo] != (int)EEventType::None)
 		{
 			const uint32_t col = debugger.GetEventColour(scanlineEvents[scanlineNo]);
-			dl->AddLine(ImVec2(pos.x + (TextureWidth/* * scale*/), pos.y + (scanlineY/* * scale*/)), ImVec2(pos.x + (TextureWidth + 32)/* * scale*/, pos.y + (scanlineY/* * scale*/)), col);
+			const ImVec2 start = ImVec2(pos.x + (TextureWidth * scale), pos.y + (scanlineY * scale));
+			const ImVec2 end = ImVec2(pos.x + (TextureWidth + 32) * scale, pos.y + (scanlineY * scale));
+			dl->AddLine(start, end, col, 1 * scale);
 		}
 	}
 
@@ -214,8 +222,8 @@ void FCpcViewer::Draw()
 			int xp=0, yp=0;
 			if (pCpcEmu->GetScreenAddressCoords(viewState.HighlightAddress.Address, xp, yp))
 			{
-				const int rx = static_cast<int>(pos.x + (ScreenEdgeL + xp)/* * scale*/);
-				const int ry = static_cast<int>(pos.y + (ScreenTop + yp)/* * scale*/);
+				const int rx = static_cast<int>(pos.x + (ScreenEdgeL + xp) * scale);
+				const int ry = static_cast<int>(pos.y + (ScreenTop + yp) * scale);
 				// in screen mode 0, 1 byte will be 2 pixels. mode 1 will be 4 pixels 
 				int pixelsToHighlight = 4;
 				const int scrMode = GetScreenModeForPixelLine(yp);
@@ -228,14 +236,8 @@ void FCpcViewer::Draw()
 				if (flashCounter & 2) flashCol |= 0xff << 8;
 				if (flashCounter & 4) flashCol |= 0xff << 16;
 
-				dl->AddRect(ImVec2((float)rx, (float)ry), ImVec2((float)rx + (pixelsToHighlight + 1/* * scale*/), (float)ry + (1/* * scale*/)), flashCol);	// TODO: flash?
-				
-				//const float b = 5.f;
-				//colour = 0xff808080;
-				//const ImVec2 min = ImVec2((float)rx - b - 1, (float)ry - b);
-				//const ImVec2 max = ImVec2((float)rx + (pixelsToHighlight + 1/* * scale*/) + b, (float)ry + (1/* * scale*/) + b);
-				//dl->AddRect(min, max, colour);	// TODO: flash?
-			}
+				dl->AddRectFilled(ImVec2((float)rx, (float)ry), ImVec2((float)rx + ((pixelsToHighlight + 1) * scale), (float)ry + (1 * scale)), flashCol);
+				}
 		}
 	}
 
@@ -266,12 +268,14 @@ void FCpcViewer::Draw()
 // todo tidy this whole function up
 bool FCpcViewer::OnHovered(const ImVec2& pos)
 {
+	const float scale = ImGui_GetScaling();
+
 	ImDrawList* dl = ImGui::GetWindowDrawList();
 	ImGuiIO& io = ImGui::GetIO();
 
 	// get mouse cursor coords in logical screen area space
-	const int xp = Clamp((int)(io.MousePos.x - pos.x - ScreenEdgeL), 0, ScreenWidth - 1);
-	const int yp = Clamp((int)(io.MousePos.y - pos.y - ScreenTop), 0, ScreenHeight - 1);
+	const int xp = Clamp((int)(((io.MousePos.x - pos.x) / scale) - ScreenEdgeL), 0, ScreenWidth - 1);
+	const int yp = Clamp((int)(((io.MousePos.y - pos.y) / scale) - ScreenTop), 0, ScreenHeight - 1);
 
 	// get the screen mode for the raster line the mouse is pointed at
 	// note: the logic doesn't always work and we sometimes end up with a negative scanline.
@@ -285,13 +289,16 @@ bool FCpcViewer::OnHovered(const ImVec2& pos)
 	if (pCpcEmu->GetScreenMemoryAddress(xp, yp, scrAddress))
 	{
 		// position (in pixels) of the start of the character
-		const int charX = xp & ~(charWidth - 1); 
-		const int charY = (yp / CharacterHeight) * CharacterHeight;
-		const float rx = Clamp(pos.x + ScreenEdgeL + charX, pos.x, pos.x + TextureWidth);
-		const float ry = Clamp(pos.y + ScreenTop + charY, pos.y, pos.y + TextureHeight);
+		const int charStartX = xp & ~(charWidth - 1); 
+		const int charStartY = (yp / CharacterHeight) * CharacterHeight;
 		
-		// highlight the current character "square" (could actually be a rectangle if the char height is not 8)
-		dl->AddRect(ImVec2(rx, ry), ImVec2((float)rx + charWidth, (float)ry + CharacterHeight), 0xffffffff);
+		{
+			const float rx = Clamp(pos.x + (ScreenEdgeL + charStartX) * scale, pos.x, pos.x + (TextureWidth * scale));
+			const float ry = Clamp(pos.y + (ScreenTop + charStartY) * scale, pos.y, pos.y + (TextureHeight * scale));
+
+			// highlight the current character "square" (could actually be a rectangle if the char height is not 8)
+			dl->AddRect(ImVec2(rx, ry), ImVec2((float)rx + (charWidth * scale), (float)ry + (CharacterHeight * scale)), 0xffffffff, 0, 0, 1 * scale);
+		}
 
 		FCodeAnalysisState& codeAnalysis = pCpcEmu->CodeAnalysis;
 		const FAddressRef lastPixWriter = codeAnalysis.GetLastWriterForAddress(scrAddress);
@@ -306,7 +313,7 @@ bool FCpcViewer::OnHovered(const ImVec2& pos)
 				uint16_t plotAddress = 0;
 				for (int y = 0; y < CharacterHeight; y++)
 				{
-					if (pCpcEmu->GetScreenMemoryAddress(charX, charY + y, plotAddress))
+					if (pCpcEmu->GetScreenMemoryAddress(charStartX, charStartY + y, plotAddress))
 					{
 						for (int b = 0; b < numBytes; b++)
 						{
@@ -323,8 +330,8 @@ bool FCpcViewer::OnHovered(const ImVec2& pos)
 		const int divisor[4] = { 4, 2, 1, 2 };
 		const int x_adj = (xp * 2) / (scrMode == -1 ? 2 : divisor[scrMode]);
 
-		const int charIndexX = charX / charWidth;
-		const int charIndexY = charY / CharacterHeight;
+		const int charIndexX = charStartX / charWidth;
+		const int charIndexY = charStartY / CharacterHeight;
 #ifndef NDEBUG
 		ImGui::Text("Character (%d, %d)", charIndexX, charIndexY);
 		ImGui::Text("Scanline: %d", ScreenTop + yp);
