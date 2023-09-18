@@ -56,6 +56,8 @@ private:
 	// Number of horizontal characters that can be displayed. Note: in mode 0 you will need to divide this by 2. This is possibly a bit poo.
 	int HorizCharCount = 0;
 
+	int	FrameCounter = 0;
+
 #ifndef NDEBUG
 	bool	bClickWritesToScreen = false;
 #endif

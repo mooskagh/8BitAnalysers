@@ -570,6 +570,13 @@ bool FSpectrumEmu::Init(const FSpectrumConfig& config)
 	CodeAnalysis.Config.bShowBanks = config.Model == ESpectrumModel::Spectrum128K;
 	CodeAnalysis.Config.CharacterColourLUT = FZXGraphicsView::GetColourLUT();
 	
+	// set supported bitmap format
+	CodeAnalysis.Config.bSupportedBitmapTypes[(int)EBitmapFormat::Bitmap_1Bpp] = true;
+	for (int i = 0; i < FCodeAnalysisState::kNoViewStates; i++)
+	{
+		CodeAnalysis.ViewState[i].CurBitmapFormat = EBitmapFormat::Bitmap_1Bpp;
+	}
+
 	// setup emu
 	zx_type_t type = config.Model == ESpectrumModel::Spectrum128K ? ZX_TYPE_128 : ZX_TYPE_48K;
 	zx_joystick_type_t joy_type = ZX_JOYSTICKTYPE_NONE;
@@ -764,6 +771,8 @@ bool FSpectrumEmu::Init(const FSpectrumConfig& config)
 	GetCurrentPalette().SetColourCount(16);
 	for (int i = 0; i < 8; i++)
 		GetCurrentPalette().SetColour(i, CodeAnalysis.Config.CharacterColourLUT[i]);
+
+	SetCurrentPalette(FPalette(CodeAnalysis.Config.CharacterColourLUT, 8));
 
 	// Setup Memory Analyser
 	CodeAnalysis.MemoryAnalyser.AddROMArea(kROMStart, kROMEnd);

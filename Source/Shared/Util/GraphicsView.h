@@ -119,6 +119,21 @@ struct FCharacterMap
 struct FPalette
 {
 	FPalette();
+	FPalette(const uint32_t* pCols, int colCount)
+	{
+		Colours.resize(colCount);
+		memcpy(Colours.data(), pCols, colCount * sizeof(uint32_t));
+	}
+	bool operator == (const FPalette& p) const
+	{
+		const size_t numColours = GetColourCount();
+		if (numColours != p.GetColourCount())
+			return false;
+		for (int c = 0; c < numColours; c++)
+			if (Colours[c] != p.Colours[c])
+				return false;
+		return true;
+	}
 	void SetColourCount(int count);
 	void SetColour(int colourIndex, uint32_t rgb);
 	size_t GetColourCount() const;
@@ -127,6 +142,7 @@ protected:
 	std::vector<uint32_t> Colours;
 };
 
+void SetCurrentPalette(const FPalette& newPalette);
 FPalette& GetCurrentPalette();
 const FPalette& GetCurrentPalette_Const();
 

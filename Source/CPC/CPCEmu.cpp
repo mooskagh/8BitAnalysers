@@ -16,6 +16,7 @@
 #include "CpcChipsImpl.h"
 
 #include "Exporters/AssemblerExport.h"
+#include "CodeAnalyser/UI/CharacterMapViewer.h"
 #include "App.h"
 #include "Viewers/CRTCViewer.h"
 #include "Viewers/OverviewViewer.h"
@@ -222,6 +223,35 @@ void* FCpcEmu::GetCPUEmulator(void) const
 	return (void*)&CpcEmuState.cpu;
 }
 
+class FScreenPixMemDescGenerator : public FMemoryRegionDescGenerator
+{
+public:
+	FScreenPixMemDescGenerator(FCpcEmu* pEmu)
+		: pCpcEmu(pEmu)
+	{
+		UpdateScreenMemoryLocation();
+	}
+
+	const char* GenerateAddressString(uint16_t addr) override
+	{
+		// todo: deal with screen mode? display both scr mode's x coords?
+		int xp = 0, yp = 0;
+		if (pCpcEmu->GetScreenAddressCoords(addr, xp, yp))
+			sprintf(DescStr, "Screen: %d,%d", xp, yp);
+		else
+			sprintf(DescStr, "Screen: ?,?");
+		return DescStr;
+	}
+
+	void UpdateScreenMemoryLocation()
+	{
+		RegionMin = pCpcEmu->GetScreenAddrStart();
+		RegionMax = pCpcEmu->GetScreenAddrEnd();
+	}
+private:
+	FCpcEmu* pCpcEmu = 0;
+	char DescStr[32] = { 0 };
+};
 
 #if 0
 void FCpcEmu::GraphicsViewerSetView(uint16_t address, int charWidth)
@@ -365,6 +395,7 @@ uint64_t FCpcEmu::Z80Tick(int num, uint64_t pins)
 
 	// sam. need to do this somewhere better. like when the screen ram address gets set 
 	CodeAnalysis.MemoryAnalyser.SetScreenMemoryArea(GetScreenAddrStart(), GetScreenAddrEnd());
+	pScreenMemDescGenerator->UpdateScreenMemoryLocation();
 
 	debugger.CPUTick(pins);
 
@@ -817,6 +848,10 @@ bool FCpcEmu::Init(const FCpcConfig& config)
 	IOAnalysis.Init(this);
 	CpcViewer.Init(this);
 	CodeAnalysis.ViewState[0].Enabled = true;	// always have first view enabled
+
+	// Setup memory description handlers
+	pScreenMemDescGenerator = new FScreenPixMemDescGenerator(this);
+	AddMemoryRegionDescGenerator(pScreenMemDescGenerator);
 
 	LoadGameConfigs(this);
 
@@ -1583,9 +1618,8 @@ void FCpcEmu::Tick()
 		CodeAnalysis.OnFrameEnd();
 	}
 	
-#if SPECCY
 	UpdateCharacterSets(CodeAnalysis);
-#endif
+
 	UpdatePalette();
 
 	DrawDockingView();
@@ -1655,6 +1689,14 @@ void FCpcEmu::DrawUI()
 	ui_kbd_draw(&pCPCUI->kbd);
 	ui_memmap_draw(&pCPCUI->memmap);
 	ui_am40010_draw(&pCPCUI->ga);
+
+	/*
+	* get these to work? they have a heatmap view that looks handy
+	for (int i = 0; i < 4; i++) {
+		ui_memedit_draw(&pCPCUI->memedit[i]);
+		ui_dasm_draw(&pCPCUI->dasm[i]);
+	}
+	ui_dbg_draw(&pCPCUI->dbg);*/
 	
 	// Draw registered viewers
 	for (auto Viewer : Viewers)
@@ -1719,8 +1761,14 @@ void FCpcEmu::DrawUI()
 			}
 			ImGui::End();
 		}
-
 	}
+
+	ImGui::SetNextWindowSize(ImVec2(500, 400), ImGuiCond_FirstUseEver);
+	if (ImGui::Begin("Character Maps"))
+	{
+		DrawCharacterMapViewer(CodeAnalysis, CodeAnalysis.GetFocussedViewState());
+	}
+	ImGui::End();
 }
 
 bool FCpcEmu::DrawDockingView()
@@ -1823,7 +1871,7 @@ void FCpcConfig::ParseCommandline(int argc, char** argv)
 // https://gist.github.com/neuro-sys/eeb7a323b27a9d8ad891b41144916946#registers
 uint16_t FCpcEmu::GetScreenAddrStart() const
 {
-	const uint16_t  dispStart = (CpcEmuState.crtc.start_addr_hi << 8) | CpcEmuState.crtc.start_addr_lo;
+	const uint16_t dispStart = (CpcEmuState.crtc.start_addr_hi << 8) | CpcEmuState.crtc.start_addr_lo;
 	const uint16_t pageIndex = (dispStart >> 12) & 0x3; // bits 12 & 13 hold the page index
 	const uint16_t baseAddr = pageIndex * 0x4000;
 	const uint16_t offset = (dispStart & 0x3ff) << 1; // 1024 positions. bits 0..9
@@ -1843,17 +1891,69 @@ uint16_t FCpcEmu::GetScreenMemSize() const
 }
 
 // values are in screen mode 1 coordinate system
+// should we pass in screen mode?
 bool FCpcEmu::GetScreenMemoryAddress(int x, int y, uint16_t& addr) const
 {
 	// sam todo. return false if out of range
 	//if (x < 0 || x>255 || y < 0 || y> 191)
 	//	return false;
 
-	//screenaddr = screenbase + (y AND 7)*&800 + int(y/8)*2*R1 + int(x/M)
+	// does this formula work if the screen is "scrolled"?
 
 	const uint8_t charHeight = CpcEmuState.crtc.max_scanline_addr + 1; 
-	const uint8_t w = CpcEmuState.crtc.h_displayed * 2;
-	addr = GetScreenAddrStart() + ((y / charHeight) * w) + ((y % charHeight) * 2048) + (x / 4);
+	const uint8_t bytesPerScrLine = CpcEmuState.crtc.h_displayed * 2;
+	uint16_t yCharIndex = y / charHeight; // which character row are we in?
+	uint16_t charLine = (y % charHeight); // which line are we in of the character square [0-charHeight]?
+	addr = GetScreenAddrStart() + (yCharIndex * bytesPerScrLine) + (charLine * 2048) + (x / 4);
+	
+	return true;
+}
+
+/*
+	Screen ram is 16k.
+	It is split into 8 sections, 2048 bytes apart.
+
+	[Screen eighth 0. 2048 bytes]
+	[Screen eighth 1. 2048 bytes]
+	...
+	[Screen eighth 7. 2048 bytes]
+	
+	Each of those sections hold a single screen line for each character row of the screen.
+	First section holds the first line of each character. Second section holds the second line of each character. Etc..
+
+	Each screen eigth holds all the contiguous bytes for a character row line followed by the next character row line.
+	The bytes for row 0 will be followed by row 1, 2.. etc.
+
+	[Pixel line bytes for character row 0] 
+	[Pixel line bytes for character row 1]
+	...
+	[Pixel line bytes for character row n]
+
+	*n depends on how many character rows are set in the CRTC register
+*/
+
+// should we pass in screen mode?
+// currently, it returns in mode 1 coords. 
+bool FCpcEmu::GetScreenAddressCoords(uint16_t addr, int& x, int& y)
+{
+	const uint16_t startAddr = GetScreenAddrStart();
+	if (addr < startAddr || addr >= GetScreenAddrEnd())
+		return false;
+
+	if (CpcEmuState.crtc.h_displayed == 0)
+		return false;
+
+	const uint16_t totOffset = addr - startAddr; // Get byte offset into screen ram
+	const uint8_t charLine = totOffset / 2048; // Which line of the character are we [0-charHeight]
+	const uint8_t bytesPerLine = CpcEmuState.crtc.h_displayed * 2; // How many bytes in a single screen line?
+	const uint16_t charLineOffset = totOffset % 2048; // What is our offset into the char line area? 
+	const uint16_t charRowIndex = charLineOffset / bytesPerLine; // Which row are we on?
+
+	x = (charLineOffset % bytesPerLine) * 4;
+
+	const uint8_t charHeight = CpcEmuState.crtc.max_scanline_addr + 1;
+	y = (charRowIndex * charHeight) + charLine;
+
 	return true;
 }
 

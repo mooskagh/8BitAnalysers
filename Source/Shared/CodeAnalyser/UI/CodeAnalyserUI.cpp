@@ -835,23 +835,38 @@ bool DrawOperandTypeCombo(const char* pLabel, EOperandType& operandType)
 	return bChanged;
 }
 
+bool IsDisplayTypeSupported(EDataItemDisplayType displayType, const FCodeAnalysisState& state)
+{
+	switch (displayType)
+	{
+		case EDataItemDisplayType::ColMap2Bpp_CPC:
+			return state.Config.bSupportedBitmapTypes[(int)EBitmapFormat::ColMap2Bpp_CPC];
+		case EDataItemDisplayType::ColMap4Bpp_CPC:
+			return state.Config.bSupportedBitmapTypes[(int)EBitmapFormat::ColMap4Bpp_CPC];
+		default:
+			return true;
+	}
+}
 
-bool DrawDataDisplayTypeCombo(const char* pLabel, EDataItemDisplayType& displayType)
+bool DrawDataDisplayTypeCombo(const char* pLabel, EDataItemDisplayType& displayType, const FCodeAnalysisState& state)
 {
 	const int index = (int)displayType;
 	const char* operandTypes[] = { "Unknown", "Pointer", "JumpAddress", "Decimal", "Hex", "Binary",
-									"Bitmap", "ColMap2Bpp", "ColMap4Bpp", "ColMap4Bpp_Twiddled" };
+									"Bitmap", "ColMap2Bpp CPC", "ColMap4Bpp CPC" };
 	bool bChanged = false;
 
 	if (ImGui::BeginCombo(pLabel, operandTypes[index]))
 	{
 		for (int n = 0; n < IM_ARRAYSIZE(operandTypes); n++)
 		{
-			const bool isSelected = (index == n);
-			if (ImGui::Selectable(operandTypes[n], isSelected))
+			if(IsDisplayTypeSupported((EDataItemDisplayType)n,state))
 			{
-				displayType = (EDataItemDisplayType)n;
-				bChanged = true;
+				const bool isSelected = (index == n);
+				if (ImGui::Selectable(operandTypes[n], isSelected))
+				{
+					displayType = (EDataItemDisplayType)n;
+					bChanged = true;
+				}
 			}
 		}
 		ImGui::EndCombo();
@@ -883,8 +898,20 @@ bool DrawDataTypeCombo(int& dataType)
 	return bChanged;
 }
 
-bool DrawBitmapFormatCombo(int& bitmapFormat)
+bool DrawBitmapFormatCombo(EBitmapFormat& bitmapFormat, const FCodeAnalysisState& state)
 {
+	assert(bitmapFormat < EBitmapFormat::Max);
+	
+	int numFormatsSupported = 0;
+	for (int n = 0; n < (int)EBitmapFormat::Max; n++)
+		numFormatsSupported += state.Config.bSupportedBitmapTypes[n] ? 1 : 0;
+
+	if (numFormatsSupported == 1)
+	{
+		// don't draw the combo box if there is only 1 format supported
+		return false;
+	}
+
 	const int index = (int)bitmapFormat;
 	const char* bitmapFormats[] = { "1bpp", "2bpp (CPC Mode 1)", "4bpp (CPC Mode 0)" };
 
@@ -894,11 +921,14 @@ bool DrawBitmapFormatCombo(int& bitmapFormat)
 	{
 		for (int n = 0; n < IM_ARRAYSIZE(bitmapFormats); n++)
 		{
-			const bool isSelected = (index == n);
-			if (ImGui::Selectable(bitmapFormats[n], isSelected))
+			if (state.Config.bSupportedBitmapTypes[n])
 			{
-				bitmapFormat = n;
-				bChanged = true;
+				const bool isSelected = (index == n);
+				if (ImGui::Selectable(bitmapFormats[n], isSelected))
+				{
+					bitmapFormat = (EBitmapFormat)n;
+					bChanged = true;
+				}
 			}
 		}
 		ImGui::EndCombo();
@@ -1366,23 +1396,22 @@ void DrawFormatTab(FCodeAnalysisState& state, FCodeAnalysisViewState& viewState)
 	{
 		formattingOptions.DataType = EDataType::Bitmap;
 		
-		static int bitmapFormatIndex = 0;
-		bool bBitmapOptionsChanged = DrawBitmapFormatCombo(bitmapFormatIndex);
+		bool bBitmapOptionsChanged = DrawBitmapFormatCombo(viewState.CurBitmapFormat, state);
 
 		static int size[2];
 		bBitmapOptionsChanged |= ImGui::InputInt2("Bitmap Size(X,Y)", size);
 			
 		if (bBitmapOptionsChanged || bDataTypeChanged)
 		{
-			switch (bitmapFormatIndex)
+			switch (viewState.CurBitmapFormat)
 			{
-			case 0: // 1 bpp
+			case EBitmapFormat::Bitmap_1Bpp:
 				formattingOptions.DisplayType = EDataItemDisplayType::Bitmap;
 				break;
-			case 1: // 2 bpp
+			case EBitmapFormat::ColMap2Bpp_CPC:
 				formattingOptions.DisplayType = EDataItemDisplayType::ColMap2Bpp_CPC;
 				break;
-			case 2: // 4 bpp
+			case EBitmapFormat::ColMap4Bpp_CPC:
 				formattingOptions.DisplayType = EDataItemDisplayType::ColMap4Bpp_CPC;
 				break;
 			}
