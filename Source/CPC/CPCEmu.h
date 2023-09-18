@@ -70,6 +70,8 @@ enum EROMBank
 	ROM_OS = 0,
 	ROM_AMSDOS,
 	ROM_BASIC,
+
+	ROM_NONE,
 };
 
 struct FCpcConfig
@@ -145,7 +147,7 @@ public:
 	void SetROMBankLo(int bankNo);
 	void SetROMBankHi(int bankNo);
 	void SetRAMBank(int slot, int bankNo);
-	void SetRAMBanks(int bankPresetIndex);
+	void SetRAMBanksPreset(int bankPresetIndex);
 
 	// util functions related to the screen. put in a different file?
 	uint16_t GetScreenAddrStart() const;
