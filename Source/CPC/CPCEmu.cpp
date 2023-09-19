@@ -253,15 +253,10 @@ private:
 	char DescStr[32] = { 0 };
 };
 
-#if 0
-void FCpcEmu::GraphicsViewerSetView(uint16_t address, int charWidth)
+void FCpcEmu::GraphicsViewerSetView(FAddressRef address)
 {
-#if SPECCY
-	GraphicsViewerGoToAddress(address);
-	GraphicsViewerSetCharWidth(charWidth);
-#endif //#if SPECCY
+	GraphicsViewer.GoToAddress(address);
 }
-#endif
 
 /* reboot callback */
 static void boot_cb(cpc_t* sys, cpc_type_t type)
@@ -843,8 +838,8 @@ bool FCpcEmu::Init(const FCpcConfig& config)
 		}
 	}
 
-	GraphicsViewer.pEmu = this;
-	InitGraphicsViewer(GraphicsViewer);
+	GraphicsViewer.Init(&CodeAnalysis);
+
 	IOAnalysis.Init(this);
 	CpcViewer.Init(this);
 	CodeAnalysis.ViewState[0].Enabled = true;	// always have first view enabled
@@ -975,6 +970,8 @@ void FCpcEmu::Shutdown()
 	config.BranchLinesDisplayMode = CodeAnalysis.Config.BranchLinesDisplayMode;
 
 	SaveGlobalConfig(kGlobalConfigFilename);
+
+	GraphicsViewer.Shutdown();
 }
 
 void FCpcEmu::StartGame(FGameConfig* pGameConfig, bool bLoadGameData /* =  true*/)
@@ -987,6 +984,7 @@ void FCpcEmu::StartGame(FGameConfig* pGameConfig, bool bLoadGameData /* =  true*
 	MemoryAccessHandlers.clear();	// remove old memory handlers
 	ResetMemoryStats(MemStats);
 	FrameTraceViewer.Reset();
+	GraphicsViewer.Reset();
 
 	const std::string memStr = CpcEmuState.type == CPC_TYPE_6128 ? " (CPC 6128)" : " (CPC 464)";
 	const std::string windowTitle = kAppTitle + " - " + pGameConfig->Name + memStr;
@@ -1006,7 +1004,6 @@ void FCpcEmu::StartGame(FGameConfig* pGameConfig, bool bLoadGameData /* =  true*
 	pNewGame->pViewerConfig = pGameConfig->pViewerConfig;
 	assert(pGameConfig->pViewerConfig != nullptr);
 #endif
-	GraphicsViewer.pGame = pNewGame;
 	pActiveGame = pNewGame;
 
 #if SPECCY
@@ -1043,6 +1040,8 @@ void FCpcEmu::StartGame(FGameConfig* pGameConfig, bool bLoadGameData /* =  true*
 		ImportAnalysisState(CodeAnalysis, analysisStateFName.c_str());
 
 #if SPECCY
+		GraphicsViewer.LoadGraphicsSets(graphicsSetsJsonFName.c_str());
+
 		LoadGameState(this, saveStateFName.c_str());
 
 		if (FileExists(romJsonFName.c_str()))
@@ -1151,6 +1150,9 @@ void FCpcEmu::SaveCurrentGameData()
 			ExportAnalysisJson(CodeAnalysis, analysisJsonFName.c_str());
 			ExportAnalysisState(CodeAnalysis, analysisStateFName.c_str());
 			//ExportGameJson(this, analysisJsonFName.c_str());
+#if SPECCY			
+			GraphicsViewer.SaveGraphicsSets(graphicsSetsJsonFName.c_str());
+#endif
 		}
 	}
 
@@ -1745,7 +1747,7 @@ void FCpcEmu::DrawUI()
 	}
 #endif
 
-	DrawGraphicsViewer(GraphicsViewer);
+	GraphicsViewer.Draw();
 	DrawMemoryTools();
 
 	// Code analysis views
