@@ -253,15 +253,10 @@ private:
 	char DescStr[32] = { 0 };
 };
 
-#if 0
-void FCpcEmu::GraphicsViewerSetView(uint16_t address, int charWidth)
+void FCpcEmu::GraphicsViewerSetView(FAddressRef address)
 {
-#if SPECCY
-	GraphicsViewerGoToAddress(address);
-	GraphicsViewerSetCharWidth(charWidth);
-#endif //#if SPECCY
+	GraphicsViewer.GoToAddress(address);
 }
-#endif
 
 /* reboot callback */
 static void boot_cb(cpc_t* sys, cpc_type_t type)
@@ -411,7 +406,9 @@ uint64_t FCpcEmu::Z80Tick(int num, uint64_t pins)
 		{
 			if ((pins & (AM40010_A14 | AM40010_A15)) == AM40010_A14)
 			{
-				const uint8_t data = _AM40010_GET_DATA(pins);
+				// extract 8-bit data bus from 64-bit pin mask
+				//#define _AM40010_GET_DATA(p) ((uint8_t)(((p)&0xFF0000ULL)>>16))
+				const uint8_t data = ((uint8_t)(((pins) & 0xFF0000ULL) >> 16));
 
 				/* data bits 6 and 7 select the register type */
 				switch (data & ((1 << 7) | (1 << 6)))
@@ -422,7 +419,7 @@ uint64_t FCpcEmu::Z80Tick(int num, uint64_t pins)
 						if (regs.config & AM40010_CONFIG_LROMEN)
 						{
 							// disable low rom
-							SetROMBankLo(-1);
+							SetROMBankLo(ROM_NONE);
 						}
 						else
 						{
@@ -433,7 +430,7 @@ uint64_t FCpcEmu::Z80Tick(int num, uint64_t pins)
 						if (regs.config & AM40010_CONFIG_HROMEN)
 						{
 							// disable high rom
-							SetROMBankHi(-1);
+							SetROMBankHi(ROM_NONE);
 						}
 						else
 						{
@@ -453,7 +450,7 @@ uint64_t FCpcEmu::Z80Tick(int num, uint64_t pins)
 						{
 							// sam todo. only set ram banks if dirty?
 							bankPresetIndex = CpcEmuState.ga.ram_config & 7;
-							SetRAMBanks(bankPresetIndex);
+							SetRAMBanksPreset(bankPresetIndex);
 						}
 						break;
 					}
@@ -503,18 +500,18 @@ static uint64_t Z80TickThunk(int num, uint64_t pins, void* user_data)
 // This is the OS ROM.
 void FCpcEmu::SetROMBankLo(int bankNo)
 {
-	const int16_t bankId = bankNo == -1 ? -1 : ROMBanks[bankNo];
+	const int16_t bankId = bankNo == ROM_NONE ? ROM_NONE : ROMBanks[bankNo];
 	if (CurROMBankLo == bankId)
 		return;
 
-	//LOGDEBUG("%s OS ROM", bankNo == -1 ? "Disable" : "Enable");
+	//LOGDEBUG("%s OS ROM", bankNo == ROM_NONE ? "Disable" : "Enable");
  
 // sam. currently disabled until separate banks for read and write are supported
 #if 0
 	// Unmap old bank
 	CodeAnalysis.UnMapBank(CurROMBankLo, 0);
-	if (bankNo != -1)
-		CodeAnalysis.MapBank(bankId, 0);
+	if (bankNo != ROM_NONE)
+		CodeAnalysis.MapBank(bankId, 0, EBankAccess::Read);
 #endif
 	CurROMBankLo = bankId;
 }
@@ -523,17 +520,18 @@ void FCpcEmu::SetROMBankLo(int bankNo)
 // This can either be the AMSDOS or the BASIC ROM
 void FCpcEmu::SetROMBankHi(int bankNo)
 {
-	const int16_t bankId = bankNo == -1 ? -1 : ROMBanks[bankNo];
+	const int16_t bankId = bankNo == ROM_NONE ? ROM_NONE : ROMBanks[bankNo];
 	if (CurROMBankHi == bankId)
 		return;
 
-	//LOGDEBUG("%s %s ROM", bankNo == -1 ? "Disable" : "Enable", bankNo == ROM_AMSDOS ? "AMSDOS" : "BASIC");
+	//LOGDEBUG("%s %s ROM", bankNo == ROM_NONE ? "Disable" : "Enable", bankNo == ROM_AMSDOS ? "AMSDOS" : "BASIC");
 
 // sam. currently disabled until separate banks for read and write are supported
 #if 0
 	// Unmap old bank
 	CodeAnalysis.UnMapBank(CurROMBankHi, 0);
-	CodeAnalysis.MapBank(bankId, 0);
+	if (bankNo != ROM_NONE)
+		CodeAnalysis.MapBank(bankId, 0, EBankAccess::Read);
 #endif
 	CurROMBankHi = bankId;
 }
@@ -556,7 +554,7 @@ void FCpcEmu::SetRAMBank(int slot, int bankNo)
 	CurRAMBank[slot] = bankId;
 }
 
-void FCpcEmu::SetRAMBanks(int bankPresetIndex)
+void FCpcEmu::SetRAMBanksPreset(int bankPresetIndex)
 {
 	//_cpc_ram_config isn't available because we don't have CHIPS_IMPL.
 	// might have to move this whole function to cpchipsimpl.c.
@@ -840,8 +838,8 @@ bool FCpcEmu::Init(const FCpcConfig& config)
 		}
 	}
 
-	GraphicsViewer.pEmu = this;
-	InitGraphicsViewer(GraphicsViewer);
+	GraphicsViewer.Init(&CodeAnalysis);
+
 	IOAnalysis.Init(this);
 	CpcViewer.Init(this);
 	CodeAnalysis.ViewState[0].Enabled = true;	// always have first view enabled
@@ -972,6 +970,8 @@ void FCpcEmu::Shutdown()
 	config.BranchLinesDisplayMode = CodeAnalysis.Config.BranchLinesDisplayMode;
 
 	SaveGlobalConfig(kGlobalConfigFilename);
+
+	GraphicsViewer.Shutdown();
 }
 
 void FCpcEmu::StartGame(FGameConfig* pGameConfig, bool bLoadGameData /* =  true*/)
@@ -984,6 +984,7 @@ void FCpcEmu::StartGame(FGameConfig* pGameConfig, bool bLoadGameData /* =  true*
 	MemoryAccessHandlers.clear();	// remove old memory handlers
 	ResetMemoryStats(MemStats);
 	FrameTraceViewer.Reset();
+	GraphicsViewer.Reset();
 
 	const std::string memStr = CpcEmuState.type == CPC_TYPE_6128 ? " (CPC 6128)" : " (CPC 464)";
 	const std::string windowTitle = kAppTitle + " - " + pGameConfig->Name + memStr;
@@ -1003,7 +1004,6 @@ void FCpcEmu::StartGame(FGameConfig* pGameConfig, bool bLoadGameData /* =  true*
 	pNewGame->pViewerConfig = pGameConfig->pViewerConfig;
 	assert(pGameConfig->pViewerConfig != nullptr);
 #endif
-	GraphicsViewer.pGame = pNewGame;
 	pActiveGame = pNewGame;
 
 #if SPECCY
@@ -1040,6 +1040,8 @@ void FCpcEmu::StartGame(FGameConfig* pGameConfig, bool bLoadGameData /* =  true*
 		ImportAnalysisState(CodeAnalysis, analysisStateFName.c_str());
 
 #if SPECCY
+		GraphicsViewer.LoadGraphicsSets(graphicsSetsJsonFName.c_str());
+
 		LoadGameState(this, saveStateFName.c_str());
 
 		if (FileExists(romJsonFName.c_str()))
@@ -1148,6 +1150,9 @@ void FCpcEmu::SaveCurrentGameData()
 			ExportAnalysisJson(CodeAnalysis, analysisJsonFName.c_str());
 			ExportAnalysisState(CodeAnalysis, analysisStateFName.c_str());
 			//ExportGameJson(this, analysisJsonFName.c_str());
+#if SPECCY			
+			GraphicsViewer.SaveGraphicsSets(graphicsSetsJsonFName.c_str());
+#endif
 		}
 	}
 
@@ -1742,7 +1747,7 @@ void FCpcEmu::DrawUI()
 	}
 #endif
 
-	DrawGraphicsViewer(GraphicsViewer);
+	GraphicsViewer.Draw();
 	DrawMemoryTools();
 
 	// Code analysis views

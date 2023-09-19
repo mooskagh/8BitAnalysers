@@ -48,7 +48,7 @@
 #include "CodeAnalyser/CodeAnalyser.h"
 #include "Viewers/CPCViewer.h"
 #include "Viewers/FrameTraceViewer.h"
-#include "Viewers/GraphicsViewer.h"
+#include "Viewers/CPCGraphicsViewer.h"
 #include "MemoryHandlers.h"
 #include "IOAnalysis.h"
 #include "Util/GraphicsView.h"
@@ -58,6 +58,7 @@ struct FGameConfig;
 struct FViewerConfig;
 class FViewerBase;
 class FScreenPixMemDescGenerator;
+
 
 enum class ECpcModel
 {
@@ -71,6 +72,8 @@ enum EROMBank
 	ROM_OS = 0,
 	ROM_AMSDOS,
 	ROM_BASIC,
+
+	ROM_NONE,
 };
 
 struct FCpcConfig
@@ -132,7 +135,7 @@ public:
 	void		WriteByte(uint16_t address, uint8_t value) override;
 	FAddressRef	GetPC(void) override;
 	uint16_t	GetSP(void) override;
-	void		GraphicsViewerSetView(FAddressRef address) override {}
+	void		GraphicsViewerSetView(FAddressRef address) override;
 	void*		GetCPUEmulator(void) const override;
 	//ICPUInterface End
 	
@@ -146,7 +149,7 @@ public:
 	void SetROMBankLo(int bankNo);
 	void SetROMBankHi(int bankNo);
 	void SetRAMBank(int slot, int bankNo);
-	void SetRAMBanks(int bankPresetIndex);
+	void SetRAMBanksPreset(int bankPresetIndex);
 
 	// util functions related to the screen. put in a different file?
 	uint16_t GetScreenAddrStart() const;
@@ -172,7 +175,7 @@ public:
 	// Viewers
 	FCpcViewer				CpcViewer;
 	FFrameTraceViewer		FrameTraceViewer;
-	FGraphicsViewerState	GraphicsViewer;
+	FCPCGraphicsViewer	GraphicsViewer;
 	FCodeAnalysisState		CodeAnalysis;
 	FIOAnalysis				IOAnalysis;
 

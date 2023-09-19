@@ -39,8 +39,12 @@ bool LoadSNAFromMemory(FCpcEmu * pEmu, uint8_t * pData, size_t dataSize)
 	{
 		if (pEmu->CpcEmuState.type == CPC_TYPE_6128)
 		{
-			pEmu->SetRAMBanks(pEmu->CpcEmuState.ga.ram_config & 7);
+			// todo: set rom bank here
+
+			pEmu->SetRAMBanksPreset(pEmu->CpcEmuState.ga.ram_config & 7);
 		}
+		// todo: maybe set rom and ram banks here for 464 too
+
 	}
 	return bResult;
 }
