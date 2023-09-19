@@ -838,7 +838,7 @@ bool FCpcEmu::Init(const FCpcConfig& config)
 		}
 	}
 
-	GraphicsViewer.Init(&CodeAnalysis);
+	GraphicsViewer.Init(&CodeAnalysis, this);
 
 	IOAnalysis.Init(this);
 	CpcViewer.Init(this);

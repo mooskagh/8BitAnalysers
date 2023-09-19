@@ -43,9 +43,9 @@ private:
 	float TextureWidth = 0;
 	float TextureHeight = 0;
 
-	// The x position of where the screen starts. Effectively this is the width of the left border.
+	// The x position of where the screen starts. Effectively, this is the width of the left border.
 	int ScreenEdgeL = 0;
-	// The y position of where the screen starts. Effectively this is the height of the top border.
+	// The y position of where the screen starts. Effectively, this is the height of the top border.
 	int ScreenTop = 0;
 	// The width of the screen in pixels. Note: this is currently using mode 1 coordinates. When in mode 0, you will need to divide this by 2.
 	int ScreenWidth = 0;

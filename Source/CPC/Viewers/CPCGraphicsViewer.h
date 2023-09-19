@@ -12,8 +12,7 @@
 
 class FCpcEmu;
 struct FGame;
-
-
+class FCpcEmu;
 
 class FCPCGraphicsViewer : public FGraphicsViewer
 {
@@ -25,8 +24,12 @@ public:
 	}
 
 	void	DrawScreenViewer(void) override;
+	void	Init(FCodeAnalysisState* pCodeAnalysis, FCpcEmu* pEmu);
+
 private:
 	void	UpdateScreenPixelImage(void);
+	
+	FCpcEmu* pCpcEmu = nullptr;
 public:
 	//std::map<std::string, FUISpriteList>	SpriteLists;
 	//std::string				SelectedSpriteList;

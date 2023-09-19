@@ -237,7 +237,7 @@ void FCpcViewer::Draw()
 				if (flashCounter & 4) flashCol |= 0xff << 16;
 
 				dl->AddRectFilled(ImVec2((float)rx, (float)ry), ImVec2((float)rx + ((pixelsToHighlight + 1) * scale), (float)ry + (1 * scale)), flashCol);
-				}
+			}
 		}
 	}
 
