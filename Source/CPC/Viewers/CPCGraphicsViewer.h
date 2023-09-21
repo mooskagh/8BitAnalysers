@@ -1,6 +1,5 @@
 #pragma once
 
-//#include "imgui.h"
 #include <cstdint>
 #include <map>
 #include <string>
@@ -19,19 +18,24 @@ class FCPCGraphicsViewer : public FGraphicsViewer
 public:
 	FCPCGraphicsViewer()
 	{
-		ScreenWidth = 256;
-		ScreenHeight = 192;
+		ScreenWidth = 320;
+		ScreenHeight = 200;
 	}
 
 	void	DrawScreenViewer(void) override;
 	void	Init(FCodeAnalysisState* pCodeAnalysis, FCpcEmu* pEmu);
 
 private:
-	void	UpdateScreenPixelImage(void);
-	
-	FCpcEmu* pCpcEmu = nullptr;
+	void		UpdateScreenPixelImage(void);
+	uint16_t	GetPixelLineAddress(int yPos);
+	uint16_t	GetPixelLineOffset(int yPos);
+
+	FCpcEmu*	pCpcEmu = nullptr;
+	int			CharacterHeight = 8;
+
 public:
 	//std::map<std::string, FUISpriteList>	SpriteLists;
 	//std::string				SelectedSpriteList;
+
 };
 
