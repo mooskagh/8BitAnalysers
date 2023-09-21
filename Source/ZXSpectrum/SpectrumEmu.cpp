@@ -559,7 +559,7 @@ void IOPortEventShowValue(FCodeAnalysisState& state, const FEvent& event)
 bool FSpectrumEmu::Init(const FSpectrumConfig& config)
 {
 	SetWindowTitle(kAppTitle.c_str());
-	SetWindowIcon("SALOGO.png");
+	SetWindowIcon("SALogo.png");
 
 	// Initialise Emulator
 	LoadGlobalConfig(kGlobalConfigFilename);
@@ -875,15 +875,22 @@ void FSpectrumEmu::StartGame(FGameConfig *pGameConfig, bool bLoadGameData /* =  
 	FormatSpectrumMemory(CodeAnalysis);
 	CodeAnalysis.SetAddressRangeDirty();
 
-	// Start in break mode so the memory will be in it's initial state. 
+	// Start in break mode so the memory will be in its initial state. 
 	// Otherwise, if we export a skool/asm file once the game is running the memory could be in an arbitrary state.
 	// 
 	// decode whole screen
 	ZXDecodeScreen(&ZXEmuState);
-	CodeAnalysis.Debugger.SetPC(CodeAnalysis.AddressRefFromPhysicalAddress(ZXEmuState.cpu.pc - 1));
 	CodeAnalysis.Debugger.Break();
 
 	CodeAnalysis.Debugger.RegisterNewStackPointer(ZXEmuState.cpu.sp, FAddressRef());
+
+	// some extra initialisation for creating new analysis from snnapshot
+	if(bLoadGameData == false)
+	{
+		FAddressRef initialPC = CodeAnalysis.AddressRefFromPhysicalAddress(ZXEmuState.cpu.pc);
+		SetItemCode(CodeAnalysis, initialPC);
+		CodeAnalysis.Debugger.SetPC(initialPC);
+	}
 
 	FGlobalConfig& globalConfig = GetGlobalConfig();
 	GraphicsViewer.SetImagesRoot((globalConfig.WorkspaceRoot + "GraphicsSets/" + pGameConfig->Name + "/").c_str());

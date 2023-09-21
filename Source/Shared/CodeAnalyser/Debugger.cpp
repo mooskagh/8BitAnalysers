@@ -306,7 +306,7 @@ bool FDebugger::FrameTick(void)
 	return bDebuggerStopped;
 }
 
-static const uint32_t kVersionNo = 2;
+static const uint32_t kVersionNo = 3;
 
 // Load state - breakpoints, watches etc.
 void	FDebugger::LoadFromFile(FILE* fp)
@@ -349,6 +349,10 @@ void	FDebugger::LoadFromFile(FILE* fp)
 			fread(&address.Val, sizeof(uint32_t), 1, fp);	// address
 		}
 	}
+
+	// PC
+	if (versionNo > 2)
+		fread(&PC.Val, sizeof(uint32_t), 1, fp);	
 }
 
 // Save state - breakpoints, watches etc.
@@ -386,6 +390,9 @@ void	FDebugger::SaveToFile(FILE* fp)
 	{
 		fwrite(&FrameTrace[i].Val,sizeof(uint32_t), 1, fp);	// address
 	}
+
+	// PC
+	fwrite(&PC.Val,sizeof(uint32_t), 1, fp);
 }
 
 
@@ -1041,8 +1048,20 @@ void FDebugger::DrawEvents(void)
 	const float rectSize = lineHeight;
 	ImDrawList* dl = ImGui::GetWindowDrawList();
 	
-	if (ImGui::CollapsingHeader("Event Types"))
+	if (ImGui::TreeNode("Event Types"))
 	{
+		ImGui::Text("  ");
+		ImGui::SameLine();
+		if (ImGui::Checkbox("All", &g_EventTypeInfo[0].bEnabled))
+		{
+			int e = 1;	// skip event type None
+			while (g_EventTypeInfo[e].EventName[0])
+			{
+				g_EventTypeInfo[e].bEnabled = g_EventTypeInfo[0].bEnabled;
+				e++;
+			}
+		}
+
 		int e = 1;	// skip event type None
 		while (g_EventTypeInfo[e].EventName[0])
 		{
@@ -1056,6 +1075,7 @@ void FDebugger::DrawEvents(void)
 			ImGui::Checkbox(g_EventTypeInfo[e].EventName, &g_EventTypeInfo[e].bEnabled);
 			e++;
 		}
+		ImGui::TreePop();
 	}
 
 	static ImGuiTableFlags flags = ImGuiTableFlags_Borders | ImGuiTableFlags_RowBg | ImGuiTableFlags_SizingFixedFit | ImGuiTableFlags_ScrollY;
