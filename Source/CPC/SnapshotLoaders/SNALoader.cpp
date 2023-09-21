@@ -1,6 +1,6 @@
 #include "SNALoader.h"
 
-#include "../CpcEmu.h"
+#include "../CPCEmu.h"
 
 #include <Util/FileUtil.h>
 #include <systems/cpc.h>

@@ -6,7 +6,7 @@
 #include <fstream>
 #include <sstream>
 
-#include "CpcEmu.h"
+#include "CPCEmu.h"
 #if SPECCY
 #include "GameViewers/GameViewer.h"
 #include "SnapshotLoaders/GamesList.h"

@@ -1,6 +1,6 @@
 #include "FrameTraceViewer.h"
 #include "CpcGraphicsView.h"
-#include "../CpcEmu.h"
+#include "../CPCEmu.h"
 
 #include <imgui.h>
 #include <CodeAnalyser/UI/CodeAnalyserUI.h>

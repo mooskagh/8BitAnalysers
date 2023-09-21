@@ -1,7 +1,7 @@
 #include "IOAnalysis.h"
 
 #include "CodeAnalyser/UI/CodeAnalyserUI.h"
-#include "CpcEmu.h"
+#include "CPCEmu.h"
 
 #include <chips/z80.h>
 #include "chips/am40010.h"

@@ -1,5 +1,5 @@
 #include "OverviewViewer.h"
-#include "../CpcEmu.h"
+#include "../CPCEmu.h"
 
 #include <imgui.h>
 #include <implot.h>

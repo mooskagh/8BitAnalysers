@@ -1,6 +1,6 @@
 #include "MemoryHandlers.h"
 
-#include "CpcEmu.h"
+#include "CPCEmu.h"
 #include "CodeAnalyser/UI/CodeAnalyserUI.h"
 #include <Util/Misc.h>
 

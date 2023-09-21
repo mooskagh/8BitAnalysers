@@ -1,5 +1,5 @@
 #include "CRTCViewer.h"
-#include "../CpcEmu.h"
+#include "../CPCEmu.h"
 #include <imgui.h>
 
 void InputU8Decimal(const char* label, uint8_t& val)

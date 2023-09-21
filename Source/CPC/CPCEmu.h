@@ -175,7 +175,7 @@ public:
 	// Viewers
 	FCpcViewer				CpcViewer;
 	FFrameTraceViewer		FrameTraceViewer;
-	FCPCGraphicsViewer	GraphicsViewer;
+	FCPCGraphicsViewer		GraphicsViewer;
 	FCodeAnalysisState		CodeAnalysis;
 	FIOAnalysis				IOAnalysis;
 
