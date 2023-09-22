@@ -24,8 +24,6 @@ void FCPCGraphicsViewer::DrawScreenViewer()
 uint16_t FCPCGraphicsViewer::GetPixelLineAddress(int yPos)
 {
 	const uint16_t start = pCpcEmu->GetScreenAddrStart();
-	// todo character height
-	// todo replace 80 with screen width
 	return start + GetPixelLineOffset(yPos);
 }
 
@@ -34,8 +32,8 @@ uint16_t FCPCGraphicsViewer::GetPixelLineAddress(int yPos)
 // get offset into screen ram for a given horizontal pixel line (scan line)
 uint16_t FCPCGraphicsViewer::GetPixelLineOffset(int yPos)
 {
-	// todo character height
-	// todo replace 80 with screen width
+	// todo: couldn't we use FCpcEmu::GetScreenMemoryAddress() instead?
+
 	return ((yPos / CharacterHeight) * (ScreenWidth / 4)) + ((yPos % CharacterHeight) * 2048);
 }
 
@@ -49,6 +47,10 @@ void FCPCGraphicsViewer::UpdateScreenPixelImage(void)
 
 	if (startBankId != endBankId)
 	{
+		ImGui::Text("SCREEN MEMORY SPANS MULTIPLE BANKS. TODO");
+		ImGui::Text("");
+		ImGui::Text("");
+
 		// if the default screen start address is used we will use one bank for the screen memory
 		// however, it could be possible the screen ram will be spread across 2 banks.
 		// todo: deal with this
@@ -57,20 +59,26 @@ void FCPCGraphicsViewer::UpdateScreenPixelImage(void)
 
 	const FCodeAnalysisBank* pBank = state.GetBank(startBankId);
 
-	/*
 	const mc6845_t& crtc = pCpcEmu->CpcEmuState.crtc;
 	CharacterHeight = crtc.max_scanline_addr + 1;
 	const int lastScreenWidth = ScreenWidth;
 	const int lastScreenHeight = ScreenHeight;
 	ScreenWidth = crtc.h_displayed * 8;
 	ScreenHeight = crtc.v_displayed * CharacterHeight;
+	
+	ScreenHeight = std::min(ScreenHeight, AM40010_DISPLAY_HEIGHT);
+	ScreenWidth = std::min(ScreenWidth, AM40010_DISPLAY_WIDTH >> 1);
+
 	if (ScreenWidth != lastScreenWidth || ScreenHeight != lastScreenHeight)
 	{
 		// ScreenWidth can be huge: 1216 for AtomSmasher
 		// temp. recreate the screen view
 		delete pScreenView;
 		pScreenView = new FGraphicsView(ScreenWidth, ScreenHeight);
-	}*/
+	}
+
+	// todo: mixed screen modes
+	const int scrMode = pCpcEmu->CpcEmuState.ga.video.mode;
 
 	for (int y = 0; y < ScreenHeight; y++)
 	{
@@ -78,68 +86,106 @@ void FCPCGraphicsViewer::UpdateScreenPixelImage(void)
 
 		uint32_t* pLineAddr = pScreenView->GetPixelBuffer() + (y * ScreenWidth);
 
-		for (int x = 0; x < ScreenWidth / 8; x++)
+		int numChars = ScreenWidth / 8;
+		if (scrMode == 0)
+			numChars = numChars / 2;
+
+		for (int x = 0; x < numChars; x++)
 		{
-			// draw 8 pixel line
-			for (int byte = 0; byte < 2; byte++)
+			// draw 8x1 pixel line
+			if (scrMode == 0)
 			{
-				const uint8_t val = pBank->Memory[bankOffset];
-
-				const FCodeAnalysisPage& page = pBank->Pages[bankOffset >> 10];
-				const uint32_t heatMapCol = GetHeatmapColourForMemoryAddress(page, bankOffset, state.CurrentFrameNo, HeatmapThreshold);
-
-				for (int pixel = 0; pixel < 4; pixel++)
+				for (int byte = 0; byte < 4; byte++)
 				{
-					int colourIndex = 0;
+					const uint8_t val = pBank->Memory[bankOffset];
 
-					switch (pixel)
+					const FCodeAnalysisPage& page = pBank->Pages[bankOffset >> 10];
+					const uint32_t heatMapCol = GetHeatmapColourForMemoryAddress(page, bankOffset, state.CurrentFrameNo, HeatmapThreshold);
+
+					// todo: put this in a function? we seem to be using it a lot
+					for (int pixel = 0; pixel < 2; pixel++)
 					{
-					case 0:
-						colourIndex = (val & 0x8 ? 2 : 0) | (val & 0x80 ? 1 : 0);
-						break;
-					case 1:
-						colourIndex = (val & 0x4 ? 2 : 0) | (val & 0x40 ? 1 : 0);
-						break;
-					case 2:
-						colourIndex = (val & 0x2 ? 2 : 0) | (val & 0x20 ? 1 : 0);
-						break;
-					case 3:
-						colourIndex = (val & 0x1 ? 2 : 0) | (val & 0x10 ? 1 : 0);
-						break;
+						int colourIndex = 0;
+
+						switch (pixel)
+						{
+						case 0:
+							colourIndex = (val & 0x80 ? 1 : 0) | (val & 0x8 ? 2 : 0) | (val & 0x20 ? 4 : 0) | (val & 0x2 ? 8 : 0);
+							break;
+						case 1:
+							colourIndex = (val & 0x40 ? 1 : 0) | (val & 0x4 ? 2 : 0) | (val & 0x10 ? 4 : 0) | (val & 0x1 ? 8 : 0);
+							break;
+						}
+
+						// todo: correct palette for scanline
+						const ImColor colour = GetCurrentPalette_Const().GetColour(colourIndex);
+						// Grayscale value is R * 0.299 + G * 0.587 + B * 0.114
+						const float grayScaleValue = colour.Value.x * 0.299f + colour.Value.y * 0.587f + colour.Value.z * 0.114f;
+						const ImColor grayScaleColour = ImColor(grayScaleValue, grayScaleValue, grayScaleValue);
+						ImU32 finalColour = grayScaleColour;
+						if (heatMapCol != 0xffffffff)
+						{
+							finalColour |= heatMapCol;
+						}
+						// double width pixel
+						*(pLineAddr + (x * 8) + (byte * 2 /*2 pixels per byte*/) + pixel) = finalColour;
+						//*(pLineAddr + (x * 8) + (byte * 2 /*2 pixels per byte*/) + pixel + 1) = finalColour;
 					}
-					
-					const ImColor colour = GetCurrentPalette_Const().GetColour(colourIndex);
-					const float r = colour.Value.x;
-					const float g = colour.Value.y;
-					const float b = colour.Value.z;
-					const float grayScaleValue = r * 0.299f + g * 0.587f + b * 0.114f;
-					const ImColor grayScaleColour = ImColor(grayScaleValue, grayScaleValue, grayScaleValue);
-					ImU32 finalColour = grayScaleColour;
-					if (heatMapCol != 0xffffffff)
-					{
-						finalColour |= heatMapCol;
-					}
-					*(pLineAddr + (x * 8) + (byte * 4) + pixel) = finalColour;
+					bankOffset++;
+					const int bankSize = pBank->GetSizeBytes();
+					if (bankOffset >= bankSize)
+						return;
+					assert(bankOffset < bankSize);
 				}
-				bankOffset++;
+			}
+			else if (scrMode == 1)
+			{
+				for (int byte = 0; byte < 2; byte++)
+				{
+					const uint8_t val = pBank->Memory[bankOffset];
+
+					const FCodeAnalysisPage& page = pBank->Pages[bankOffset >> 10];
+					const uint32_t heatMapCol = GetHeatmapColourForMemoryAddress(page, bankOffset, state.CurrentFrameNo, HeatmapThreshold);
+
+					// todo: put this in a function? we seem to be using it a lot
+					for (int pixel = 0; pixel < 4; pixel++)
+					{
+						int colourIndex = 0;
+
+						switch (pixel)
+						{
+						case 0:
+							colourIndex = (val & 0x8 ? 2 : 0) | (val & 0x80 ? 1 : 0);
+							break;
+						case 1:
+							colourIndex = (val & 0x4 ? 2 : 0) | (val & 0x40 ? 1 : 0);
+							break;
+						case 2:
+							colourIndex = (val & 0x2 ? 2 : 0) | (val & 0x20 ? 1 : 0);
+							break;
+						case 3:
+							colourIndex = (val & 0x1 ? 2 : 0) | (val & 0x10 ? 1 : 0);
+							break;
+						}
+
+						// todo: correct palette for scanline
+						const ImColor colour = GetCurrentPalette_Const().GetColour(colourIndex);
+						// Grayscale value is R * 0.299 + G * 0.587 + B * 0.114
+						const float grayScaleValue = colour.Value.x * 0.299f + colour.Value.y * 0.587f + colour.Value.z * 0.114f;
+						const ImColor grayScaleColour = ImColor(grayScaleValue, grayScaleValue, grayScaleValue);
+						ImU32 finalColour = grayScaleColour;
+						if (heatMapCol != 0xffffffff)
+						{
+							finalColour |= heatMapCol;
+						}
+						*(pLineAddr + (x * 8) + (byte * 4 /* 4 pixels per byte */) + pixel) = finalColour;
+					}
+					bankOffset++;
+					const int bankSize = pBank->GetSizeBytes();
+					// todo: this fires when loading dtc.sna
+					assert(bankOffset < bankSize);
+				}
 			}
 		}
-
-		/*for (int x = 0; x < ScreenWidth / 8; x++)
-		{
-			// 4 pixels in mode 1
-			const uint8_t pixels = pBank->Memory[bankOffset];
-			const FCodeAnalysisPage& page = pBank->Pages[bankOffset >> 10];
-			const uint32_t col = GetHeatmapColourForMemoryAddress(page, bankOffset, state.CurrentFrameNo, HeatmapThreshold);
-
-			for (int xpix = 0; xpix < 8; xpix++)
-			{
-				const bool bSet = (charLine & (1 << (7 - xpix))) != 0;
-				*(pLineAddr + xpix + (x * 8)) = bSet ? col : 0xff000000;
-			}
-
-			// todo: check we're not going off the bounds of the bank
-			bankOffset++;
-		}*/
 	}
 }

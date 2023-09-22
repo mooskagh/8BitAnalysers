@@ -383,7 +383,6 @@ bool FCpcViewer::OnHovered(const ImVec2& pos)
 }
 
 // todo: 
-// - get palette from the palette for that scanline
 // - problematic mode 0 games:
 //		canard
 //		amsbrique
@@ -408,7 +407,7 @@ float FCpcViewer::DrawScreenCharacter(int xChar, int yChar, float x, float y, fl
 	{
 		uint16_t pixLineAddress = 0;
 		// todo check return from this
-		pCpcEmu->GetScreenMemoryAddress(xChar * xMult * 8, yChar * CharacterHeight + pixline, pixLineAddress); // this wont work
+		pCpcEmu->GetScreenMemoryAddress(xChar * xMult * 8, yChar * CharacterHeight + pixline, pixLineAddress);
 
 		switch (screenMode)
 		{
