@@ -4,8 +4,9 @@
 
 void InputU8Decimal(const char* label, uint8_t& val)
 {
-	ImGui::PushItemWidth(ImGui::GetFontSize() * 2);
-	ImGui::InputScalar(label, ImGuiDataType_U8, &val, NULL, NULL, "%u", ImGuiInputTextFlags_CharsDecimal);
+	ImGui::PushItemWidth(ImGui::GetFontSize() * 5);
+	const uint8_t u8_one = 1;
+	ImGui::InputScalar(label, ImGuiDataType_U8, &val, &u8_one, NULL, "%u", ImGuiInputTextFlags_CharsDecimal);
 	ImGui::PopItemWidth();
 }
 
@@ -64,8 +65,8 @@ void FCrtcViewer::DrawUI(void)
 	mc6845_t& mc = pCpcEmu->CpcEmuState.crtc;
 
 	ImGui::Columns(2, "##regs", false);
-	ImGui::SetColumnWidth(0, ImGui::GetFontSize() * 15);
-	ImGui::SetColumnWidth(1, ImGui::GetFontSize() * 15);
+	ImGui::SetColumnWidth(0, ImGui::GetFontSize() * 18);
+	ImGui::SetColumnWidth(1, ImGui::GetFontSize() * 18);
 
 	DrawCrtcRegValue(mc.h_total,			"R0 Horiz. Total",			63, std::string("Physical width of the screen, in characters.\nRange [0-255]"));
 	DrawCrtcRegValue(mc.h_displayed,		"R1 Horiz. Displayed",		40, std::string("Range [0-255]"));

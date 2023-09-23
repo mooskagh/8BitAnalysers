@@ -37,6 +37,22 @@ uint16_t FCPCGraphicsViewer::GetPixelLineOffset(int yPos)
 	return ((yPos / CharacterHeight) * (ScreenWidth / 4)) + ((yPos % CharacterHeight) * 2048);
 }
 
+uint32_t FCPCGraphicsViewer::GetRGBValueForPixel(int colourIndex, uint32_t heatMapCol) const
+{
+	const ImColor colour = GetCurrentPalette_Const().GetColour(colourIndex);
+	return colour;
+
+	// Grayscale value is R * 0.299 + G * 0.587 + B * 0.114
+	const float grayScaleValue = colour.Value.x * 0.299f + colour.Value.y * 0.587f + colour.Value.z * 0.114f;
+	const ImColor grayScaleColour = ImColor(grayScaleValue, grayScaleValue, grayScaleValue);
+	ImU32 finalColour = grayScaleColour;
+	if (heatMapCol != 0xffffffff)
+	{
+		finalColour |= heatMapCol;
+	}
+	return finalColour;
+}
+
 void FCPCGraphicsViewer::UpdateScreenPixelImage(void)
 {
 	const FCodeAnalysisState& state = GetCodeAnalysis();
@@ -47,7 +63,7 @@ void FCPCGraphicsViewer::UpdateScreenPixelImage(void)
 
 	if (startBankId != endBankId)
 	{
-		ImGui::Text("SCREEN MEMORY SPANS MULTIPLE BANKS. TODO");
+		ImGui::Text("SCREEN MEMORY SPANS MULTIPLE BANKS. CURRENTLY UNSUPORTED");
 		ImGui::Text("");
 		ImGui::Text("");
 
@@ -61,6 +77,11 @@ void FCPCGraphicsViewer::UpdateScreenPixelImage(void)
 
 	const mc6845_t& crtc = pCpcEmu->CpcEmuState.crtc;
 	CharacterHeight = crtc.max_scanline_addr + 1;
+	
+	// Not sure character height of >8 is supported?
+	// I'm clamping it to 8 because it can cause out of bounds crashes.
+	CharacterHeight = std::min(CharacterHeight, 8);
+
 	const int lastScreenWidth = ScreenWidth;
 	const int lastScreenHeight = ScreenHeight;
 	ScreenWidth = crtc.h_displayed * 8;
@@ -71,7 +92,6 @@ void FCPCGraphicsViewer::UpdateScreenPixelImage(void)
 
 	if (ScreenWidth != lastScreenWidth || ScreenHeight != lastScreenHeight)
 	{
-		// ScreenWidth can be huge: 1216 for AtomSmasher
 		// temp. recreate the screen view
 		delete pScreenView;
 		pScreenView = new FGraphicsView(ScreenWidth, ScreenHeight);
@@ -82,110 +102,82 @@ void FCPCGraphicsViewer::UpdateScreenPixelImage(void)
 
 	for (int y = 0; y < ScreenHeight; y++)
 	{
-		uint16_t bankOffset = GetPixelLineOffset(y);
+		// I think this needs to return an address instead of an offset
+		// then we can lookup a bank per screen line?
+		// can a screen line cross bank boundaries?
+		uint16_t bankOffset = GetPixelLineOffset(y); 
+		
+		const int bankSize = pBank->GetSizeBytes();
+		assert(bankOffset < bankSize);
+		if (bankOffset >= bankSize)
+			return;
 
-		uint32_t* pLineAddr = pScreenView->GetPixelBuffer() + (y * ScreenWidth);
+		// get pointer to start of line in pixel buffer
+		uint32_t* pPixBufAddr = pScreenView->GetPixelBuffer() + (y * ScreenWidth);
 
-		int numChars = ScreenWidth / 8;
-		if (scrMode == 0)
-			numChars = numChars / 2;
-
-		for (int x = 0; x < numChars; x++)
+		const int pixelsPerByte = scrMode == 0 ? 2 : 4;
+		const int bytesPerLine = crtc.h_displayed * 2;
+		for (int b = 0; b < bytesPerLine; b++)
 		{
-			// draw 8x1 pixel line
-			if (scrMode == 0)
+			const uint8_t val = pBank->Memory[bankOffset];
+			const FCodeAnalysisPage& page = pBank->Pages[bankOffset >> 10];
+			const uint32_t heatMapCol = GetHeatmapColourForMemoryAddress(page, bankOffset, state.CurrentFrameNo, HeatmapThreshold);
+
+			for (int p = 0; p < pixelsPerByte; p++)
 			{
-				for (int byte = 0; byte < 4; byte++)
+				int colourIndex = GetHWColourIndexForPixel(val, p, scrMode);
+
+				// todo: correct palette for scanline
+				const ImU32 pixelColour = GetRGBValueForPixel(colourIndex, heatMapCol);
+
+				*pPixBufAddr = pixelColour;
+				pPixBufAddr++;
+				
+				if (scrMode == 0)
 				{
-					const uint8_t val = pBank->Memory[bankOffset];
-
-					const FCodeAnalysisPage& page = pBank->Pages[bankOffset >> 10];
-					const uint32_t heatMapCol = GetHeatmapColourForMemoryAddress(page, bankOffset, state.CurrentFrameNo, HeatmapThreshold);
-
-					// todo: put this in a function? we seem to be using it a lot
-					for (int pixel = 0; pixel < 2; pixel++)
-					{
-						int colourIndex = 0;
-
-						switch (pixel)
-						{
-						case 0:
-							colourIndex = (val & 0x80 ? 1 : 0) | (val & 0x8 ? 2 : 0) | (val & 0x20 ? 4 : 0) | (val & 0x2 ? 8 : 0);
-							break;
-						case 1:
-							colourIndex = (val & 0x40 ? 1 : 0) | (val & 0x4 ? 2 : 0) | (val & 0x10 ? 4 : 0) | (val & 0x1 ? 8 : 0);
-							break;
-						}
-
-						// todo: correct palette for scanline
-						const ImColor colour = GetCurrentPalette_Const().GetColour(colourIndex);
-						// Grayscale value is R * 0.299 + G * 0.587 + B * 0.114
-						const float grayScaleValue = colour.Value.x * 0.299f + colour.Value.y * 0.587f + colour.Value.z * 0.114f;
-						const ImColor grayScaleColour = ImColor(grayScaleValue, grayScaleValue, grayScaleValue);
-						ImU32 finalColour = grayScaleColour;
-						if (heatMapCol != 0xffffffff)
-						{
-							finalColour |= heatMapCol;
-						}
-						// double width pixel
-						*(pLineAddr + (x * 8) + (byte * 2 /*2 pixels per byte*/) + pixel) = finalColour;
-						//*(pLineAddr + (x * 8) + (byte * 2 /*2 pixels per byte*/) + pixel + 1) = finalColour;
-					}
-					bankOffset++;
-					const int bankSize = pBank->GetSizeBytes();
-					if (bankOffset >= bankSize)
-						return;
-					assert(bankOffset < bankSize);
+					*pPixBufAddr = pixelColour;
+					pPixBufAddr++;
 				}
 			}
-			else if (scrMode == 1)
-			{
-				for (int byte = 0; byte < 2; byte++)
-				{
-					const uint8_t val = pBank->Memory[bankOffset];
-
-					const FCodeAnalysisPage& page = pBank->Pages[bankOffset >> 10];
-					const uint32_t heatMapCol = GetHeatmapColourForMemoryAddress(page, bankOffset, state.CurrentFrameNo, HeatmapThreshold);
-
-					// todo: put this in a function? we seem to be using it a lot
-					for (int pixel = 0; pixel < 4; pixel++)
-					{
-						int colourIndex = 0;
-
-						switch (pixel)
-						{
-						case 0:
-							colourIndex = (val & 0x8 ? 2 : 0) | (val & 0x80 ? 1 : 0);
-							break;
-						case 1:
-							colourIndex = (val & 0x4 ? 2 : 0) | (val & 0x40 ? 1 : 0);
-							break;
-						case 2:
-							colourIndex = (val & 0x2 ? 2 : 0) | (val & 0x20 ? 1 : 0);
-							break;
-						case 3:
-							colourIndex = (val & 0x1 ? 2 : 0) | (val & 0x10 ? 1 : 0);
-							break;
-						}
-
-						// todo: correct palette for scanline
-						const ImColor colour = GetCurrentPalette_Const().GetColour(colourIndex);
-						// Grayscale value is R * 0.299 + G * 0.587 + B * 0.114
-						const float grayScaleValue = colour.Value.x * 0.299f + colour.Value.y * 0.587f + colour.Value.z * 0.114f;
-						const ImColor grayScaleColour = ImColor(grayScaleValue, grayScaleValue, grayScaleValue);
-						ImU32 finalColour = grayScaleColour;
-						if (heatMapCol != 0xffffffff)
-						{
-							finalColour |= heatMapCol;
-						}
-						*(pLineAddr + (x * 8) + (byte * 4 /* 4 pixels per byte */) + pixel) = finalColour;
-					}
-					bankOffset++;
-					const int bankSize = pBank->GetSizeBytes();
-					// todo: this fires when loading dtc.sna
-					assert(bankOffset < bankSize);
-				}
-			}
+			bankOffset++;
+			assert(bankOffset < bankSize); // todo: work out why this sometimes fires
+			if (bankOffset >= bankSize)
+				return;
 		}
 	}
+}
+
+// Given a byte containing multiple pixels, decode the colour index for a specified pixel.
+// For screen mode 0 pixel index can be [0-1]. For mode 1 pixel index can be [0-3]
+// This returns a colour index into the 32 hardware colours. It does not return an RGB value.
+int GetHWColourIndexForPixel(uint8_t val, int pixelIndex, int scrMode)
+{
+	int colourIndex = -1;
+
+	if (scrMode == 0)
+	{
+		if (pixelIndex == 0)
+			colourIndex = (val & 0x80 ? 1 : 0) | (val & 0x8 ? 2 : 0) | (val & 0x20 ? 4 : 0) | (val & 0x2 ? 8 : 0);
+		else if (pixelIndex == 1)
+			colourIndex = (val & 0x40 ? 1 : 0) | (val & 0x4 ? 2 : 0) | (val & 0x10 ? 4 : 0) | (val & 0x1 ? 8 : 0);
+	}
+	else
+	{
+		switch (pixelIndex)
+		{
+		case 0:
+			colourIndex = (val & 0x8 ? 2 : 0) | (val & 0x80 ? 1 : 0);
+			break;
+		case 1:
+			colourIndex = (val & 0x4 ? 2 : 0) | (val & 0x40 ? 1 : 0);
+			break;
+		case 2:
+			colourIndex = (val & 0x2 ? 2 : 0) | (val & 0x20 ? 1 : 0);
+			break;
+		case 3:
+			colourIndex = (val & 0x1 ? 2 : 0) | (val & 0x10 ? 1 : 0);
+			break;
+		}
+	}
+	return colourIndex;
 }

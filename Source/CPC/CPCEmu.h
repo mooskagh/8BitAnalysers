@@ -230,4 +230,3 @@ private:
 };
 
 uint8_t GetBitsPerPixel(int screenMode);
-uint8_t GetPixelsPerByte(int screenMode);

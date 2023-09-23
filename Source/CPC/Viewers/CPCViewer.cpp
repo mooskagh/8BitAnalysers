@@ -6,6 +6,7 @@
 #include "../CPCEmu.h"
 #include <CodeAnalyser/UI/CodeAnalyserUI.h>
 
+#include "CPCGraphicsViewer.h"
 #include "Debug/DebugLog.h"
 #include "Util/Misc.h"
 #include "Util/GraphicsView.h"
@@ -422,17 +423,7 @@ float FCpcViewer::DrawScreenCharacter(int xChar, int yChar, float x, float y, fl
 					const ImVec2 rectMin(pos.x, pos.y);
 					const ImVec2 rectMax(pos.x + pixelSize.x, pos.y + pixelSize.y);
 
-					int colourIndex = 0;
-
-					switch (pixel)
-					{
-					case 0:
-						colourIndex = (val & 0x80 ? 1 : 0) | (val & 0x8 ? 2 : 0) | (val & 0x20 ? 4 : 0) | (val & 0x2 ? 8 : 0);
-						break;
-					case 1:
-						colourIndex = (val & 0x40 ? 1 : 0) | (val & 0x4 ? 2 : 0) | (val & 0x10 ? 4 : 0) | (val & 0x1 ? 8 : 0);
-						break;
-					}
+					int colourIndex = GetHWColourIndexForPixel(val, pixel, 0);
 
 					const ImU32 colour = GetPaletteForPixelLine(yChar * CharacterHeight).GetColour(colourIndex);
 					dl->AddRectFilled(rectMin, rectMax, colour);
@@ -450,23 +441,7 @@ float FCpcViewer::DrawScreenCharacter(int xChar, int yChar, float x, float y, fl
 					const ImVec2 rectMin(pos.x, pos.y);
 					const ImVec2 rectMax(pos.x + pixelSize.x, pos.y + pixelSize.y);
 
-					int colourIndex = 0;
-
-					switch (pixel)
-					{
-					case 0:
-						colourIndex = (val & 0x8 ? 2 : 0) | (val & 0x80 ? 1 : 0);
-						break;
-					case 1:
-						colourIndex = (val & 0x4 ? 2 : 0) | (val & 0x40 ? 1 : 0);
-						break;
-					case 2:
-						colourIndex = (val & 0x2 ? 2 : 0) | (val & 0x20 ? 1 : 0);
-						break;
-					case 3:
-						colourIndex = (val & 0x1 ? 2 : 0) | (val & 0x10 ? 1 : 0);
-						break;
-					}
+					int colourIndex = GetHWColourIndexForPixel(val, pixel, 1);
 
 					const ImU32 colour = GetPaletteForPixelLine(yChar * CharacterHeight).GetColour(colourIndex);
 					dl->AddRectFilled(rectMin, rectMax, colour);
@@ -493,6 +468,9 @@ void FCpcViewer::CalculateScreenProperties()
 
 	CharacterHeight = crtc.max_scanline_addr + 1;			// crtc register 9 defines how many scanlines in a character square
 	
+	// not sure I should be doing this, but values >8 cause problems.
+	CharacterHeight = std::min(CharacterHeight, 8);
+
 	ScreenWidth = crtc.h_displayed * 8; // this is always in mode 1 coords. fix this?
 	ScreenHeight = crtc.v_displayed * CharacterHeight;
 

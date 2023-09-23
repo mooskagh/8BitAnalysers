@@ -1082,6 +1082,14 @@ void FCpcEmu::StartGame(FGameConfig* pGameConfig, bool bLoadGameData /* =  true*
 
 	CodeAnalysis.Debugger.RegisterNewStackPointer(CpcEmuState.cpu.sp, FAddressRef());
 
+	// some extra initialisation for creating new analysis from snnapshot
+	if (bLoadGameData == false)
+	{
+		FAddressRef initialPC = CodeAnalysis.AddressRefFromPhysicalAddress(CpcEmuState.cpu.pc);
+		SetItemCode(CodeAnalysis, initialPC);
+		CodeAnalysis.Debugger.SetPC(initialPC);
+	}
+
 #if SPECCY
 	FGlobalConfig& globalConfig = GetGlobalConfig();
 	GraphicsViewer.SetImagesRoot((globalConfig.WorkspaceRoot + "GraphicsSets/" + pGameConfig->Name + "/").c_str());
@@ -1966,23 +1974,6 @@ void FCpcEmu::UpdatePalette()
 	{
 		palette.SetColour(i, CpcEmuState.ga.hw_colors[CpcEmuState.ga.regs.ink[i]]);
 	}
-}
-
-uint8_t GetPixelsPerByte(int screenMode)
-{
-	uint8_t bpp = 0;
-	switch (screenMode)
-	{
-	case 0:
-		return 2;
-	case 1:
-		return 4;
-	case 2:
-		return 8;
-	case 3: // unsupported
-		return 4;
-	}
-	return 0;
 }
 
 uint8_t GetBitsPerPixel(int screenMode)

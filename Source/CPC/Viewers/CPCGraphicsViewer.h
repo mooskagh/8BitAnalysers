@@ -26,6 +26,7 @@ public:
 	void	Init(FCodeAnalysisState* pCodeAnalysis, FCpcEmu* pEmu);
 
 private:
+	uint32_t	GetRGBValueForPixel(int colourIndex, uint32_t heatMapCol) const;
 	void		UpdateScreenPixelImage(void);
 	uint16_t	GetPixelLineAddress(int yPos);
 	uint16_t	GetPixelLineOffset(int yPos);
@@ -39,3 +40,4 @@ public:
 
 };
 
+int GetHWColourIndexForPixel(uint8_t val, int pixelIndex, int scrMode);
