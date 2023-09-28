@@ -45,20 +45,19 @@
 #include <map>
 #include <string>
 
+#include "CPCScreen.h"
 #include "CodeAnalyser/CodeAnalyser.h"
 #include "Viewers/CPCViewer.h"
 #include "Viewers/FrameTraceViewer.h"
 #include "Viewers/CPCGraphicsViewer.h"
 #include "MemoryHandlers.h"
 #include "IOAnalysis.h"
-#include "Util/GraphicsView.h"
 
 struct FGameViewerData;
 struct FGameConfig;
 struct FViewerConfig;
 class FViewerBase;
 class FScreenPixMemDescGenerator;
-
 
 enum class ECpcModel
 {
@@ -151,13 +150,6 @@ public:
 	void SetRAMBank(int slot, int bankNo);
 	void SetRAMBanksPreset(int bankPresetIndex);
 
-	// util functions related to the screen. put in a different file?
-	uint16_t GetScreenAddrStart() const;
-	uint16_t GetScreenAddrEnd() const;
-	uint16_t GetScreenMemSize() const;
-	bool GetScreenMemoryAddress(int x, int y, uint16_t& addr) const;
-	bool GetScreenAddressCoords(uint16_t addr, int& x, int& y);
-
 	void UpdatePalette();
 
 	bool NewGameFromSnapshot(int snapshotIndex);
@@ -208,10 +200,7 @@ public:
 
 	const FGamesList& GetGamesList() const { return GamesList;  }
 
-	// sam. put this somewhere else?
-	int ScreenModePerScanline[AM40010_DISPLAY_HEIGHT] = {-1 };
-	FPalette PalettePerScanline[AM40010_DISPLAY_HEIGHT];
-	int LastScanline = -1;
+	FCPCScreen Screen;
 
 private:
 	FGamesList		GamesList;

@@ -236,7 +236,7 @@ public:
 	{
 		// todo: deal with screen mode? display both scr mode's x coords?
 		int xp = 0, yp = 0;
-		if (pCpcEmu->GetScreenAddressCoords(addr, xp, yp))
+		if (pCpcEmu->Screen.GetScreenAddressCoords(addr, xp, yp))
 			sprintf(DescStr, "Screen: %d,%d", xp, yp);
 		else
 			sprintf(DescStr, "Screen: ?,?");
@@ -245,8 +245,8 @@ public:
 
 	void UpdateScreenMemoryLocation()
 	{
-		RegionMin = pCpcEmu->GetScreenAddrStart();
-		RegionMax = pCpcEmu->GetScreenAddrEnd();
+		RegionMin = pCpcEmu->Screen.GetScreenAddrStart();
+		RegionMax = pCpcEmu->Screen.GetScreenAddrEnd();
 	}
 private:
 	FCpcEmu* pCpcEmu = 0;
@@ -309,21 +309,6 @@ void	FCpcEmu::OnInstructionExecuted(int ticks, uint64_t pins)
 #endif
 
 	PreviousPC = pc;
-
-	// sam. Store the screen mode per scanline.
-	// Shame to do this here. Would be nice to have a horizontal blank callback
-	const int curScanline = CpcEmuState.ga.crt.pos_y;
-	if (LastScanline != curScanline)
-	{
-		const uint8_t screenMode = CpcEmuState.ga.video.mode;
-		ScreenModePerScanline[curScanline] = screenMode;
-
-		FPalette& palette = PalettePerScanline[curScanline];
-		for (int i = 0; i < palette.GetColourCount(); i++)
-			palette.SetColour(i, CpcEmuState.ga.hw_colors[CpcEmuState.ga.regs.ink[i]]);
-
-		LastScanline = CpcEmuState.ga.crt.pos_y;
-	}
 }
 
 // Note - you can't read the cpu vars during tick
@@ -337,11 +322,10 @@ uint64_t FCpcEmu::Z80Tick(int num, uint64_t pins)
 	z80_t* pCPU = (z80_t*)state.CPUInterface->GetCPUEmulator();
 	const uint16_t pc = GetPC().Address;
 
-	// sam. no idea if this is right or not
-	const uint16_t scanlinePos = CpcEmuState.ga.crt.v_pos;
+	Screen.Tick();
 
-	if (scanlinePos == 0)	// clear scanline info on new frame
-		debugger.ResetScanlineEvents();
+	const am40010_crt_t& crt = CpcEmuState.ga.crt;
+	const uint16_t scanlinePos = crt.v_pos;
 
 	/* memory and IO requests */
 	if (pins & Z80_MREQ)
@@ -369,7 +353,7 @@ uint64_t FCpcEmu::Z80Tick(int num, uint64_t pins)
 			state.SetLastWriterForAddress(addr, pcAddrRef);
 
 			// Log screen pixel writes
-			if (addr >= GetScreenAddrStart() && addr <= GetScreenAddrEnd())
+			if (addr >= Screen.GetScreenAddrStart() && addr <= Screen.GetScreenAddrEnd())
 			{
 				debugger.RegisterEvent((uint8_t)EEventType::ScreenPixWrite, pcAddrRef, addr, value, scanlinePos);
 			}
@@ -389,7 +373,7 @@ uint64_t FCpcEmu::Z80Tick(int num, uint64_t pins)
 	}
 
 	// sam. need to do this somewhere better. like when the screen ram address gets set 
-	CodeAnalysis.MemoryAnalyser.SetScreenMemoryArea(GetScreenAddrStart(), GetScreenAddrEnd());
+	CodeAnalysis.MemoryAnalyser.SetScreenMemoryArea(Screen.GetScreenAddrStart(), Screen.GetScreenAddrEnd());
 	pScreenMemDescGenerator->UpdateScreenMemoryLocation();
 
 	debugger.CPUTick(pins);
@@ -761,6 +745,8 @@ bool FCpcEmu::Init(const FCpcConfig& config)
 	// We use this so we can quickly restore the game state after running ahead to generate the frame buffer in StartGame().
 	GameLoader.SetCachingEnabled(true);
 
+	Screen.Init(this);
+
 	//cpc_type_t type = CPC_TYPE_464;
 	//cpc_type_t type = CPC_TYPE_6128;
 	cpc_type_t type = config.Model == ECpcModel::CPC_6128 ? CPC_TYPE_6128 : CPC_TYPE_464;
@@ -945,7 +931,7 @@ bool FCpcEmu::Init(const FCpcConfig& config)
 	debugger.RegisterEventType((int)EEventType::CrtcRegisterWrite,		"CRTC Reg. Write",	0xffffff00, CRTCWriteEventShowAddress, CRTCWriteEventShowValue);
 	debugger.RegisterEventType((int)EEventType::KeyboardRead,			"Keyboard Read",	0xff808080, IOPortEventShowAddress, IOPortEventShowValue);
 	
-	CodeAnalysis.MemoryAnalyser.SetScreenMemoryArea(GetScreenAddrStart(), GetScreenAddrEnd());
+	CodeAnalysis.MemoryAnalyser.SetScreenMemoryArea(Screen.GetScreenAddrStart(), Screen.GetScreenAddrEnd());
 
 	bInitialised = true;
 
@@ -1876,95 +1862,6 @@ void FCpcConfig::ParseCommandline(int argc, char** argv)
 
 		++argIt;
 	}
-}
-
-// https://gist.github.com/neuro-sys/eeb7a323b27a9d8ad891b41144916946#registers
-uint16_t FCpcEmu::GetScreenAddrStart() const
-{
-	const uint16_t dispStart = (CpcEmuState.crtc.start_addr_hi << 8) | CpcEmuState.crtc.start_addr_lo;
-	const uint16_t pageIndex = (dispStart >> 12) & 0x3; // bits 12 & 13 hold the page index
-	const uint16_t baseAddr = pageIndex * 0x4000;
-	const uint16_t offset = (dispStart & 0x3ff) << 1; // 1024 positions. bits 0..9
-	return baseAddr + offset;
-}
-
-uint16_t FCpcEmu::GetScreenAddrEnd() const
-{
-	return GetScreenAddrStart() + GetScreenMemSize() - 1;
-}
-
-// Usually screen mem size is 16k but it's possible to be set to 32k if both bits are set.
-uint16_t FCpcEmu::GetScreenMemSize() const
-{
-	const uint16_t dispSize = (CpcEmuState.crtc.start_addr_hi >> 2) & 0x3;
-	return dispSize == 0x3 ? 0x8000 : 0x4000;
-}
-
-// values are in screen mode 1 coordinate system
-// should we pass in screen mode?
-bool FCpcEmu::GetScreenMemoryAddress(int x, int y, uint16_t& addr) const
-{
-	// sam todo. return false if out of range
-	//if (x < 0 || x>255 || y < 0 || y> 191)
-	//	return false;
-
-	// does this formula work if the screen is "scrolled"?
-
-	const uint8_t charHeight = CpcEmuState.crtc.max_scanline_addr + 1; 
-	const uint8_t bytesPerScrLine = CpcEmuState.crtc.h_displayed * 2;
-	uint16_t yCharIndex = y / charHeight; // which character row are we in?
-	uint16_t charLine = (y % charHeight); // which line are we in of the character square [0-charHeight]?
-	addr = GetScreenAddrStart() + (yCharIndex * bytesPerScrLine) + (charLine * 2048) + (x / 4);
-	
-	return true;
-}
-
-/*
-	Screen ram is 16k.
-	It is split into 8 sections, 2048 bytes apart.
-
-	[Screen eighth 0. 2048 bytes]
-	[Screen eighth 1. 2048 bytes]
-	...
-	[Screen eighth 7. 2048 bytes]
-	
-	Each of those sections hold a single screen line for each character row of the screen.
-	First section holds the first line of each character. Second section holds the second line of each character. Etc..
-
-	Each screen eigth holds all the contiguous bytes for a character row line followed by the next character row line.
-	The bytes for row 0 will be followed by row 1, 2.. etc.
-
-	[Pixel line bytes for character row 0] 
-	[Pixel line bytes for character row 1]
-	...
-	[Pixel line bytes for character row n]
-
-	*n depends on how many character rows are set in the CRTC register
-*/
-
-// should we pass in screen mode?
-// currently, it returns in mode 1 coords. 
-bool FCpcEmu::GetScreenAddressCoords(uint16_t addr, int& x, int& y)
-{
-	const uint16_t startAddr = GetScreenAddrStart();
-	if (addr < startAddr || addr >= GetScreenAddrEnd())
-		return false;
-
-	if (CpcEmuState.crtc.h_displayed == 0)
-		return false;
-
-	const uint16_t totOffset = addr - startAddr; // Get byte offset into screen ram
-	const uint8_t charLine = totOffset / 2048; // Which line of the character are we [0-charHeight]
-	const uint8_t bytesPerLine = CpcEmuState.crtc.h_displayed * 2; // How many bytes in a single screen line?
-	const uint16_t charLineOffset = totOffset % 2048; // What is our offset into the char line area? 
-	const uint16_t charRowIndex = charLineOffset / bytesPerLine; // Which row are we on?
-
-	x = (charLineOffset % bytesPerLine) * 4;
-
-	const uint8_t charHeight = CpcEmuState.crtc.max_scanline_addr + 1;
-	y = (charRowIndex * charHeight) + charLine;
-
-	return true;
 }
 
 void FCpcEmu::UpdatePalette()

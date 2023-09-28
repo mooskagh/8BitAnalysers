@@ -5,7 +5,6 @@
 #include <CodeAnalyser/CodeAnalyser.h>
 
 #include "../CPCEmu.h"
-//#include "../SpectrumConstants.h"
 
 void FCPCGraphicsViewer::Init(FCodeAnalysisState* pCodeAnalysis, FCpcEmu* pEmu)
 {
@@ -23,7 +22,7 @@ void FCPCGraphicsViewer::DrawScreenViewer()
 // should this return an offset from the start of screen ram?
 uint16_t FCPCGraphicsViewer::GetPixelLineAddress(int yPos)
 {
-	const uint16_t start = pCpcEmu->GetScreenAddrStart();
+	const uint16_t start = pCpcEmu->Screen.GetScreenAddrStart();
 	return start + GetPixelLineOffset(yPos);
 }
 
@@ -37,10 +36,11 @@ uint16_t FCPCGraphicsViewer::GetPixelLineOffset(int yPos)
 	return ((yPos / CharacterHeight) * (ScreenWidth / 4)) + ((yPos % CharacterHeight) * 2048);
 }
 
-uint32_t FCPCGraphicsViewer::GetRGBValueForPixel(int colourIndex, uint32_t heatMapCol) const
+uint32_t FCPCGraphicsViewer::GetRGBValueForPixel(int yPos, int colourIndex, uint32_t heatMapCol) const
 {
-	const ImColor colour = GetCurrentPalette_Const().GetColour(colourIndex);
-	return colour;
+	//const ImColor colour = GetCurrentPalette_Const().GetColour(colourIndex);
+	const ImColor colour = pCpcEmu->Screen.GetPaletteForYPos(yPos).GetColour(colourIndex);
+	//return colour;
 
 	// Grayscale value is R * 0.299 + G * 0.587 + B * 0.114
 	const float grayScaleValue = colour.Value.x * 0.299f + colour.Value.y * 0.587f + colour.Value.z * 0.114f;
@@ -53,13 +53,15 @@ uint32_t FCPCGraphicsViewer::GetRGBValueForPixel(int colourIndex, uint32_t heatM
 	return finalColour;
 }
 
+// todo: make sure this can display a full screen overscan image
 void FCPCGraphicsViewer::UpdateScreenPixelImage(void)
 {
 	const FCodeAnalysisState& state = GetCodeAnalysis();
 
 	// todo: deal with Bank being set
-	const int16_t startBankId = Bank == -1 ? state.GetBankFromAddress(pCpcEmu->GetScreenAddrStart()) : Bank;
-	const int16_t endBankId = Bank == -1 ? state.GetBankFromAddress(pCpcEmu->GetScreenAddrEnd()) : Bank;
+	const mc6845_t& crtc = pCpcEmu->CpcEmuState.crtc;
+	const int16_t startBankId = Bank == -1 ? state.GetBankFromAddress(pCpcEmu->Screen.GetScreenAddrStart()) : Bank;
+	const int16_t endBankId = Bank == -1 ? state.GetBankFromAddress(pCpcEmu->Screen.GetScreenAddrEnd()) : Bank;
 
 	if (startBankId != endBankId)
 	{
@@ -75,7 +77,6 @@ void FCPCGraphicsViewer::UpdateScreenPixelImage(void)
 
 	const FCodeAnalysisBank* pBank = state.GetBank(startBankId);
 
-	const mc6845_t& crtc = pCpcEmu->CpcEmuState.crtc;
 	CharacterHeight = crtc.max_scanline_addr + 1;
 	
 	// Not sure character height of >8 is supported?
@@ -93,20 +94,22 @@ void FCPCGraphicsViewer::UpdateScreenPixelImage(void)
 	if (ScreenWidth != lastScreenWidth || ScreenHeight != lastScreenHeight)
 	{
 		// temp. recreate the screen view
+		// todo: need to create this up front. 
 		delete pScreenView;
 		pScreenView = new FGraphicsView(ScreenWidth, ScreenHeight);
 	}
 
-	// todo: mixed screen modes
-	const int scrMode = pCpcEmu->CpcEmuState.ga.video.mode;
-
 	for (int y = 0; y < ScreenHeight; y++)
 	{
+		const int scrMode = pCpcEmu->Screen.GetScreenModeForYPos(y);
+
 		// I think this needs to return an address instead of an offset
 		// then we can lookup a bank per screen line?
 		// can a screen line cross bank boundaries?
 		uint16_t bankOffset = GetPixelLineOffset(y); 
 		
+		// todo: check here if we have enough bytes in the bank for a pixel line
+
 		const int bankSize = pBank->GetSizeBytes();
 		assert(bankOffset < bankSize);
 		if (bankOffset >= bankSize)
@@ -128,7 +131,7 @@ void FCPCGraphicsViewer::UpdateScreenPixelImage(void)
 				int colourIndex = GetHWColourIndexForPixel(val, p, scrMode);
 
 				// todo: correct palette for scanline
-				const ImU32 pixelColour = GetRGBValueForPixel(colourIndex, heatMapCol);
+				const ImU32 pixelColour = GetRGBValueForPixel(y, colourIndex, heatMapCol);
 
 				*pPixBufAddr = pixelColour;
 				pPixBufAddr++;
@@ -145,39 +148,4 @@ void FCPCGraphicsViewer::UpdateScreenPixelImage(void)
 				return;
 		}
 	}
-}
-
-// Given a byte containing multiple pixels, decode the colour index for a specified pixel.
-// For screen mode 0 pixel index can be [0-1]. For mode 1 pixel index can be [0-3]
-// This returns a colour index into the 32 hardware colours. It does not return an RGB value.
-int GetHWColourIndexForPixel(uint8_t val, int pixelIndex, int scrMode)
-{
-	int colourIndex = -1;
-
-	if (scrMode == 0)
-	{
-		if (pixelIndex == 0)
-			colourIndex = (val & 0x80 ? 1 : 0) | (val & 0x8 ? 2 : 0) | (val & 0x20 ? 4 : 0) | (val & 0x2 ? 8 : 0);
-		else if (pixelIndex == 1)
-			colourIndex = (val & 0x40 ? 1 : 0) | (val & 0x4 ? 2 : 0) | (val & 0x10 ? 4 : 0) | (val & 0x1 ? 8 : 0);
-	}
-	else
-	{
-		switch (pixelIndex)
-		{
-		case 0:
-			colourIndex = (val & 0x8 ? 2 : 0) | (val & 0x80 ? 1 : 0);
-			break;
-		case 1:
-			colourIndex = (val & 0x4 ? 2 : 0) | (val & 0x40 ? 1 : 0);
-			break;
-		case 2:
-			colourIndex = (val & 0x2 ? 2 : 0) | (val & 0x20 ? 1 : 0);
-			break;
-		case 3:
-			colourIndex = (val & 0x1 ? 2 : 0) | (val & 0x10 ? 1 : 0);
-			break;
-		}
-	}
-	return colourIndex;
 }

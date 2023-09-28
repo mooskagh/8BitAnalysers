@@ -102,7 +102,7 @@ void FCpcViewer::Draw()
 	int scrMode = pCpcEmu->CpcEmuState.ga.video.mode;
 	for (int s=0; s< AM40010_DISPLAY_HEIGHT; s++)
 	{
-		if (pCpcEmu->ScreenModePerScanline[s] != scrMode)
+		if (pCpcEmu->Screen.GetScreenModeForScanline(s) != scrMode)
 		{
 			scrMode = -1;
 			break;
@@ -122,12 +122,21 @@ void FCpcViewer::Draw()
 		ImGui::Text("Screen mode: %d", scrMode);
 		ImGui::Text("Resolution: %d x %d", crtc.h_displayed * multiplier[scrMode], ScreenHeight);
 	}
+	
+	const uint16_t pageIndex = (crtc.start_addr_hi >> 4) & 0x3;
+	const uint16_t size = (crtc.start_addr_hi >> 2) & 0x3;
+
+	ImGui::Text("Screen RAM: %s. Page: %s. Size %s. Scrolled: %s", 
+		NumStr(pCpcEmu->Screen.GetScreenAddrStart()), 
+		NumStr(pageIndex),
+		size == 3 ? "32k" : "16k",
+		pCpcEmu->Screen.IsScrolled() ? "Yes" : "No");
 
 	int numPaletteChanges = false;
 	// see if palette changes occured during last frame
 	for (int p = 1; p < AM40010_DISPLAY_HEIGHT; p++)
 	{
-		if (pCpcEmu->PalettePerScanline[p - 1] != pCpcEmu->PalettePerScanline[p])
+		if (pCpcEmu->Screen.GetPaletteForScanline(p - 1) != pCpcEmu->Screen.GetPaletteForScanline(p))
 			numPaletteChanges++;
 	}
 	ImGui::Text("Palette changes: %d", numPaletteChanges);
@@ -185,7 +194,7 @@ void FCpcViewer::Draw()
 	{
 		for (int s=0; s< AM40010_DISPLAY_HEIGHT; s++)
 		{
-			const uint8_t scrMode = pCpcEmu->ScreenModePerScanline[s];
+			const uint8_t scrMode = pCpcEmu->Screen.GetScreenModeForScanline(s);
 			dl->AddLine(ImVec2(pos.x, pos.y + (s * scale)), ImVec2(pos.x + (TextureWidth * scale), pos.y + (s * scale)), scrMode == 0 ? 0x40ffff00 : 0x4000ffff, 1 * scale);
 		}
 	}
@@ -218,10 +227,10 @@ void FCpcViewer::Draw()
 	if (viewState.HighlightAddress.IsValid())
 	{
 		ImDrawList* dl = ImGui::GetWindowDrawList();
-		if (viewState.HighlightAddress.Address >= pCpcEmu->GetScreenAddrStart() && viewState.HighlightAddress.Address <= pCpcEmu->GetScreenAddrEnd())
+		if (viewState.HighlightAddress.Address >= pCpcEmu->Screen.GetScreenAddrStart() && viewState.HighlightAddress.Address <= pCpcEmu->Screen.GetScreenAddrEnd())
 		{
 			int xp=0, yp=0;
-			if (pCpcEmu->GetScreenAddressCoords(viewState.HighlightAddress.Address, xp, yp))
+			if (pCpcEmu->Screen.GetScreenAddressCoords(viewState.HighlightAddress.Address, xp, yp))
 			{
 				const int rx = static_cast<int>(pos.x + (ScreenEdgeL + xp) * scale);
 				const int ry = static_cast<int>(pos.y + (ScreenTop + yp) * scale);
@@ -287,7 +296,7 @@ bool FCpcViewer::OnHovered(const ImVec2& pos)
 	// note: for screen mode 0 this will be in coord space of 320 x 200.
 	// not sure that is right?
 	uint16_t scrAddress = 0;
-	if (pCpcEmu->GetScreenMemoryAddress(xp, yp, scrAddress))
+	if (pCpcEmu->Screen.GetScreenMemoryAddress(xp, yp, scrAddress))
 	{
 		// position (in pixels) of the start of the character
 		const int charStartX = xp & ~(charWidth - 1); 
@@ -314,11 +323,11 @@ bool FCpcViewer::OnHovered(const ImVec2& pos)
 				uint16_t plotAddress = 0;
 				for (int y = 0; y < CharacterHeight; y++)
 				{
-					if (pCpcEmu->GetScreenMemoryAddress(charStartX, charStartY + y, plotAddress))
+					if (pCpcEmu->Screen.GetScreenMemoryAddress(charStartX, charStartY + y, plotAddress))
 					{
 						for (int b = 0; b < numBytes; b++)
 						{
-							pCpcEmu->WriteByte(plotAddress + b, 0xff);
+							pCpcEmu->WriteByte(plotAddress + b, 1<<y);
 						}
 					}
 				}
@@ -404,11 +413,16 @@ float FCpcViewer::DrawScreenCharacter(int xChar, int yChar, float x, float y, fl
 	ImDrawList* dl = ImGui::GetWindowDrawList();
 	ImVec2 pos = ImVec2((float)x, (float)y);
 	const float startPos = pos.x;
+
 	for (int pixline = 0; pixline < CharacterHeight; pixline++) 
 	{
 		uint16_t pixLineAddress = 0;
 		// todo check return from this
-		pCpcEmu->GetScreenMemoryAddress(xChar * xMult * 8, yChar * CharacterHeight + pixline, pixLineAddress);
+		// todo deal with non contiguous screen memory bytes
+		pCpcEmu->Screen.GetScreenMemoryAddress(xChar * xMult * 8, yChar * CharacterHeight + pixline, pixLineAddress);
+
+		// TEMP
+		//ImGui::Text("                               %d %x", pixline, pixLineAddress);
 
 		switch (screenMode)
 		{
@@ -474,6 +488,7 @@ void FCpcViewer::CalculateScreenProperties()
 	ScreenWidth = crtc.h_displayed * 8; // this is always in mode 1 coords. fix this?
 	ScreenHeight = crtc.v_displayed * CharacterHeight;
 
+#ifdef CALCULATE_SCREEN_OFFSETS_FROM_CRTC_REGS
 	const int hTotOffset = (crtc.h_total - 63) * 8;					// offset based on the default horiz total size (63 chars)
 	const int hSyncOffset = (crtc.h_sync_pos - 46) * 8;				// offset based on the default horiz sync position (46 chars)
 	ScreenEdgeL = crtc.h_displayed * 8 - hSyncOffset + 32 - ScreenWidth + hTotOffset;
@@ -485,6 +500,10 @@ void FCpcViewer::CalculateScreenProperties()
 
 	// not sure this is right?
 	ScreenTop = Clamp(ScreenTop, 0, AM40010_FRAMEBUFFER_HEIGHT);
+#else
+	ScreenTop = pCpcEmu->Screen.GetTopScanline();
+	ScreenEdgeL = pCpcEmu->Screen.GetLeftEdgeScanline();
+#endif
 
 	HorizCharCount = crtc.h_displayed;
 }
@@ -492,14 +511,13 @@ void FCpcViewer::CalculateScreenProperties()
 int FCpcViewer::GetScreenModeForPixelLine(int yPos) const
 {
 	const int scanline = ScreenTop + yPos;
-	return scanline > 0 && scanline < AM40010_DISPLAY_HEIGHT ? pCpcEmu->ScreenModePerScanline[scanline] : -1;
+	return pCpcEmu->Screen.GetScreenModeForScanline(scanline);
 }
 
-// todo possibly want to not return current palette?
 const FPalette& FCpcViewer::GetPaletteForPixelLine(int yPos) const
 {
 	const int scanline = ScreenTop + yPos;
-	return scanline > 0 && scanline < AM40010_DISPLAY_HEIGHT ? pCpcEmu->PalettePerScanline[scanline] : GetCurrentPalette_Const();
+	return pCpcEmu->Screen.GetPaletteForScanline(scanline);
 }
 
 void FCpcViewer::Tick(void)
@@ -537,7 +555,7 @@ void FCpcViewer::DrawTestScreen()
 	const float pixelHeight = 5.0f;
 	for (int y = 0; y < crtc.v_displayed; y++)
 	{
-		const int scrMode = pCpcEmu->ScreenModePerScanline[scanLine];
+		const int scrMode = pCpcEmu->Screen.GetScreenModeForScanline(scanLine);
 		const int charCount = scrMode == 0 ? HorizCharCount / 2 : HorizCharCount;
 		for (int x = 0; x < charCount; x++)
 		{

@@ -5,9 +5,7 @@
 #include <string>
 
 #include <CodeAnalyser/CodeAnalyserTypes.h>
-
 #include <CodeAnalyser/UI/GraphicsViewer.h>
-//#include "SpriteViewer.h"
 
 class FCpcEmu;
 struct FGame;
@@ -26,18 +24,11 @@ public:
 	void	Init(FCodeAnalysisState* pCodeAnalysis, FCpcEmu* pEmu);
 
 private:
-	uint32_t	GetRGBValueForPixel(int colourIndex, uint32_t heatMapCol) const;
+	uint32_t	GetRGBValueForPixel(int yPos, int colourIndex, uint32_t heatMapCol) const;
 	void		UpdateScreenPixelImage(void);
 	uint16_t	GetPixelLineAddress(int yPos);
 	uint16_t	GetPixelLineOffset(int yPos);
 
 	FCpcEmu*	pCpcEmu = nullptr;
 	int			CharacterHeight = 8;
-
-public:
-	//std::map<std::string, FUISpriteList>	SpriteLists;
-	//std::string				SelectedSpriteList;
-
 };
-
-int GetHWColourIndexForPixel(uint8_t val, int pixelIndex, int scrMode);
