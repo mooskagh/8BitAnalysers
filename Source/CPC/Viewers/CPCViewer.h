@@ -28,6 +28,7 @@ private:
 	void	CalculateScreenProperties();
 	int		GetScreenModeForPixelLine(int yPos) const;
 	const FPalette& GetPaletteForPixelLine(int yPos) const;
+	ImU32 GetFlashColour() const;
 
 #ifndef NDEBUG
 	void DrawTestScreen();

@@ -222,14 +222,18 @@ void FCpcViewer::Draw()
 		}
 	}
 
-	// todo: dont do this if cpu is running
-	if (viewState.HighlightScanline != -1)
+	// highlight scanline
+	if (debugger.IsStopped())
 	{
-		// these scanline positions dont line up with the screen
-		const float yPos = viewState.HighlightScanline - scanlineStart;
-		ImVec2 start = ImVec2(pos.x, pos.y + (yPos * scale));
-		const ImVec2 end = ImVec2(pos.x + (TextureWidth + 32) * scale, pos.y + (yPos * scale));
-		dl->AddLine(start, end, 0Xffffffff, 1 * scale);
+		if (viewState.HighlightScanline != -1)
+		{
+			const int scanlineY = std::min(std::max(viewState.HighlightScanline - scanlineStart, 0), AM40010_DISPLAY_HEIGHT);
+
+			ImVec2 start = ImVec2(pos.x, pos.y + (scanlineY * scale));
+			const ImVec2 end = ImVec2(pos.x + (TextureWidth + 32) * scale, pos.y + (scanlineY * scale));
+			
+			dl->AddLine(start, end, GetFlashColour(), 1 * scale);
+		}
 	}
 
 	// todo highlight hovered address in code analyser view
@@ -250,14 +254,7 @@ void FCpcViewer::Draw()
 				const int scrMode = GetScreenModeForPixelLine(yp);
 				pixelsToHighlight = scrMode == 0 ? 2 : 4;
 
-				// generate flash colour
-				ImU32 flashCol = 0xff000000;
-				const int flashCounter = FrameCounter >> 2;
-				if (flashCounter & 1) flashCol |= 0xff << 0;
-				if (flashCounter & 2) flashCol |= 0xff << 8;
-				if (flashCounter & 4) flashCol |= 0xff << 16;
-
-				dl->AddRectFilled(ImVec2((float)rx, (float)ry), ImVec2((float)rx + ((pixelsToHighlight + 1) * scale), (float)ry + (1 * scale)), flashCol);
+				dl->AddRectFilled(ImVec2((float)rx, (float)ry), ImVec2((float)rx + ((pixelsToHighlight + 1) * scale), (float)ry + (1 * scale)), GetFlashColour());
 			}
 		}
 	}
@@ -529,6 +526,17 @@ const FPalette& FCpcViewer::GetPaletteForPixelLine(int yPos) const
 {
 	const int scanline = ScreenTop + yPos;
 	return pCpcEmu->Screen.GetPaletteForScanline(scanline);
+}
+
+ImU32 FCpcViewer::GetFlashColour() const
+{
+	// generate flash colour
+	ImU32 flashCol = 0xff000000;
+	const int flashCounter = FrameCounter >> 2;
+	if (flashCounter & 1) flashCol |= 0xff << 0;
+	if (flashCounter & 2) flashCol |= 0xff << 8;
+	if (flashCounter & 4) flashCol |= 0xff << 16;
+	return flashCol;
 }
 
 void FCpcViewer::Tick(void)
