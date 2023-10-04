@@ -202,6 +202,8 @@ public:
 
 	FCPCScreen Screen;
 
+	int bIsNewFrame = false;
+
 private:
 	FGamesList		GamesList;
 	FCpcGameLoader	GameLoader;

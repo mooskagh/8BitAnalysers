@@ -327,6 +327,21 @@ uint64_t FCpcEmu::Z80Tick(int num, uint64_t pins)
 	const am40010_crt_t& crt = CpcEmuState.ga.crt;
 	const uint16_t scanlinePos = crt.v_pos;
 
+	if (scanlinePos == 0)
+	{
+		if (!bIsNewFrame)
+		{
+			// if scanline is 0 for the first time then do the machine frame
+			debugger.OnMachineFrame();
+			debugger.ResetScanlineEvents();
+			bIsNewFrame = true;
+		}
+	}
+	else
+	{
+		bIsNewFrame = false;
+	}
+
 	/* memory and IO requests */
 	if (pins & Z80_MREQ)
 	{

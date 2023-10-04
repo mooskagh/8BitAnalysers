@@ -199,6 +199,7 @@ void FCpcViewer::Draw()
 		}
 	}
 	
+	// why do we need this?
 	static int scanlineStart = 32;
 	//ImGui::InputInt("Scanline start", &scanlineStart);
 
@@ -206,6 +207,7 @@ void FCpcViewer::Draw()
 	// cpc seems to have 312 scanlines
 	// AM40010_FRAMEBUFFER_HEIGHT is 312
 
+	const FCodeAnalysisViewState& viewState = pCpcEmu->CodeAnalysis.GetFocussedViewState();
 	FDebugger& debugger = pCpcEmu->CodeAnalysis.Debugger;
 	const uint8_t* scanlineEvents = debugger.GetScanlineEvents();
 	for (int scanlineNo = 0; scanlineNo < 320; scanlineNo++)
@@ -220,10 +222,19 @@ void FCpcViewer::Draw()
 		}
 	}
 
+	// todo: dont do this if cpu is running
+	if (viewState.HighlightScanline != -1)
+	{
+		// these scanline positions dont line up with the screen
+		const float yPos = viewState.HighlightScanline - scanlineStart;
+		ImVec2 start = ImVec2(pos.x, pos.y + (yPos * scale));
+		const ImVec2 end = ImVec2(pos.x + (TextureWidth + 32) * scale, pos.y + (yPos * scale));
+		dl->AddLine(start, end, 0Xffffffff, 1 * scale);
+	}
+
 	// todo highlight hovered address in code analyser view
 	
-	// draw hovered address
-	const FCodeAnalysisViewState& viewState = pCpcEmu->CodeAnalysis.GetFocussedViewState();
+	// draw pixels that correspond with address hovered in code analysis view
 	if (viewState.HighlightAddress.IsValid())
 	{
 		ImDrawList* dl = ImGui::GetWindowDrawList();

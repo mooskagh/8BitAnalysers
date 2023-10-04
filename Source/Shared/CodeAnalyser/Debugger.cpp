@@ -1109,10 +1109,14 @@ void FDebugger::DrawEvents(void)
 		ImGui::TreePop();
 	}
 
+	// todo do this somewhere better
+	viewState.HighlightScanline = -1;
+
 	static ImGuiTableFlags flags = ImGuiTableFlags_Borders | ImGuiTableFlags_RowBg | ImGuiTableFlags_SizingFixedFit | ImGuiTableFlags_ScrollY;
-	if (ImGui::BeginTable("Events", 4, flags))
+	if (ImGui::BeginTable("Events", 5, flags))
 	{
 		ImGui::TableSetupScrollFreeze(0, 1); // Make top row always visible
+		ImGui::TableSetupColumn("Scanline", ImGuiTableColumnFlags_WidthFixed, 65);
 		ImGui::TableSetupColumn("Type", ImGuiTableColumnFlags_WidthFixed, 200);
 		ImGui::TableSetupColumn("PC", ImGuiTableColumnFlags_WidthStretch);
 		ImGui::TableSetupColumn("Address", ImGuiTableColumnFlags_WidthStretch);
@@ -1129,6 +1133,9 @@ void FDebugger::DrawEvents(void)
 				ImGui::TableNextRow();
 
 				ImGui::TableSetColumnIndex(0);
+				ImGui::Text("%d", event.ScanlinePos);
+
+				ImGui::TableSetColumnIndex(1);
 				ImVec2 pos = ImGui::GetCursorScreenPos();
 					
 				// Type
@@ -1138,13 +1145,18 @@ void FDebugger::DrawEvents(void)
 
 				ImGui::Text("   %s", GetEventName(event.Type));
 					
+				if (ImGui::IsItemHovered())
+				{
+					viewState.HighlightScanline = event.ScanlinePos;
+				}
+
 				// PC
-				ImGui::TableSetColumnIndex(1);
+				ImGui::TableSetColumnIndex(2);
 				ImGui::Text("%s:", NumStr(event.PC.Address));
 				DrawAddressLabel(state, viewState, event.PC);
 
 				// Address
-				ImGui::TableSetColumnIndex(2);
+				ImGui::TableSetColumnIndex(3);
 				if (typeInfo.ShowAddressCB != nullptr)
 				{
 					typeInfo.ShowAddressCB(state, event);
@@ -1156,7 +1168,7 @@ void FDebugger::DrawEvents(void)
 				}
 
 				// Value
-				ImGui::TableSetColumnIndex(3);
+				ImGui::TableSetColumnIndex(4);
 				if (typeInfo.ShowValueCB != nullptr)
 				{
 					typeInfo.ShowValueCB(state, event);

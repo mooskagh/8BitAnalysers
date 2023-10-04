@@ -66,7 +66,6 @@ void FCPCScreen::Tick()
 						crt.v_blank,
 						crt.h_blank
 					);
-					pCpcEmu->CodeAnalysis.Debugger.ResetScanlineEvents();
 					bInVblank = true;
 					bDrawingPixels = false;
 				}
