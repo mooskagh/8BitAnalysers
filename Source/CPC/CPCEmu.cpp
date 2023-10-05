@@ -676,7 +676,7 @@ const char* g_CRTCRegNames[18] =
 "Max Scan lines",
 "Cursor Start",
 "Cursor End",
-"Disp. Start Addr. H"
+"Disp. Start Addr. H",
 "Disp. Start Addr. L",
 "Cursor H",
 "Cursor L",
@@ -686,13 +686,26 @@ const char* g_CRTCRegNames[18] =
 
 void CRTCWriteEventShowAddress(FCodeAnalysisState& state, const FEvent& event)
 {
-	int regIndex = event.Address & 0x1f;
+	const int regIndex = event.Address & 0x1f;
 	ImGui::Text("Port %s: R%d %s", NumStr(event.Address), regIndex, regIndex < 18 ? g_CRTCRegNames[regIndex] : "");
 }
 
 void CRTCWriteEventShowValue(FCodeAnalysisState& state, const FEvent& event)
 {
-	ImGui::Text("%s", NumStr(event.Value));
+	if (GetNumberDisplayMode() != ENumberDisplayMode::Decimal)
+		ImGui::Text("%d (%s)", event.Value, NumStr(event.Value));
+	else
+		ImGui::Text("%d", event.Value);
+}
+
+void ScreenAddrChangeEventShowValue(FCodeAnalysisState& state, const FEvent& event)
+{
+	if (event.Value == 12)
+		ImGui::Text("R12 (H)");
+	else if (event.Value == 13)
+		ImGui::Text("R13 (L)");
+	else
+		ImGui::Text("Unknown");
 }
 
 void PaletteEventShowValue(FCodeAnalysisState& state, const FEvent& event)
@@ -936,16 +949,17 @@ bool FCpcEmu::Init(const FCpcConfig& config)
 
 	FDebugger& debugger = CodeAnalysis.Debugger;
 	debugger.RegisterEventType((int)EEventType::None, "None", 0);
-	debugger.RegisterEventType((int)EEventType::ScreenPixWrite,			"Screen RAM Write",	0xff0000ff, nullptr, EventShowPixValue);
-	debugger.RegisterEventType((int)EEventType::PaletteSelect,			"Palette Select",	0xffffffff, IOPortEventShowAddress, PaletteEventShowValue);
-	debugger.RegisterEventType((int)EEventType::PaletteColour,			"Palette Colour",	0xff00ffff, IOPortEventShowAddress, PaletteEventShowValue);
-	debugger.RegisterEventType((int)EEventType::BorderColour,			"Border Colour",	0xff00ff00, IOPortEventShowAddress, PaletteEventShowValue);
-	debugger.RegisterEventType((int)EEventType::ScreenModeChange,		"Screen Mode",		0xff0080ff, IOPortEventShowAddress, ScreenModeShowValue);
-	debugger.RegisterEventType((int)EEventType::CrtcRegisterSelect,		"CRTC Reg. Select",	0xffff00ff, CRTCWriteEventShowAddress, CRTCWriteEventShowValue);
-	debugger.RegisterEventType((int)EEventType::CrtcRegisterRead,		"CRTC Reg. Read",	0xffff0000, CRTCWriteEventShowAddress, CRTCWriteEventShowValue);
-	debugger.RegisterEventType((int)EEventType::CrtcRegisterWrite,		"CRTC Reg. Write",	0xffffff00, CRTCWriteEventShowAddress, CRTCWriteEventShowValue);
-	debugger.RegisterEventType((int)EEventType::KeyboardRead,			"Keyboard Read",	0xff808080, IOPortEventShowAddress, IOPortEventShowValue);
-	
+	debugger.RegisterEventType((int)EEventType::ScreenPixWrite,				"Screen RAM Write",	0xff0000ff, nullptr, EventShowPixValue);
+	debugger.RegisterEventType((int)EEventType::PaletteSelect,				"Palette Select",	0xffffffff, IOPortEventShowAddress, PaletteEventShowValue);
+	debugger.RegisterEventType((int)EEventType::PaletteColour,				"Palette Colour",	0xff00ffff, IOPortEventShowAddress, PaletteEventShowValue);
+	debugger.RegisterEventType((int)EEventType::BorderColour,				"Border Colour",	0xff00ff00, IOPortEventShowAddress, PaletteEventShowValue);
+	debugger.RegisterEventType((int)EEventType::ScreenModeChange,			"Screen Mode",		0xff0080ff, IOPortEventShowAddress, ScreenModeShowValue);
+	debugger.RegisterEventType((int)EEventType::CrtcRegisterSelect,			"CRTC Reg. Select",	0xffff00ff, CRTCWriteEventShowAddress, CRTCWriteEventShowValue);
+	debugger.RegisterEventType((int)EEventType::CrtcRegisterRead,			"CRTC Reg. Read",	0xffff0000, CRTCWriteEventShowAddress, CRTCWriteEventShowValue);
+	debugger.RegisterEventType((int)EEventType::CrtcRegisterWrite,			"CRTC Reg. Write",	0xffffff00, CRTCWriteEventShowAddress, CRTCWriteEventShowValue);
+	debugger.RegisterEventType((int)EEventType::KeyboardRead,				"Keyboard Read",	0xff808080, IOPortEventShowAddress, IOPortEventShowValue);
+	debugger.RegisterEventType((int)EEventType::ScreenMemoryAddressChange,	"Screen Address",	0xffff69b4, nullptr, ScreenAddrChangeEventShowValue);
+
 	CodeAnalysis.MemoryAnalyser.SetScreenMemoryArea(Screen.GetScreenAddrStart(), Screen.GetScreenAddrEnd());
 
 	bInitialised = true;

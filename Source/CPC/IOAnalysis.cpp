@@ -148,10 +148,16 @@ void FIOAnalysis::HandleCRTC(uint64_t pins, CpcIODevice& readDevice, CpcIODevice
 		  {
 			 writeDevice = CpcIODevice::CRTC;
 
-			 // think data should be this?
-			 //MC6845_GET_DATA(pins)& _mc6845_mask[i]
-			 RegisterEvent((uint8_t)EEventType::CrtcRegisterWrite, MC6845_GET_ADDR(pins), Z80_GET_DATA(pins));
-
+			 // think data should potentially be this, to limit number of bits per register?
+			 // MC6845_GET_DATA(pins) & _mc6845_mask[r]
+			 RegisterEvent((uint8_t)EEventType::CrtcRegisterWrite, r, Z80_GET_DATA(pins));
+			 
+			 if (r == 12 || r == 13)
+			 {
+				 // Add a bespoke event for changing the screen memory address, so we can see which address it got changed to
+				 // when displayed in the event list.
+				 RegisterEvent((uint8_t)EEventType::ScreenMemoryAddressChange, pCpcEmu->Screen.GetScreenAddrStart(), r);
+			 }
 		  }
 		}
 	 }
