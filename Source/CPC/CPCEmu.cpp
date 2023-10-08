@@ -333,7 +333,6 @@ uint64_t FCpcEmu::Z80Tick(int num, uint64_t pins)
 		{
 			// if scanline is 0 for the first time then do the machine frame
 			debugger.OnMachineFrame();
-			debugger.ResetScanlineEvents();
 			bIsNewFrame = true;
 		}
 	}
@@ -391,13 +390,14 @@ uint64_t FCpcEmu::Z80Tick(int num, uint64_t pins)
 	CodeAnalysis.MemoryAnalyser.SetScreenMemoryArea(Screen.GetScreenAddrStart(), Screen.GetScreenAddrEnd());
 	pScreenMemDescGenerator->UpdateScreenMemoryLocation();
 
-	debugger.CPUTick(pins);
+	//debugger.CPUTick(pins);
+	CodeAnalysis.OnCPUTick(pins);
 
 // might need to move this to the chipsimpl code as we use chips functions/defines only available when CHIPS_IMPL is defined
 //#if FIXME
 	if (pins & Z80_IORQ)
 	{
-		IOAnalysis.IOHandler(pc, pins);
+		//IOAnalysis.IOHandler(pc, pins);
 
 #if FIXME
 		// note: this code is duplicated in IOAnalysis.cpp in HandleGateArray
@@ -854,7 +854,7 @@ bool FCpcEmu::Init(const FCpcConfig& config)
 
 	GraphicsViewer.Init(&CodeAnalysis, this);
 
-	IOAnalysis.Init(this);
+	//IOAnalysis.Init(this);
 	CpcViewer.Init(this);
 	CodeAnalysis.ViewState[0].Enabled = true;	// always have first view enabled
 
@@ -962,6 +962,15 @@ bool FCpcEmu::Init(const FCpcConfig& config)
 
 	CodeAnalysis.MemoryAnalyser.SetScreenMemoryArea(Screen.GetScreenAddrStart(), Screen.GetScreenAddrEnd());
 
+#if SPECCY
+	// Setup IO analyser
+	if (config.Model == ESpectrumModel::Spectrum128K)
+	{
+		AYSoundChip.SetEmulator(&ZXEmuState.ay);
+		CodeAnalysis.IOAnalyser.AddDevice(&AYSoundChip);
+	}
+#endif
+
 	bInitialised = true;
 
 #ifndef NDEBUG
@@ -1028,7 +1037,7 @@ void FCpcEmu::StartGame(FGameConfig* pGameConfig, bool bLoadGameData /* =  true*
 	// Initialise code analysis
 	CodeAnalysis.Init(this);
 	
-	IOAnalysis.Reset();
+	//IOAnalysis.Reset();
 
 	// Set options from config
 	for (int i = 0; i < FCodeAnalysisState::kNoViewStates; i++)
@@ -1321,7 +1330,7 @@ void FCpcEmu::DrawSystemMenu()
 		{
 			cpc_reset(&CpcEmuState);
 			ui_dbg_reset(&UICpc.dbg);
-			IOAnalysis.Reset();
+			//IOAnalysis.Reset();
 		}
 
 		if (ImGui::BeginMenu("Joystick"))
@@ -1650,6 +1659,7 @@ void FCpcEmu::Tick()
 	DrawDockingView();
 }
 
+// todo: delete?
 void FCpcEmu::DrawMemoryTools()
 {
 	if (ImGui::Begin("Memory Tools") == false)
@@ -1677,7 +1687,7 @@ void FCpcEmu::DrawMemoryTools()
 		
 		if (ImGui::BeginTabItem("IO Analysis"))
 		{
-			IOAnalysis.DrawUI();
+			//IOAnalysis.DrawUI();
 			ImGui::EndTabItem();
 		}
 
@@ -1771,7 +1781,7 @@ void FCpcEmu::DrawUI()
 #endif
 
 	GraphicsViewer.Draw();
-	DrawMemoryTools();
+	//DrawMemoryTools();
 
 	// Code analysis views
 	for (int codeAnalysisNo = 0; codeAnalysisNo < FCodeAnalysisState::kNoViewStates; codeAnalysisNo++)

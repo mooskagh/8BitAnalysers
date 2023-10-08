@@ -47,6 +47,7 @@
 
 #include "CPCScreen.h"
 #include "CodeAnalyser/CodeAnalyser.h"
+//#include "CodeAnalyser/IOAnalyser.h"
 #include "Viewers/CPCViewer.h"
 #include "Viewers/FrameTraceViewer.h"
 #include "Viewers/CPCGraphicsViewer.h"
@@ -169,7 +170,11 @@ public:
 	FFrameTraceViewer		FrameTraceViewer;
 	FCPCGraphicsViewer		GraphicsViewer;
 	FCodeAnalysisState		CodeAnalysis;
-	FIOAnalysis				IOAnalysis;
+	//FIOAnalysis				IOAnalysis;
+
+	// todo: hook this up to the IO Analyser
+	// IO Devices
+	//FAYAudioDevice		AYSoundChip;
 
 	static const int	kNoBankPages = 16;	// no of pages per physical address slot (16k)
 	static const int	kNoRAMPages = 128;
