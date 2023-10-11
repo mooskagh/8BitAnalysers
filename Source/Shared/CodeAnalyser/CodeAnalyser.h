@@ -267,6 +267,8 @@ public:
 	void	Init(ICPUInterface* pCPUInterface);
 	void	OnFrameStart();
 	void	OnFrameEnd();
+	void	OnMachineFrameStart();
+	void	OnMachineFrameEnd();
 	void	OnCPUTick(uint64_t pins);
 
 	const ICPUInterface* GetCPUInterface() const { return CPUInterface; }
