@@ -326,20 +326,20 @@ uint64_t FCpcEmu::Z80Tick(int num, uint64_t pins)
 
 	const am40010_crt_t& crt = CpcEmuState.ga.crt;
 	const uint16_t scanlinePos = crt.v_pos;
+	static uint16_t lastScanlinePos = 0;
 
-	if (scanlinePos == 0)
+	if (lastScanlinePos != scanlinePos)
 	{
-		if (!bIsNewFrame)
+		if (scanlinePos == 0)
 		{
-			// if scanline is 0 for the first time then do the machine frame
-			debugger.OnMachineFrame();
-			bIsNewFrame = true;
+			debugger.OnMachineFrameStart();
+		}
+		if (scanlinePos == 311)
+		{
+			debugger.OnMachineFrameEnd();
 		}
 	}
-	else
-	{
-		bIsNewFrame = false;
-	}
+	lastScanlinePos = scanlinePos;
 
 	/* memory and IO requests */
 	if (pins & Z80_MREQ)
@@ -397,7 +397,8 @@ uint64_t FCpcEmu::Z80Tick(int num, uint64_t pins)
 //#if FIXME
 	if (pins & Z80_IORQ)
 	{
-		//IOAnalysis.IOHandler(pc, pins);
+		// This is still needed because it deals with adding events to the event trace.
+		IOAnalysis.IOHandler(pc, pins);
 
 #if FIXME
 		// note: this code is duplicated in IOAnalysis.cpp in HandleGateArray
@@ -854,7 +855,7 @@ bool FCpcEmu::Init(const FCpcConfig& config)
 
 	GraphicsViewer.Init(&CodeAnalysis, this);
 
-	//IOAnalysis.Init(this);
+	IOAnalysis.Init(this);
 	CpcViewer.Init(this);
 	CodeAnalysis.ViewState[0].Enabled = true;	// always have first view enabled
 
@@ -958,7 +959,7 @@ bool FCpcEmu::Init(const FCpcConfig& config)
 	debugger.RegisterEventType((int)EEventType::CrtcRegisterRead,			"CRTC Reg. Read",	0xffff0000, CRTCWriteEventShowAddress, CRTCWriteEventShowValue);
 	debugger.RegisterEventType((int)EEventType::CrtcRegisterWrite,			"CRTC Reg. Write",	0xffffff00, CRTCWriteEventShowAddress, CRTCWriteEventShowValue);
 	debugger.RegisterEventType((int)EEventType::KeyboardRead,				"Keyboard Read",	0xff808080, IOPortEventShowAddress, IOPortEventShowValue);
-	debugger.RegisterEventType((int)EEventType::ScreenMemoryAddressChange,	"Screen Address",	0xffff69b4, nullptr, ScreenAddrChangeEventShowValue);
+	debugger.RegisterEventType((int)EEventType::ScreenMemoryAddressChange,	"Set Scr. Addr.",	0xffff69b4, nullptr, ScreenAddrChangeEventShowValue);
 
 	CodeAnalysis.MemoryAnalyser.SetScreenMemoryArea(Screen.GetScreenAddrStart(), Screen.GetScreenAddrEnd());
 
@@ -1037,7 +1038,7 @@ void FCpcEmu::StartGame(FGameConfig* pGameConfig, bool bLoadGameData /* =  true*
 	// Initialise code analysis
 	CodeAnalysis.Init(this);
 	
-	//IOAnalysis.Reset();
+	IOAnalysis.Reset();
 
 	// Set options from config
 	for (int i = 0; i < FCodeAnalysisState::kNoViewStates; i++)

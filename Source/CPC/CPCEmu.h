@@ -170,7 +170,9 @@ public:
 	FFrameTraceViewer		FrameTraceViewer;
 	FCPCGraphicsViewer		GraphicsViewer;
 	FCodeAnalysisState		CodeAnalysis;
-	//FIOAnalysis				IOAnalysis;
+	
+	// todo: refactor this to move all event related code out of it
+	FIOAnalysis				IOAnalysis;
 
 	// todo: hook this up to the IO Analyser
 	// IO Devices
@@ -206,8 +208,6 @@ public:
 	const FGamesList& GetGamesList() const { return GamesList;  }
 
 	FCPCScreen Screen;
-
-	int bIsNewFrame = false;
 
 private:
 	FGamesList		GamesList;
