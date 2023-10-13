@@ -761,6 +761,15 @@ bool FCpcEmu::Init(const FCpcConfig& config)
 	static const uint32_t ColourLUT[8] = { 0 };
 	CodeAnalysis.Config.CharacterColourLUT = ColourLUT;
 
+	// set supported bitmap format
+	CodeAnalysis.Config.bSupportedBitmapTypes[(int)EBitmapFormat::Bitmap_1Bpp] = true;
+	CodeAnalysis.Config.bSupportedBitmapTypes[(int)EBitmapFormat::ColMap2Bpp_CPC] = true;
+	CodeAnalysis.Config.bSupportedBitmapTypes[(int)EBitmapFormat::ColMap4Bpp_CPC] = true;
+	for (int i = 0; i < FCodeAnalysisState::kNoViewStates; i++)
+	{
+		CodeAnalysis.ViewState[i].CurBitmapFormat = EBitmapFormat::ColMap2Bpp_CPC;
+	}
+
 	// A class that deals with loading games.
 	GameLoader.Init(this);
 	GamesList.Init(&GameLoader);
