@@ -22,7 +22,7 @@ extern "C" {
 #endif	
 
 // put any function definitions that need to be called from c++ here
-uint32_t GetCpcColour(int index);
+uint32_t GetCpcColour(unsigned int index);
 
 #ifdef __cplusplus
 } // extern "C"

@@ -115,7 +115,7 @@ void FCpcViewer::Draw()
 	const int multiplier[4] = {4, 8, 16, 4};
 	if(scrMode == -1)
 	{
-		ImGui::Text("Screen mode: mixed", ScreenWidth, ScreenHeight);
+		ImGui::Text("Screen mode: mixed");
 		ImGui::Text("Resolution: mixed (%d) x %d", ScreenWidth, ScreenHeight);
 	}
 	else
@@ -374,7 +374,7 @@ bool FCpcViewer::OnHovered(const ImVec2& pos)
 		}
 
 		if (scrMode == -1)
-			ImGui::Text("Screen Mode: unknown", scrMode);
+			ImGui::Text("Screen Mode: unknown");
 		else
 			ImGui::Text("Screen Mode: %d", scrMode);
 		
