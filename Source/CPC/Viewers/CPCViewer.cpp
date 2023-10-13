@@ -45,8 +45,8 @@ void FCpcViewer::Init(FCpcEmu* pEmu)
 
 void FCpcViewer::Draw()
 {		
+#if 0
 #ifndef NDEBUG
-
 	// debug code to manually iterate through all snaps in a directory
 	if (pCpcEmu->GetGamesList().GetNoGames())
 	{
@@ -76,6 +76,7 @@ void FCpcViewer::Draw()
 			pCpcEmu->GetGamesList().LoadGame(gGameIndex);
 		}
 	}
+#endif
 #endif
 
 	CalculateScreenProperties();
@@ -265,6 +266,7 @@ void FCpcViewer::Draw()
 		bJustSelectedChar = OnHovered(pos);
 	}
 
+#if 0
 #ifndef NDEBUG
 	static bool bDrawTestScreen = true;
 	ImGui::Checkbox("Draw test screen (DEBUG. SLOW!)", &bDrawTestScreen);
@@ -272,7 +274,8 @@ void FCpcViewer::Draw()
 	if (bDrawTestScreen)
 		DrawTestScreen();
 #endif
-	
+#endif
+
 	ImGui::SliderFloat("Speed Scale", &pCpcEmu->ExecSpeedScale, 0.0f, 2.0f);
 	ImGui::SameLine();
 	if (ImGui::Button("Reset"))
