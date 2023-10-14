@@ -18,6 +18,7 @@
 
 int CpcKeyFromImGuiKey(ImGuiKey key);
 void DrawPalette(const FPalette& palette);
+void DrawSnapLoadButtons(FCpcEmu* pCpcEmu);
 
 template<typename T> static inline T Clamp(T v, T mn, T mx)
 { 
@@ -45,59 +46,25 @@ void FCpcViewer::Init(FCpcEmu* pEmu)
 
 void FCpcViewer::Draw()
 {		
-#if 0
-#ifndef NDEBUG
-	// debug code to manually iterate through all snaps in a directory
-	if (pCpcEmu->GetGamesList().GetNoGames())
-	{
-		static int gGameIndex = 0;
-		bool bLoadSnap = false;
-		if (ImGui::Button("Prev snap") || ImGui::IsKeyPressed(ImGuiKey_F1))
-		{
-			if (gGameIndex > 0)
-				gGameIndex--;
-			bLoadSnap = true;
-		}
-		ImGui::SameLine();
-		if (ImGui::Button("Next snap") || ImGui::IsKeyPressed(ImGuiKey_F2))
-		{
-			if (gGameIndex < pCpcEmu->GetGamesList().GetNoGames()-1) 
-				gGameIndex++;
-			bLoadSnap = true;
-		}
-		ImGui::SameLine();
-		const FGameSnapshot& game = pCpcEmu->GetGamesList().GetGame(gGameIndex);
-		ImGui::Text("(%d/%d) %s", gGameIndex+1, pCpcEmu->GetGamesList().GetNoGames(), game.DisplayName.c_str());
-		if (bLoadSnap)
-		{
-#ifndef NDEBUG
-			LOGINFO("Load game '%s'", game.DisplayName.c_str());
-#endif
-			pCpcEmu->GetGamesList().LoadGame(gGameIndex);
-		}
-	}
-#endif
-#endif
+#ifdef CPCVIEWER_EXTRA_DEBUG
+	DrawSnapLoadButtons(pCpcEmu);
+#endif 
 
 	CalculateScreenProperties();
 
+#ifndef NDEBUG
 	static bool bDrawScreenExtents = true;
+#else
+	static bool bDrawScreenExtents = false;
+#endif
 	ImGui::Checkbox("Draw screen extents", &bDrawScreenExtents);
-	ImGui::SameLine();
-	static uint8_t scrRectAlpha = 0xff;
-	ImGui::PushItemWidth(40);
-	ImGui::InputScalar("Alpha", ImGuiDataType_U8, &scrRectAlpha, NULL, NULL, "%u", ImGuiInputTextFlags_CharsDecimal);
-	ImGui::PopItemWidth();
 	static bool bShowScreenmodeChanges = false;
 	ImGui::Checkbox("Show screenmode changes", &bShowScreenmodeChanges);
-#ifndef NDEBUG
+#ifdef CPCVIEWER_EXTRA_DEBUG
 	ImGui::Checkbox("Write to screen on click", &bClickWritesToScreen);
 #endif
 
 	const float scale = ImGui_GetScaling();
-
-	//static float scale = 4.0f;
-	//ImGui::InputScalar("Scale", ImGuiDataType_Float, &scale, NULL, NULL, "%f", ImGuiInputTextFlags_CharsDecimal);
 
 	// see if mixed screen modes are used
 	int scrMode = pCpcEmu->CpcEmuState.ga.video.mode;
@@ -157,19 +124,6 @@ void FCpcViewer::Draw()
 	const static float uv0h = 0.0f;
 	const static float uv1w = (float)AM40010_DISPLAY_WIDTH / (float)AM40010_FRAMEBUFFER_WIDTH;
 	const static float uv1h = (float)AM40010_DISPLAY_HEIGHT / (float)AM40010_FRAMEBUFFER_HEIGHT;
-#if 0
-	ImGui::InputScalar("width", ImGuiDataType_Float, &textureWidth, NULL, NULL, "%f", ImGuiInputTextFlags_CharsDecimal); ImGui::SameLine();
-	ImGui::InputScalar("height", ImGuiDataType_Float, textureHeight, NULL, NULL, "%f", ImGuiInputTextFlags_CharsDecimal);// ImGui::SameLine();
-	ImGui::InputScalar("uv1w", ImGuiDataType_Float, &uv1w, NULL, NULL, "%f", ImGuiInputTextFlags_CharsDecimal); ImGui::SameLine();
-	ImGui::InputScalar("uv1h", ImGuiDataType_Float, &uv1h, NULL, NULL, "%f", ImGuiInputTextFlags_CharsDecimal); ImGui::SameLine();
-	ImGui::InputScalar("uv0w", ImGuiDataType_Float, &uv0w, NULL, NULL, "%f", ImGuiInputTextFlags_CharsDecimal); ImGui::SameLine();
-	ImGui::InputScalar("uv0h", ImGuiDataType_Float, &uv0h, NULL, NULL, "%f", ImGuiInputTextFlags_CharsDecimal);
-	
-	ImGui::SliderFloat("uv1w", &uv1w, 0.0f, 1.0f);
-	ImGui::SliderFloat("uv1h", &uv1h, 0.0f, 1.0f);
-	ImGui::SliderFloat("uv0w", &uv0w, 0.0f, 1.0f);
-	ImGui::SliderFloat("uv0h", &uv0h, 0.0f, 1.0f);
-#endif
 
 	const ImVec2 pos = ImGui::GetCursorScreenPos(); // get the position of the texture
 	ImVec2 uv0(uv0w, uv0h);
@@ -187,7 +141,7 @@ void FCpcViewer::Draw()
 		const float y_min = Clamp(pos.y + (ScreenTop * scale), pos.y, pos.y + (TextureHeight * scale));
 		const float y_max = Clamp(pos.y + (ScreenTop * scale) + (ScreenHeight * scale), pos.y, pos.y + (TextureHeight * scale));
 
-		dl->AddRect(ImVec2(x_min, y_min), ImVec2(x_max, y_max), scrRectAlpha << 24 | 0xffffff, 0, 0, 1 * scale);
+		dl->AddRect(ImVec2(x_min, y_min), ImVec2(x_max, y_max), 0xffffffff, 0, 0, 1 * scale);
 	}
 
 	// colourize scanlines depending on the screen mode
@@ -266,14 +220,11 @@ void FCpcViewer::Draw()
 		bJustSelectedChar = OnHovered(pos);
 	}
 
-#if 0
-#ifndef NDEBUG
-	static bool bDrawTestScreen = true;
+#ifdef CPCVIEWER_EXTRA_DEBUG
+	static bool bDrawTestScreen = false;
 	ImGui::Checkbox("Draw test screen (DEBUG. SLOW!)", &bDrawTestScreen);
-	// draw an entire screen out of characters - to test the code for drawing a screen character
 	if (bDrawTestScreen)
 		DrawTestScreen();
-#endif
 #endif
 
 	ImGui::SliderFloat("Speed Scale", &pCpcEmu->ExecSpeedScale, 0.0f, 2.0f);
@@ -324,7 +275,7 @@ bool FCpcViewer::OnHovered(const ImVec2& pos)
 		FCodeAnalysisState& codeAnalysis = pCpcEmu->CodeAnalysis;
 		const FAddressRef lastPixWriter = codeAnalysis.GetLastWriterForAddress(scrAddress);
 
-#ifndef NDEBUG
+#ifdef CPCVIEWER_EXTRA_DEBUG
 		if (ImGui::IsMouseClicked(0))
 		{
 			// this code tests GetScreenMemoryAddress() is working correctly.
@@ -353,7 +304,7 @@ bool FCpcViewer::OnHovered(const ImVec2& pos)
 
 		const int charIndexX = charStartX / charWidth;
 		const int charIndexY = charStartY / CharacterHeight;
-#ifndef NDEBUG
+#ifdef CPCVIEWER_EXTRA_DEBUG
 		ImGui::Text("Character (%d, %d)", charIndexX, charIndexY);
 		ImGui::Text("Scanline: %d", ScreenTop + yp);
 #endif
@@ -403,11 +354,6 @@ bool FCpcViewer::OnHovered(const ImVec2& pos)
 	return false;
 }
 
-// todo: 
-// - problematic mode 0 games:
-//		canard
-//		amsbrique
-
 // returns how much horizontal space it took
 float FCpcViewer::DrawScreenCharacter(int xChar, int yChar, float x, float y, float pixelHeight) const 
 {
@@ -427,13 +373,10 @@ float FCpcViewer::DrawScreenCharacter(int xChar, int yChar, float x, float y, fl
 
 	for (int pixline = 0; pixline < CharacterHeight; pixline++) 
 	{
+		// todo: check return from this
+		// todo: deal with non contiguous screen memory bytes
 		uint16_t pixLineAddress = 0;
-		// todo check return from this
-		// todo deal with non contiguous screen memory bytes
 		pCpcEmu->Screen.GetScreenMemoryAddress(xChar * xMult * 8, yChar * CharacterHeight + pixline, pixLineAddress);
-
-		// TEMP
-		//ImGui::Text("                               %d %x", pixline, pixLineAddress);
 
 		switch (screenMode)
 		{
@@ -496,10 +439,13 @@ void FCpcViewer::CalculateScreenProperties()
 	// not sure I should be doing this, but values >8 cause problems.
 	CharacterHeight = std::min(CharacterHeight, 8);
 
-	ScreenWidth = crtc.h_displayed * 8; // this is always in mode 1 coords. fix this?
+	ScreenWidth = crtc.h_displayed * 8; // note: this is always in mode 1 coords. 
 	ScreenHeight = crtc.v_displayed * CharacterHeight;
 
 #ifdef CALCULATE_SCREEN_OFFSETS_FROM_CRTC_REGS
+	// This is my first attempt at calculating the screen extents from the crtc register values.
+	// It mostly worked but I found a better way. 
+
 	const int hTotOffset = (crtc.h_total - 63) * 8;					// offset based on the default horiz total size (63 chars)
 	const int hSyncOffset = (crtc.h_sync_pos - 46) * 8;				// offset based on the default horiz sync position (46 chars)
 	ScreenEdgeL = crtc.h_displayed * 8 - hSyncOffset + 32 - ScreenWidth + hTotOffset;
@@ -565,31 +511,6 @@ void FCpcViewer::Tick(void)
 	}
 }
 
-#ifndef NDEBUG
-void FCpcViewer::DrawTestScreen()
-{
-	const mc6845_t& crtc = pCpcEmu->CpcEmuState.crtc;
-	ImVec2 curPos = ImGui::GetCursorScreenPos();
-	const float xStart = curPos.x;
-
-	int scanLine = ScreenTop;
-
-	const float pixelHeight = 5.0f;
-	for (int y = 0; y < crtc.v_displayed; y++)
-	{
-		const int scrMode = pCpcEmu->Screen.GetScreenModeForScanline(scanLine);
-		const int charCount = scrMode == 0 ? HorizCharCount / 2 : HorizCharCount;
-		for (int x = 0; x < charCount; x++)
-		{
-			curPos.x += DrawScreenCharacter(x, y, curPos.x, curPos.y, pixelHeight);
-		}
-		scanLine += CharacterHeight;
-		curPos.x = xStart;
-		curPos.y += pixelHeight * CharacterHeight;
-	}
-	ImGui::SetCursorScreenPos(ImVec2(curPos.x, curPos.y));
-}
-#endif
 
 int CpcKeyFromImGuiKey(ImGuiKey key)
 {
@@ -739,3 +660,61 @@ void DrawPalette(const FPalette& palette)
 		}
 	}	
 }
+
+#ifdef CPCVIEWER_EXTRA_DEBUG
+// Draw an entire screen out of characters - to test the code for drawing a screen character.
+void FCpcViewer::DrawTestScreen()
+{
+	const mc6845_t& crtc = pCpcEmu->CpcEmuState.crtc;
+	ImVec2 curPos = ImGui::GetCursorScreenPos();
+	const float xStart = curPos.x;
+
+	int scanLine = ScreenTop;
+
+	const float pixelHeight = 5.0f;
+	for (int y = 0; y < crtc.v_displayed; y++)
+	{
+		const int scrMode = pCpcEmu->Screen.GetScreenModeForScanline(scanLine);
+		const int charCount = scrMode == 0 ? HorizCharCount / 2 : HorizCharCount;
+		for (int x = 0; x < charCount; x++)
+		{
+			curPos.x += DrawScreenCharacter(x, y, curPos.x, curPos.y, pixelHeight);
+		}
+		scanLine += CharacterHeight;
+		curPos.x = xStart;
+		curPos.y += pixelHeight * CharacterHeight;
+	}
+	ImGui::SetCursorScreenPos(ImVec2(curPos.x, curPos.y));
+}
+
+// Debug code to manually iterate through all snaps in a directory.
+void DrawSnapLoadButtons(FCpcEmu* pCpcEmu)
+{
+	if (pCpcEmu->GetGamesList().GetNoGames())
+	{
+		static int gGameIndex = 0;
+		bool bLoadSnap = false;
+		if (ImGui::Button("Prev snap") || ImGui::IsKeyPressed(ImGuiKey_F1))
+		{
+			if (gGameIndex > 0)
+				gGameIndex--;
+			bLoadSnap = true;
+		}
+		ImGui::SameLine();
+		if (ImGui::Button("Next snap") || ImGui::IsKeyPressed(ImGuiKey_F2))
+		{
+			if (gGameIndex < pCpcEmu->GetGamesList().GetNoGames() - 1)
+				gGameIndex++;
+			bLoadSnap = true;
+		}
+		ImGui::SameLine();
+		const FGameSnapshot& game = pCpcEmu->GetGamesList().GetGame(gGameIndex);
+		ImGui::Text("(%d/%d) %s", gGameIndex + 1, pCpcEmu->GetGamesList().GetNoGames(), game.DisplayName.c_str());
+		if (bLoadSnap)
+		{
+			LOGINFO("Load game '%s'", game.DisplayName.c_str());
+			pCpcEmu->GetGamesList().LoadGame(gGameIndex);
+		}
+	}
+}
+#endif

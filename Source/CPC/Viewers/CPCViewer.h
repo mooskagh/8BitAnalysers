@@ -10,6 +10,10 @@ class FCodeAnalysisState;
 struct FCodeAnalysisViewState;
 struct FPalette;
 
+#ifndef NDEBUG
+//#define CPCVIEWER_EXTRA_DEBUG
+#endif
+
 class FCpcViewer
 {
 public:
@@ -28,10 +32,10 @@ private:
 	void	CalculateScreenProperties();
 	int		GetScreenModeForPixelLine(int yPos) const;
 	const FPalette& GetPaletteForPixelLine(int yPos) const;
-	ImU32 GetFlashColour() const;
+	ImU32	GetFlashColour() const;
 
-#ifndef NDEBUG
-	void DrawTestScreen();
+#ifdef CPCVIEWER_EXTRA_DEBUG
+	void	DrawTestScreen();
 #endif
 private:
 
@@ -59,18 +63,8 @@ private:
 
 	int	FrameCounter = 0;
 
-#ifndef NDEBUG
-	bool	bClickWritesToScreen = false;
+#ifdef CPCVIEWER_EXTRA_DEBUG
+	bool bClickWritesToScreen = false;
 #endif
-	// screen inspector
-	/*bool		bScreenCharSelected = false;
-	uint16_t	SelectPixAddr = 0;
-	uint16_t	SelectAttrAddr = 0;
-	int			SelectedCharX = 0;
-	int			SelectedCharY = 0;
-	bool		CharDataFound = false;
-	uint16_t	FoundCharDataAddress = 0;
-	uint8_t		CharData[8] = {0};
-	bool		bCharSearchWrap = true;*/
 };
 
