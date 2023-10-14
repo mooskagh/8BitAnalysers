@@ -11,7 +11,6 @@ file ( GLOB shared_base_src
 	../Shared/Debug/*.cpp ../Shared/Debug/*.h
 	../Shared/ImGuiSupport/*.cpp ../Shared/ImGuiSupport/*.h
 	../Shared/Misc/*.cpp ../Shared/Misc/*.h
-	../Shared/System/*.cpp ../Shared/System/*.h
 	../Shared/Util/*.cpp ../Shared/Util/*.h
 	)
 	
