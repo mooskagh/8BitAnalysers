@@ -15,14 +15,6 @@ enum class CpcIODevice
 	PaletteWrite,
 	BorderColour,
 
-#if SPECCY
-	Ear,	// for loading
-	Mic,	// for saving
-	KempstonJoystick,
-	MemoryBank,		// Switching in/out RAM banks
-	SoundChip,		// AY
-#endif
-
 	Unknown,
 	Count
 };

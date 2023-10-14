@@ -139,12 +139,6 @@ public:
 	void*		GetCPUEmulator(void) const override;
 	//ICPUInterface End
 	
-	// Read a byte/word from writable memory. i.e. RAM
-	// In the case of RAM behind ROM this will always return a byte from RAM - unlike ReadByte() which will return ROM.
-	// TODO get rid of these
-	uint8_t		ReadWritableByte(uint16_t address) const;
-	uint16_t	ReadWritableWord(uint16_t address) const;
-
 	//void SetROMBank(int bankNo);
 	void SetROMBankLo(int bankNo);
 	void SetROMBankHi(int bankNo);
@@ -224,5 +218,3 @@ private:
 
 	bool	bInitialised = false;
 };
-
-uint8_t GetBitsPerPixel(int screenMode);

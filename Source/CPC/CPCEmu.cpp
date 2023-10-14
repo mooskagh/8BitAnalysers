@@ -32,7 +32,6 @@
 //#define ENABLE_CPC_6128
 
 const std::string kAppTitle = "CPC Analyser";
-
 const char* kGlobalConfigFilename = "GlobalConfig.json";
 
 void StoreRegisters_Z80(FCodeAnalysisState& state);
@@ -146,11 +145,6 @@ void MemWriteFunc(int layer, uint16_t addr, uint8_t data, void* user_data)
 }
 #endif
 
-uint8_t	FCpcEmu::ReadWritableByte(uint16_t address) const
-{
-	return CpcEmuState.mem.page_table[address >> MEM_PAGE_SHIFT].write_ptr[address & MEM_PAGE_MASK];
-}
-
 uint8_t	FCpcEmu::ReadByte(uint16_t address) const
 {
 	return mem_rd(const_cast<mem_t*>(&CpcEmuState.mem), address);
@@ -159,11 +153,6 @@ uint8_t	FCpcEmu::ReadByte(uint16_t address) const
 uint16_t FCpcEmu::ReadWord(uint16_t address) const 
 {
 	return ReadByte(address) | (ReadByte(address + 1) << 8);
-}
-
-uint16_t FCpcEmu::ReadWritableWord(uint16_t address) const
-{
-	return ReadWritableByte(address) | (ReadWritableByte(address + 1) << 8);
 }
 
 const uint8_t* FCpcEmu::GetMemPtr(uint16_t address) const 
@@ -400,8 +389,11 @@ uint64_t FCpcEmu::Z80Tick(int num, uint64_t pins)
 		// This is still needed because it deals with adding events to the event trace.
 		IOAnalysis.IOHandler(pc, pins);
 
+
 #if FIXME
-		// note: this code is duplicated in IOAnalysis.cpp in HandleGateArray
+		// This is a failed attempt to get bank switching working, including switching in rom banks. 
+		// Some of this logic is based on what happens in _cpc_bankswitch().
+		// note: some of this code logic is duplicated in IOAnalysis.cpp in HandleGateArray
 		if (pins & (Z80_RD | Z80_WR))
 		{
 			if ((pins & (AM40010_A14 | AM40010_A15)) == AM40010_A14)
@@ -459,33 +451,6 @@ uint64_t FCpcEmu::Z80Tick(int num, uint64_t pins)
 		}
 #endif // FIXME
 	}
-
-
-#if 0
-			/* 0x0000 .. 0x3FFF */
-	if (rom_enable & AM40010_CONFIG_LROMEN) {
-		/* read/write RAM */
-		mem_map_ram(&sys->mem, 0, 0x0000, 0x4000, sys->ram[i0]);
-	}
-	else {
-		/* RAM-behind-ROM */
-		mem_map_rw(&sys->mem, 0, 0x0000, 0x4000, rom0_ptr, sys->ram[i0]);
-	}
-	/* 0x4000 .. 0x7FFF */
-	mem_map_ram(&sys->mem, 0, 0x4000, 0x4000, sys->ram[i1]);
-	/* 0x8000 .. 0xBFFF */
-	mem_map_ram(&sys->mem, 0, 0x8000, 0x4000, sys->ram[i2]);
-	/* 0xC000 .. 0xFFFF */
-	if (rom_enable & AM40010_CONFIG_HROMEN) {
-		/* read/write RAM */
-		mem_map_ram(&sys->mem, 0, 0xC000, 0x4000, sys->ram[i3]);
-	}
-	else {
-		/* RAM-behind-ROM */
-		mem_map_rw(&sys->mem, 0, 0xC000, 0x4000, rom1_ptr, sys->ram[i3]);
-	}
-			}
-#endif
 
 	return pins;
 }
@@ -878,7 +843,6 @@ bool FCpcEmu::Init(const FCpcConfig& config)
 	// Set up code analysis
 	// initialise code analysis pages
 
-//if 0
 	// Low ROM 0x0000 - 0x3fff
 	ROMBanks[ROM_OS] = CodeAnalysis.CreateBank("ROM OS", 16, CpcEmuState.rom_os, true);
 	CodeAnalysis.GetBank(ROMBanks[ROM_OS])->PrimaryMappedPage = 0;
@@ -890,7 +854,6 @@ bool FCpcEmu::Init(const FCpcConfig& config)
 	// High ROM BASIC 0xc000 - 0xffff
 	ROMBanks[ROM_BASIC] = CodeAnalysis.CreateBank("ROM BASIC", 16, CpcEmuState.rom_basic, true);
 	CodeAnalysis.GetBank(ROMBanks[ROM_BASIC])->PrimaryMappedPage = 48;
-//#endif
 
 	// create & register RAM banks
 	for (int bankNo = 0; bankNo < kNoRAMBanks; bankNo++)
@@ -899,9 +862,6 @@ bool FCpcEmu::Init(const FCpcConfig& config)
 		sprintf(bankName, "RAM %d", bankNo);
 		RAMBanks[bankNo] = CodeAnalysis.CreateBank(bankName, 16, CpcEmuState.ram[bankNo], false);
 	}
-
-	// CreateBank(name,size in kb,r/w)
-	// return bank id
 
 	// Setup initial machine memory config
 	if (config.Model == ECpcModel::CPC_464)
@@ -1019,6 +979,7 @@ void FCpcEmu::StartGame(FGameConfig* pGameConfig, bool bLoadGameData /* =  true*
 	ResetMemoryStats(MemStats);
 	FrameTraceViewer.Reset();
 	GraphicsViewer.Reset();
+	Screen.Reset();
 
 	const std::string memStr = CpcEmuState.type == CPC_TYPE_6128 ? " (CPC 6128)" : " (CPC 464)";
 	const std::string windowTitle = kAppTitle + " - " + pGameConfig->Name + memStr;
@@ -1059,13 +1020,6 @@ void FCpcEmu::StartGame(FGameConfig* pGameConfig, bool bLoadGameData /* =  true*
 	if (bLoadGameData)
 	{
 		const std::string root = GetGlobalConfig().WorkspaceRoot;
-#if SPECCY
-		std::string romJsonFName = kRomInfo48JsonFile;
-
-		if (ZXEmuState.type == ZX_TYPE_128)
-			romJsonFName = root + kRomInfo128JsonFile;
-#endif
-
 		const std::string analysisJsonFName = root + "AnalysisJson/" + pGameConfig->Name + ".json";
 		const std::string analysisStateFName = root + "AnalysisState/" + pGameConfig->Name + ".astate";
 		const std::string saveStateFName = root + "SaveStates/" + pGameConfig->Name + ".state";
@@ -1679,22 +1633,6 @@ void FCpcEmu::DrawMemoryTools()
 	}
 	if (ImGui::BeginTabBar("MemoryToolsTabBar"))
 	{
-#if SPECCY
-	  // mark said he's not sure what this does
-		if (ImGui::BeginTabItem("Memory Handlers"))
-		{
-			DrawMemoryHandlers(this);
-			ImGui::EndTabItem();
-		}
-
-		// mark said he needs to look at this again. it might not be worth bringing across
-		if (ImGui::BeginTabItem("Memory Analysis"))
-		{
-			DrawMemoryAnalysis(this);
-			ImGui::EndTabItem();
-		}
-#endif
-		
 		if (ImGui::BeginTabItem("IO Analysis"))
 		{
 			//IOAnalysis.DrawUI();
@@ -1734,14 +1672,6 @@ void FCpcEmu::DrawUI()
 	ui_kbd_draw(&pCPCUI->kbd);
 	ui_memmap_draw(&pCPCUI->memmap);
 	ui_am40010_draw(&pCPCUI->ga);
-
-	/*
-	* get these to work? they have a heatmap view that looks handy
-	for (int i = 0; i < 4; i++) {
-		ui_memedit_draw(&pCPCUI->memedit[i]);
-		ui_dasm_draw(&pCPCUI->dasm[i]);
-	}
-	ui_dbg_draw(&pCPCUI->dbg);*/
 	
 	// Draw registered viewers
 	for (auto Viewer : Viewers)
@@ -1920,21 +1850,4 @@ void FCpcEmu::UpdatePalette()
 	{
 		palette.SetColour(i, CpcEmuState.ga.hw_colors[CpcEmuState.ga.regs.ink[i]]);
 	}
-}
-
-uint8_t GetBitsPerPixel(int screenMode)
-{
-	uint8_t bpp = 0;
-	switch (screenMode)
-	{
-	case 0:
-		return 4;
-	case 1:
-		return 2;
-	case 2:
-		return 1;
-	case 3: // unsupported
-		return 4;
-	}
-	return 0;
 }

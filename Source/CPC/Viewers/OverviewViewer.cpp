@@ -25,8 +25,6 @@ void FOverviewViewer::DrawStats()
         ImPlot::PlotPieChart(labels1, data1, 6, 0.5, 0.5, 0.4, "%.2f%%", 90, flags);
         ImPlot::EndPlot();
     }
-
-    //ImPlot::ShowDemoWindow();
 }
 
 void FOverviewViewer::CalculateStats()

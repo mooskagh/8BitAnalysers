@@ -1,18 +1,5 @@
 #include "CPCGraphicsView.h"
 
-// CPC colour CLUT
-//const uint32_t FCpcGraphicsView::ColourLUT[8] =
-//{
-//	0xFF000000,     // 0 - black
-//	0xFFFF0000,     // 1 - blue
-//	0xFF0000FF,     // 2 - red
-//	0xFFFF00FF,     // 3 - magenta
-//	0xFF00FF00,     // 4 - green
-//	0xFFFFFF00,     // 5 - cyan
-//	0xFF00FFFF,     // 6 - yellow
-//	0xFFFFFFFF,     // 7 - white
-//};
-
 const uint32_t FCpcGraphicsView::ColourLUT[32] =
 {
     0xff6B7D6E,         // #40 white

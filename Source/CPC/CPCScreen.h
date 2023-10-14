@@ -13,6 +13,7 @@ class FCPCScreen
 public:
 	void Init(FCpcEmu* pEmu);
 	void Tick();
+	void Reset();
 
 	int GetTopScanline() const { return ScreenTopScanline; }
 	int GetLeftEdgeScanline() const { return ScreenLeftEdgeOffset; }
@@ -25,10 +26,6 @@ public:
 	uint16_t GetScreenAddrEnd() const;
 	uint16_t GetScreenMemSize() const;
 
-	// Given a screen memory address, will return the next location.
-	// This is needed because screen memory locations are not always contiguous.
-	uint16_t GetNextScreenAddr(uint16_t addr) const;
-
 	bool IsScrolled() const;
 
 	// Get a screen memory address for a screen position.
@@ -38,10 +35,11 @@ public:
 	bool GetScreenAddressCoords(uint16_t addr, int& x, int& y) const;
 
 private:
-	// should this be AM40010_FRAMEBUFFER_HEIGHT? this is 272. 
-	// I thought the cpc had 312 scanlines?
 	// Note: the screen mode (on real HW anyway) can, in theory, be changed mid-scanline. 
 	// We don't currently support this. Don't know if CHIPS supports this or if any games do this.
+
+	// should this be AM40010_FRAMEBUFFER_HEIGHT? this is 272. 
+	// I thought the cpc had 312 scanlines?
 	int ScreenModePerScanline[AM40010_DISPLAY_HEIGHT] = { -1 };
 	FPalette PalettePerScanline[AM40010_DISPLAY_HEIGHT];
 	int LastScanline = -1;
@@ -54,3 +52,4 @@ private:
 };
 
 int GetHWColourIndexForPixel(uint8_t val, int pixelIndex, int scrMode);
+uint8_t GetBitsPerPixel(int screenMode);

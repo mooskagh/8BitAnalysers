@@ -45,28 +45,15 @@ bool FCrtcViewer::Init(void)
 
 void FCrtcViewer::DrawUI(void)
 {
-	/*for (int i = 0; i < 4; i++)
-	{
-		const int bnk = CurRAMBank[i];
-		ImGui::Text("Slot %d Bank: %d '%s'", i, bnk, CodeAnalysis.GetBank(bnk)->Name.c_str());
-	}
-
-	for (int i = 0; i < kNoRAMBanks; i++)
-	{
-		const int bnk = RAMBanks[i];
-		ImGui::Text("Ram Bank %d: id=%d '%s' used=%d mapped=%d",
-			i,
-			bnk,
-			CodeAnalysis.GetBank(bnk)->Name.c_str(),
-			CodeAnalysis.GetBank(bnk)->IsUsed(),
-			CodeAnalysis.GetBank(bnk)->IsMapped());
-	}*/
-
 	mc6845_t& mc = pCpcEmu->CpcEmuState.crtc;
 
 	ImGui::Columns(2, "##regs", false);
 	ImGui::SetColumnWidth(0, ImGui::GetFontSize() * 18);
 	ImGui::SetColumnWidth(1, ImGui::GetFontSize() * 18);
+
+
+	// todo apply min and max on these
+	// see _mc6845_mask
 
 	DrawCrtcRegValue(mc.h_total,			"R0 Horiz. Total",			63, std::string("Physical width of the screen, in characters.\nRange [0-255]"));
 	DrawCrtcRegValue(mc.h_displayed,		"R1 Horiz. Displayed",		40, std::string("Range [0-255]"));

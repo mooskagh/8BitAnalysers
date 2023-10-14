@@ -8,6 +8,15 @@ void FCPCScreen::Init(FCpcEmu* pEmu)
 	pCpcEmu = pEmu;
 }
 
+void FCPCScreen::Reset()
+{
+	LastScanline = -1;
+	bInVblank = false;
+	bDrawingPixels = false;
+	ScreenTopScanline = 0;
+	ScreenLeftEdgeOffset = 0;
+}
+
 int FCPCScreen::GetScreenModeForScanline(int scanline) const
 {
 	if (scanline < 0 || scanline >= AM40010_DISPLAY_HEIGHT)
@@ -39,37 +48,12 @@ void FCPCScreen::Tick()
 	const am40010_crt_t& crt = pCpcEmu->CpcEmuState.ga.crt;
 	const uint16_t scanlinePos = crt.v_pos;
 
-	// todo reset these bools when loading games
-
 	if (!bInVblank)
 	{
-		/*LOGINFO("VBLANK v_pos %d pos_y %d h_pos %d pos_x %d vblank %d hblank %d",
-			crt.v_pos,
-			crt.pos_y,
-			crt.h_pos,
-			crt.pos_x,
-			crt.v_blank,
-			crt.h_blank
-		);*/
-
 		if (crt.v_blank)
 		{
-			// (crt.h_pos == 0)
-			{
-				//if (scanlinePos == 0)	// clear scanline info on new frame
-				{
-					LOGINFO("VBLANK v_pos %d pos_y %d h_pos %d pos_x %d vblank %d hblank %d",
-						crt.v_pos,
-						crt.pos_y,
-						crt.h_pos,
-						crt.pos_x,
-						crt.v_blank,
-						crt.h_blank
-					);
-					bInVblank = true;
-					bDrawingPixels = false;
-				}
-			}
+			bInVblank = true;
+			bDrawingPixels = false;
 		}
 
 		if (!bDrawingPixels)
@@ -78,44 +62,11 @@ void FCPCScreen::Tick()
 			{
 				if (pCpcEmu->CpcEmuState.ga.crtc_pins & AM40010_DE)
 				{
-					LOGINFO("STARTED DRAWING. v_pos %d pos_y %d h_pos %d pos_x %d vblank %d hblank %d",
-						crt.v_pos,
-						crt.pos_y,
-						crt.h_pos,
-						crt.pos_x,
-						crt.v_blank,
-						crt.h_blank
-					);
-					LOGINFO("pos_x * 16 %d pos_x * 8 %d pos_x * 4 %d",
-						crt.pos_x * 16,
-						crt.pos_x * 8,
-						crt.pos_x * 4
-					);
 					bDrawingPixels = true;
 					ScreenTopScanline = crt.pos_y;
 					ScreenLeftEdgeOffset = crt.pos_x * 8;
 				}
 			}
-		}
-		else
-		{
-#if 0
-			if (CpcEmuState.ga.crt.visible)
-			{
-				if (!(CpcEmuState.ga.crtc_pins & AM40010_DE))
-				{
-					LOGINFO("STOPPED DRAWING. v_pos %d pos_y %d h_pos %d pos_x %d vblank %d hblank %d",
-						CpcEmuState.ga.crt.v_pos,
-						CpcEmuState.ga.crt.pos_y,
-						CpcEmuState.ga.crt.h_pos,
-						CpcEmuState.ga.crt.pos_x,
-						CpcEmuState.ga.crt.v_blank,
-						CpcEmuState.ga.crt.h_blank
-					);
-					//bDrawingPixels = true;
-				}
-			}
-#endif
 		}
 	}
 	else
@@ -126,7 +77,6 @@ void FCPCScreen::Tick()
 		}
 	}
 
-	
 	// Store the screen mode per scanline.
 	// Shame to do this here. Would be nice to have a horizontal blank callback
 	const am40010_t ga = pCpcEmu->CpcEmuState.ga;
@@ -182,32 +132,6 @@ uint16_t FCPCScreen::GetScreenMemSize() const
 	return dispSize == 0x3 ? 0x8000 : 0x4000;
 }
 
-uint16_t FCPCScreen::GetNextScreenAddr(uint16_t addr) const
-{
-	return 0;
-#if 0
-	const mc6845_t& crtc = pCpcEmu->CpcEmuState.crtc;
-	const bool bIsScreenScrolled = crtc.start_addr_lo > 0 || crtc.start_addr_hi != 48;
-
-	// Get the offset from the start of the "bank". 
-	// The bank being one of the 4 16k physical memory locations : [$0, $4000, $8000, $c000]
-	const uint16_t offsetFromBankStart = addr & 0x3fff;
-
-	if (bIsScreenScrolled)
-	{
-		// Deal with the fact that, when the screen is HW scrolled,
-		// the bytes on a single pixel line may not be contiguous.
-		// For example the next byte after $c7ff is not $c800 but $c000 (2048 bytes back).
-		// I didn't fully get my head around this logic so this code was written
-		// with some educated guesses and trial and error. It may not be correct.
-
-		uint16_t scrAddrOffsetFromBankStart = scrAddrStart & 0x3fff;
-		if (offsetFromBankStart % 2048 < scrAddrOffsetFromBankStart)
-			addr -= 2048;
-	}
-#endif
-}
-
 // values are in screen mode 1 coordinate system
 // should we pass in screen mode?
 bool FCPCScreen::GetScreenMemoryAddress(int x, int y, uint16_t& addr) const
@@ -216,10 +140,7 @@ bool FCPCScreen::GetScreenMemoryAddress(int x, int y, uint16_t& addr) const
 	//if (x < 0 || x>255 || y < 0 || y> 191)
 	//	return false;
 	 
-	// todo: deal with all r12 values. some don't work, like 47. 
-	
 	const mc6845_t& crtc = pCpcEmu->CpcEmuState.crtc;
-	//const bool bIsScreenScrolled = crtc.start_addr_lo > 0 || crtc.start_addr_hi != 48;
 	const uint8_t charHeight = crtc.max_scanline_addr + 1;
 	const uint8_t bytesPerScrLine = crtc.h_displayed * 2;
 	const uint16_t yCharIndex = y / charHeight; // which character row are we in?
@@ -251,7 +172,7 @@ bool FCPCScreen::GetScreenMemoryAddress(int x, int y, uint16_t& addr) const
 }
 
 /*
-	Screen ram is 16k.
+	Screen ram is 16k.*
 	It is split into 8 sections, 2048 bytes apart.
 
 	[Screen eighth 0. 2048 bytes]
@@ -268,9 +189,10 @@ bool FCPCScreen::GetScreenMemoryAddress(int x, int y, uint16_t& addr) const
 	[Pixel line bytes for character row 0]
 	[Pixel line bytes for character row 1]
 	...
-	[Pixel line bytes for character row n]
+	[Pixel line bytes for character row n]**
 
-	*n depends on how many character rows are set in the CRTC register
+	*Screen ram is almost always 16k but some it's possible for it to be 32k. 
+	**n depends on how many character rows are set in the CRTC register
 */
 
 // should we pass in screen mode?
@@ -332,4 +254,21 @@ int GetHWColourIndexForPixel(uint8_t val, int pixelIndex, int scrMode)
 		}
 	}
 	return colourIndex;
+}
+
+uint8_t GetBitsPerPixel(int screenMode)
+{
+	uint8_t bpp = 0;
+	switch (screenMode)
+	{
+	case 0:
+		return 4;
+	case 1:
+		return 2;
+	case 2:
+		return 1;
+	case 3: // unsupported
+		return 4;
+	}
+	return 0;
 }
