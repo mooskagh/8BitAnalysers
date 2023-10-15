@@ -26,9 +26,13 @@ public:
 private:
 	uint32_t	GetRGBValueForPixel(int yPos, int colourIndex, uint32_t heatMapCol) const;
 	void		UpdateScreenPixelImage(void);
-	uint16_t	GetPixelLineAddress(int yPos);
 	uint16_t	GetPixelLineOffset(int yPos);
 
 	FCpcEmu*	pCpcEmu = nullptr;
+
+	int			DisplayAddress = 0xc000;
+	int			WidthChars = 40;
+	int			HeightChars = 25;
+	int			ScreenMode = 1;
 	int			CharacterHeight = 8;
 };
