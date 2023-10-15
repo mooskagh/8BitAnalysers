@@ -1,4 +1,4 @@
-#include "../Shared/GamesList/GamesList.h"
+#include "Misc/GamesList.h"
 
 class FCpcEmu;
 

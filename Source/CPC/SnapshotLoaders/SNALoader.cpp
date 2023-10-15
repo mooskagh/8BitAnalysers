@@ -34,6 +34,22 @@ bool LoadSNAFromMemory(FCpcEmu * pEmu, uint8_t * pData, size_t dataSize)
 	chips_range_t range;
 	range.ptr = static_cast<void*>(pData);
 	range.size = dataSize;
+
+
+	if (dataSize <= 0x100)
+		return false;
+	
+	static uint8_t magic[8] = { 'M', 'V', 0x20, '-', 0x20, 'S', 'N', 'A' };
+	for (size_t i = 0; i < 8; i++) 
+	{
+		if (magic[i] != pData[i]) 
+			return false;
+	}
+
+	uint8_t sizeL = *(pData + 0x6b);
+	uint8_t sizeH = *(pData + 0x6c);
+	const uint16_t dump_size = sizeH << 8 | sizeL;
+
 	bool bResult = cpc_quickload(&pEmu->CpcEmuState, range);
 	if (bResult == true)
 	{

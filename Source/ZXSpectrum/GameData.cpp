@@ -9,7 +9,6 @@
 
 #include "SpectrumEmu.h"
 #include "GameViewers/GameViewer.h"
-#include "SnapshotLoaders/GamesList.h"
 #include "GameConfig.h"
 #include "Debug/DebugLog.h"
 #include "Util/Misc.h"

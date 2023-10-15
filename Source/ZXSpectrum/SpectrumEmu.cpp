@@ -624,15 +624,15 @@ bool FSpectrumEmu::Init(const FSpectrumConfig& config)
 
 	zx_init(&ZXEmuState, &desc);
 
-
-	GamesList.Init(this);
+	GameLoader.Init(this);
+	GamesList.Init(&GameLoader);
 	if(config.Model == ESpectrumModel::Spectrum128K)
 		GamesList.EnumerateGames(globalConfig.SnapshotFolder128.c_str());
 	else
 		GamesList.EnumerateGames(globalConfig.SnapshotFolder.c_str());
 
 	RZXManager.Init(this);
-	RZXGamesList.Init(this);
+	RZXGamesList.Init(&GameLoader);
 	RZXGamesList.EnumerateGames(globalConfig.RZXFolder.c_str());
 
 	// Clear UI

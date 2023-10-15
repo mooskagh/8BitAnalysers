@@ -9,6 +9,8 @@ enum class ESnapshotType
 {
 	Z80,
 	SNA,
+	TAP,
+	TZX,
 	RZX,
 
 	Unknown
