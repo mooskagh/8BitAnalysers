@@ -1330,6 +1330,7 @@ void FCpcEmu::DrawHardwareMenu()
 		ImGui::MenuItem("Audio Output", 0, &UICpc.audio.open);
 		ImGui::MenuItem("Z80 CPU", 0, &UICpc.cpu.open);
 		ImGui::MenuItem("AM40010 (Gate Array)", 0, &UICpc.ga.open);
+		ImGui::MenuItem("AY-3-8912 (PSG)", 0, &UICpc.psg.open);
 		ImGui::EndMenu();
 	}
 }
