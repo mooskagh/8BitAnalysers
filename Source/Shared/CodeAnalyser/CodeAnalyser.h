@@ -12,6 +12,7 @@
 #include "Debugger.h"
 #include "MemoryAnalyser.h"
 #include "IOAnalyser.h"
+#include <Misc/GlobalConfig.h>
 
 class FGraphicsView;
 class FCodeAnalysisState;
@@ -205,9 +206,9 @@ private:
 
 struct FCodeAnalysisConfig
 {
-	bool				bShowOpcodeValues = false;
+	//bool				bShowOpcodeValues = false;
 	bool				bShowBanks = false;
-	int					BranchLinesDisplayMode = 1;
+	//int					BranchLinesDisplayMode = 1;
 	const uint32_t*		CharacterColourLUT = nullptr;
 
 	bool				bSupportedBitmapTypes[(int)EBitmapFormat::Max] = { false };
@@ -275,6 +276,8 @@ public:
 
 	ICPUInterface* CPUInterface = nullptr;	// Make private
 	int						CurrentFrameNo = 0;
+
+	void	SetGlobalConfig(FGlobalConfig *pConfig) { pGlobalConfig = pConfig; }
 
 	// Memory Banks & Pages
 	int16_t		CreateBank(const char* name, int noKb, uint8_t* pMemory, bool bReadOnly);
@@ -436,7 +439,8 @@ public:
 
 	bool					bAllowEditing = false;
 
-	FCodeAnalysisConfig Config;
+	FCodeAnalysisConfig		Config;
+	FGlobalConfig*			pGlobalConfig = nullptr;
 public:
 	// Access functions for code analysis
 
