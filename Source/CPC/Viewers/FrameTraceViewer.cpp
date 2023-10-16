@@ -1,5 +1,5 @@
 #include "FrameTraceViewer.h"
-#include "CpcGraphicsView.h"
+#include "CPCGraphicsView.h"
 #include "../CPCEmu.h"
 
 #include <imgui.h>
