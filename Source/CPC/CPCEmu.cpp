@@ -5,7 +5,7 @@
 #include <imgui.h>
 #include "CPCEmu.h"
 
-#include "GlobalConfig.h"
+#include "CPCConfig.h"
 #include "GameConfig.h"
 #include "Util/FileUtil.h"
 #include "Util/GraphicsView.h"
@@ -273,7 +273,7 @@ void gfx_destroy_texture(void* h)
 static void PushAudio(const float* samples, int num_samples, void* user_data)
 {
 	FCpcEmu* pEmu = (FCpcEmu*)user_data;
-	if(GetGlobalConfig().bEnableAudio)
+	if(pEmu->pGlobalConfig->bEnableAudio)
 		saudio_push(samples, num_samples);
 }
 
@@ -715,12 +715,10 @@ bool FCpcEmu::Init(const FCpcConfig& config)
 	SetWindowIcon("CPCALogo.png");
 
 	// Initialise the CPC emulator
-	LoadGlobalConfig(kGlobalConfigFilename);
-	FGlobalConfig& globalConfig = GetGlobalConfig();
-	SetNumberDisplayMode(globalConfig.NumberDisplayMode);
-	CodeAnalysis.Config.bShowOpcodeValues = globalConfig.bShowOpcodeValues;
-	CodeAnalysis.Config.BranchLinesDisplayMode = globalConfig.BranchLinesDisplayMode;
-	CodeAnalysis.Config.bShowBanks = true;
+	pGlobalConfig = new FCPCConfig();
+	pGlobalConfig->Load(kGlobalConfigFilename);
+	CodeAnalysis.SetGlobalConfig(pGlobalConfig);
+	SetNumberDisplayMode(pGlobalConfig->NumberDisplayMode);
 
 	// temp hack to stop it crashing with a null pointer exception.
 	static const uint32_t ColourLUT[8] = { 0 };
@@ -739,9 +737,9 @@ bool FCpcEmu::Init(const FCpcConfig& config)
 	GameLoader.Init(this);
 	GamesList.Init(&GameLoader);
 	if (config.Model == ECpcModel::CPC_6128)
-		GamesList.EnumerateGames(globalConfig.SnapshotFolder128.c_str());
+		GamesList.EnumerateGames(pGlobalConfig->SnapshotFolder128.c_str());
 	else
-		GamesList.EnumerateGames(globalConfig.SnapshotFolder.c_str());
+		GamesList.EnumerateGames(pGlobalConfig->SnapshotFolder.c_str());
 	
 	// Turn caching on for the game loader. This means that if the same game is loaded more than once
 	// the second time will involve no disk i/o.
@@ -896,9 +894,9 @@ bool FCpcEmu::Init(const FCpcConfig& config)
 	{
 		bLoadedGame = StartGame(config.SpecificGame.c_str());
 	}
-	else if (globalConfig.LastGame.empty() == false)
+	else if (pGlobalConfig->LastGame.empty() == false)
 	{
-		bLoadedGame = StartGame(globalConfig.LastGame.c_str());
+		bLoadedGame = StartGame(pGlobalConfig->LastGame.c_str());
 	}
 	// Start ROM if no game has been loaded
 	if (bLoadedGame == false)
@@ -954,16 +952,15 @@ void FCpcEmu::Shutdown()
 	SaveCurrentGameData();	// save on close
 
 	// Save Global Config - move to function?
-	FGlobalConfig& config = GetGlobalConfig();
 
 	if (pActiveGame != nullptr)
-		config.LastGame = pActiveGame->pConfig->Name;
+		pGlobalConfig->LastGame = pActiveGame->pConfig->Name;
 
-	config.NumberDisplayMode = GetNumberDisplayMode();
-	config.bShowOpcodeValues = CodeAnalysis.Config.bShowOpcodeValues;
-	config.BranchLinesDisplayMode = CodeAnalysis.Config.BranchLinesDisplayMode;
+	pGlobalConfig->NumberDisplayMode = GetNumberDisplayMode();
+	pGlobalConfig->bShowOpcodeValues = CodeAnalysis.pGlobalConfig->bShowOpcodeValues;
+	pGlobalConfig->BranchLinesDisplayMode = CodeAnalysis.pGlobalConfig->BranchLinesDisplayMode;
 
-	SaveGlobalConfig(kGlobalConfigFilename);
+	pGlobalConfig->Save(kGlobalConfigFilename);
 
 	GraphicsViewer.Shutdown();
 }
@@ -1019,7 +1016,7 @@ void FCpcEmu::StartGame(FGameConfig* pGameConfig, bool bLoadGameData /* =  true*
 
 	if (bLoadGameData)
 	{
-		const std::string root = GetGlobalConfig().WorkspaceRoot;
+		const std::string root = pGlobalConfig->WorkspaceRoot;
 		const std::string analysisJsonFName = root + "AnalysisJson/" + pGameConfig->Name + ".json";
 		const std::string analysisStateFName = root + "AnalysisState/" + pGameConfig->Name + ".astate";
 		const std::string saveStateFName = root + "SaveStates/" + pGameConfig->Name + ".state";
@@ -1036,7 +1033,7 @@ void FCpcEmu::StartGame(FGameConfig* pGameConfig, bool bLoadGameData /* =  true*
 			ImportAnalysisJson(CodeAnalysis, romJsonFName.c_str());
 
 		// where do we want pokes to live?
-		LoadPOKFile(*pGameConfig, std::string(GetGlobalConfig().PokesFolder + pGameConfig->Name + ".pok").c_str());
+		LoadPOKFile(*pGameConfig, std::string(pGlobalConfig->PokesFolder + pGameConfig->Name + ".pok").c_str());
 #endif
 	}
 
@@ -1058,7 +1055,7 @@ void FCpcEmu::StartGame(FGameConfig* pGameConfig, bool bLoadGameData /* =  true*
 	ImGui_UpdateTextureRGBA(CpcViewer.GetScreenTexture(), CpcViewer.GetFrameBuffer());
 
 	// Load the game again (from memory - it should be cached) to restore the cpc state.
-	const std::string snapFolder = GetGlobalConfig().SnapshotFolder;
+	const std::string snapFolder = pGlobalConfig->SnapshotFolder;
 	const std::string gameFile = snapFolder + pGameConfig->SnapshotFile;
 	GamesList.LoadGame(gameFile.c_str());
 #endif
@@ -1090,7 +1087,7 @@ bool FCpcEmu::StartGame(const char* pGameName)
 	{
 		if (pGameConfig->Name == pGameName)
 		{
-			const std::string snapFolder = CpcEmuState.type == CPC_TYPE_6128 ? GetGlobalConfig().SnapshotFolder128 : GetGlobalConfig().SnapshotFolder;
+			const std::string snapFolder = CpcEmuState.type == CPC_TYPE_6128 ? pGlobalConfig->SnapshotFolder128 : pGlobalConfig->SnapshotFolder;
 			const std::string gameFile = snapFolder + pGameConfig->SnapshotFile;
 			
 			if (GamesList.LoadGame(gameFile.c_str()))
@@ -1116,7 +1113,7 @@ void FCpcEmu::SaveCurrentGameData()
 		}
 		else
 		{
-			const std::string root = GetGlobalConfig().WorkspaceRoot;
+			const std::string root = pGlobalConfig->WorkspaceRoot;
 			const std::string configFName = root + "Configs/" + pGameConfig->Name + ".json";
 			const std::string dataFName = root + "GameData/" + pGameConfig->Name + ".bin";
 			const std::string analysisJsonFName = root + "AnalysisJson/" + pGameConfig->Name + ".json";
@@ -1191,7 +1188,7 @@ void FCpcEmu::DrawFileMenu()
 			const int numGames = GamesList.GetNoGames();
 			if (!numGames)
 			{
-				const std::string snapFolder = CpcEmuState.type == CPC_TYPE_6128 ? GetGlobalConfig().SnapshotFolder128 : GetGlobalConfig().SnapshotFolder;
+				const std::string snapFolder = CpcEmuState.type == CPC_TYPE_6128 ? pGlobalConfig->SnapshotFolder128 : pGlobalConfig->SnapshotFolder;
 				ImGui::Text("No snapshots found in snapshot directory:\n\n'%s'.\n\nSnapshot directory is set in GlobalConfig.json", snapFolder.c_str());
 			}
 			else
@@ -1237,7 +1234,7 @@ void FCpcEmu::DrawFileMenu()
 				{
 					if (ImGui::MenuItem(pGameConfig->Name.c_str()))
 					{
-						const std::string snapFolder = CpcEmuState.type == CPC_TYPE_6128 ? GetGlobalConfig().SnapshotFolder128 : GetGlobalConfig().SnapshotFolder;
+						const std::string snapFolder = CpcEmuState.type == CPC_TYPE_6128 ? pGlobalConfig->SnapshotFolder128 : pGlobalConfig->SnapshotFolder;
 						const std::string gameFile = snapFolder + pGameConfig->SnapshotFile;
 
 						if (GamesList.LoadGame(gameFile.c_str()))
@@ -1260,7 +1257,7 @@ void FCpcEmu::DrawFileMenu()
 		{
 			/*if (pActiveGame != nullptr)
 			{
-				const std::string dir = GetGlobalConfig().WorkspaceRoot + "OutputBin/";
+				const std::string dir = pGlobalConfig->WorkspaceRoot + "OutputBin/";
 				EnsureDirectoryExists(dir.c_str());
 				std::string outBinFname = dir + pActiveGame->pConfig->Name + ".bin";
 				uint8_t *pSpecMem = new uint8_t[65536];
@@ -1286,7 +1283,7 @@ void FCpcEmu::DrawSystemMenu()
 	{
 		/*if (pActiveGame && ImGui::MenuItem("Reload Snapshot"))
 		{
-			const std::string snapFolder = GetGlobalConfig().SnapshotFolder;
+			const std::string snapFolder = pGlobalConfig->SnapshotFolder;
 			const std::string gameFile = snapFolder + pActiveGame->pConfig->SnapshotFile;
 			GamesList.LoadGame(gameFile.c_str());
 		}*/
@@ -1339,8 +1336,6 @@ void FCpcEmu::DrawOptionsMenu()
 {
 	if (ImGui::BeginMenu("Options"))
 	{
-		FGlobalConfig& config = GetGlobalConfig();
-
 		if (ImGui::BeginMenu("Number Mode"))
 		{
 			bool bClearCode = false;
@@ -1378,28 +1373,28 @@ void FCpcEmu::DrawOptionsMenu()
 			ImGui::EndMenu();
 		}
 
-		ImGui::MenuItem("Enable Audio", 0, &config.bEnableAudio);
+		ImGui::MenuItem("Enable Audio", 0, &pGlobalConfig->bEnableAudio);
 		ImGui::MenuItem("Edit Mode", 0, &CodeAnalysis.bAllowEditing);
 #if SPECCY
-		ImGui::MenuItem("Scan Line Indicator", 0, &config.bShowScanLineIndicator);
+		ImGui::MenuItem("Scan Line Indicator", 0, &pGlobalConfig->bShowScanLineIndicator);
 		if(pActiveGame!=nullptr)
 			ImGui::MenuItem("Save Snapshot with game", 0, &pActiveGame->pConfig->WriteSnapshot);
 #endif
-		ImGui::MenuItem("Show Opcode Values", 0, &CodeAnalysis.Config.bShowOpcodeValues);
+		ImGui::MenuItem("Show Opcode Values", 0, &CodeAnalysis.pGlobalConfig->bShowOpcodeValues);
 
 		if (ImGui::BeginMenu("Display Branch Lines"))
 		{
-			if (ImGui::MenuItem("Off", 0, CodeAnalysis.Config.BranchLinesDisplayMode == 0))
+			if (ImGui::MenuItem("Off", 0, CodeAnalysis.pGlobalConfig->BranchLinesDisplayMode == 0))
 			{
-				CodeAnalysis.Config.BranchLinesDisplayMode = 0;
+				CodeAnalysis.pGlobalConfig->BranchLinesDisplayMode = 0;
 			}
-			if (ImGui::MenuItem("Minimal", 0, CodeAnalysis.Config.BranchLinesDisplayMode == 1))
+			if (ImGui::MenuItem("Minimal", 0, CodeAnalysis.pGlobalConfig->BranchLinesDisplayMode == 1))
 			{
-				CodeAnalysis.Config.BranchLinesDisplayMode = 1;
+				CodeAnalysis.pGlobalConfig->BranchLinesDisplayMode = 1;
 			}
-			if (ImGui::MenuItem("Full", 0, CodeAnalysis.Config.BranchLinesDisplayMode == 2))
+			if (ImGui::MenuItem("Full", 0, CodeAnalysis.pGlobalConfig->BranchLinesDisplayMode == 2))
 			{
-				CodeAnalysis.Config.BranchLinesDisplayMode = 2;
+				CodeAnalysis.pGlobalConfig->BranchLinesDisplayMode = 2;
 			}
 
 			ImGui::EndMenu();
@@ -1531,7 +1526,7 @@ void FCpcEmu::DrawExportAsmModalPopup()
 			{
 				if (pActiveGame != nullptr)
 				{
-					const std::string dir = GetGlobalConfig().WorkspaceRoot + "OutputASM/";
+					const std::string dir = pGlobalConfig->WorkspaceRoot + "OutputASM/";
 					EnsureDirectoryExists(dir.c_str());
 
 					char addrRangeStr[16];

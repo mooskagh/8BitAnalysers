@@ -27,7 +27,7 @@
 #endif
 
 #include "../CPCEmu.h"
-#include "../GlobalConfig.h"
+#include "../CPCConfig.h"
 #include "Debug/DebugLog.h"
 
 #define SOKOL_IMPL
@@ -173,11 +173,11 @@ int main(int argc, char** argv)
     FCpcEmu* pCpcEmulator = new FCpcEmu;
     pCpcEmulator->Init(config);
 
-    FGlobalConfig& globalConfig = GetGlobalConfig();
-    if (!globalConfig.Font.empty())
+    const FGlobalConfig* pGlobalConfig = pCpcEmulator->pGlobalConfig;
+    if (!pGlobalConfig->Font.empty())
     {
-        std::string fontPath = "./Fonts/" + globalConfig.Font;
-        if (!io.Fonts->AddFontFromFileTTF(fontPath.c_str(), (float)globalConfig.FontSizePixels))
+        std::string fontPath = "./Fonts/" + pGlobalConfig->Font;
+        if (!io.Fonts->AddFontFromFileTTF(fontPath.c_str(), (float)pGlobalConfig->FontSizePixels))
         {
             LOGWARNING("Could not load font '%s'", fontPath.c_str());
         }

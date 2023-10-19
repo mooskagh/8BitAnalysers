@@ -59,6 +59,7 @@ struct FGameConfig;
 struct FViewerConfig;
 class FViewerBase;
 class FScreenPixMemDescGenerator;
+struct FCPCConfig;
 
 enum class ECpcModel
 {
@@ -152,6 +153,7 @@ public:
 	// Emulator 
 	cpc_t			CpcEmuState;		// Chips CPC State
 	uint8_t*		MappedInMemory = nullptr;
+	FCPCConfig*		pGlobalConfig = nullptr;
 
 	float			ExecSpeedScale = 1.0f;
 
