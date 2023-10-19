@@ -1113,20 +1113,21 @@ void FDebugger::DrawEvents(void)
 		ImGui::TreePop();
 	}
 
-	// todo do this somewhere better
 	viewState.HighlightScanline = -1;
 
 	static ImGuiTableFlags flags = ImGuiTableFlags_Borders | ImGuiTableFlags_RowBg | ImGuiTableFlags_SizingFixedFit | ImGuiTableFlags_ScrollY;
 	if (ImGui::BeginTable("Events", 5, flags))
 	{
+		const float fontSize = ImGui::GetFontSize();
+
 		ImGui::TableSetupScrollFreeze(0, 1); // Make top row always visible
-		ImGui::TableSetupColumn("Scanline", ImGuiTableColumnFlags_WidthFixed, 65);
-		ImGui::TableSetupColumn("Type", ImGuiTableColumnFlags_WidthFixed, 200);
+		ImGui::TableSetupColumn("Scanline", ImGuiTableColumnFlags_WidthFixed, fontSize * 3);
+		ImGui::TableSetupColumn("Type", ImGuiTableColumnFlags_WidthFixed, fontSize * 14);
 		ImGui::TableSetupColumn("PC", ImGuiTableColumnFlags_WidthStretch);
 		ImGui::TableSetupColumn("Address", ImGuiTableColumnFlags_WidthStretch);
-		ImGui::TableSetupColumn("Value", ImGuiTableColumnFlags_WidthFixed, 100);
+		ImGui::TableSetupColumn("Value", ImGuiTableColumnFlags_WidthFixed, fontSize * 8);
 		ImGui::TableHeadersRow();
-
+		
 		while (clipper.Step())
 		{
 			for (int i = clipper.DisplayStart; i < clipper.DisplayEnd; i++)
@@ -1182,7 +1183,6 @@ void FDebugger::DrawEvents(void)
 					ImGui::Text("%s", NumStr(event.Value));
 				}
 				ImGui::PopID();
-
 			}
 		}
 
