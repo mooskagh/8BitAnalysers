@@ -21,6 +21,9 @@
 #include <algorithm>
 
 #include "C64Emulator.h"
+#include "C64Config.h"
+#include <ImGuiSupport/ImGuiScaling.h>
+#include <ImGuiSupport/ImGuiDrawing.h>
 
 void FC64Display::Init(FCodeAnalysisState* pAnalysis, FC64Emulator* pC64Emu)
 {
@@ -89,7 +92,7 @@ void FC64Display::DrawUI()
 {
     c64_t* pC64 = C64Emu->GetEmu();
     FCodeAnalysisViewState& viewState = CodeAnalysis->GetFocussedViewState();
-
+    const FC64Config &config = *C64Emu->GetGlobalConfig();
     const bool bDebugFrame = pC64->vic.debug_vis;
     //if (bDebugFrame)
     //else
@@ -121,6 +124,11 @@ void FC64Display::DrawUI()
     const bool bMultiColourMode = !!(pC64->vic.reg.ctrl_2 & (1<<4));
     uint16_t vicMemBase = pC64->vic_bank_select;
     uint16_t screenMem = (pC64->vic.reg.mem_ptrs >> 4) << 10;
+    uint16_t spritePtrs = vicMemBase + screenMem + 1016;
+
+    uint8_t sprite1 = mem_rd(&pC64->mem_vic,spritePtrs);
+    // sprite address is sprite1 * 64
+
     ImGui::Text("VIC Bank: $%04X, Screen Mem: $%04X", vicMemBase, vicMemBase + screenMem);
     if (bBitmapMode)
     {
@@ -138,29 +146,52 @@ void FC64Display::DrawUI()
 
     ImGuiIO& io = ImGui::GetIO();
     ImVec2 pos = ImGui::GetCursorScreenPos();
+    const float scale = ImGui_GetScaling();
     ImDrawList* dl = ImGui::GetWindowDrawList();
     ImVec2 uv0(0, 0);
     ImVec2 uv1((float)disp.screen.width / (float)disp.frame.dim.width, (float)disp.screen.height / (float)disp.frame.dim.height);
 
+    // Draw Screen
+    ImGui::Image(ScreenTexture, ImVec2((float)disp.screen.width * scale, (float)disp.screen.height * scale),uv0,uv1);
 
-    ImGui::Image(ScreenTexture, ImVec2((float)disp.screen.width, (float)disp.screen.height),uv0,uv1);
+    // Draw an indicator to show which scanline is being drawn
+    if (config.bShowScanLineIndicator && CodeAnalysis->Debugger.IsStopped())
+    {
+        int topScreenScanLine = 0;
+        int scanlineX = pC64->vic.rs.h_count * M6569_PIXELS_PER_TICK;  
+        int scanlineY = std::min(std::max(pC64->vic.rs.v_count - topScreenScanLine, 0), disp.screen.height);
+        int interruptScanline = pC64->vic.rs.v_irqline;
+        dl->AddLine(ImVec2(pos.x + (4 * scale), pos.y + (scanlineY * scale)), ImVec2(pos.x + (disp.screen.width - 8) * scale, pos.y + (scanlineY * scale)), 0x50ffffff);
+        DrawArrow(dl, ImVec2(pos.x - 2, pos.y + (scanlineY * scale) - 6), false);
+        DrawArrow(dl, ImVec2(pos.x + (disp.screen.width - 11) * scale, pos.y + (scanlineY * scale) - 6), true);
+
+        // interrupt scanline
+        dl->AddLine(ImVec2(pos.x + (4 * scale), pos.y + (interruptScanline * scale)), ImVec2(pos.x + (disp.screen.width - 8) * scale, pos.y + (interruptScanline * scale)), 0x50ffffff);
+
+        if(config.bShowHCounter)
+            dl->AddLine(ImVec2(pos.x + (scanlineX * scale), pos.y), ImVec2(pos.x + (scanlineX * scale), pos.y + disp.screen.height * scale), 0x50ffffff);
+    }
 
     if (ImGui::IsItemHovered())
     {
-        const int borderOffsetX = ((dispFrameWidth - graphicsScreenWidth) / 2) & ~7;    // align to character size
+        //pC64->vic.crt.vis_x0 * M6569_PIXELS_PER_TICK;
+        //pC64->vic.brd.left* M6569_PIXELS_PER_TICK;
+
+        const int borderOffsetX = ((dispFrameWidth - graphicsScreenWidth) / 2);    // align to character size
         const int borderOffsetY = ((dispFrameHeight - graphicsScreenHeight) / 2);
 
-        const int xp = std::min(std::max((int)(io.MousePos.x - pos.x - borderOffsetX), 0), graphicsScreenWidth - 1);
-        const int yp = std::min(std::max((int)(io.MousePos.y - pos.y - borderOffsetY), 0), graphicsScreenHeight - 1);
+        const ImVec2 mouseOffset((io.MousePos.x - pos.x)/scale, (io.MousePos.y - pos.y) / scale);
+        const int xp = std::min(std::max((int)(mouseOffset.x - borderOffsetX), 0), graphicsScreenWidth - 1);
+        const int yp = std::min(std::max((int)(mouseOffset.y - borderOffsetY), 0), graphicsScreenHeight - 1);
         
         dl->AddRect(
-            ImVec2((float)pos.x + borderOffsetX, (float)pos.y + borderOffsetY), 
-            ImVec2((float)pos.x + borderOffsetX + graphicsScreenWidth, (float)pos.y + borderOffsetY + graphicsScreenHeight), 
+            ImVec2((float)pos.x + borderOffsetX * scale, (float)pos.y + borderOffsetY * scale), 
+            ImVec2((float)pos.x + borderOffsetX + graphicsScreenWidth * scale, (float)pos.y + (borderOffsetY + graphicsScreenHeight) * scale), 
             0xffffffff);
 
         dl->AddRect(
             ImVec2((float)pos.x, (float)pos.y),
-            ImVec2((float)pos.x + dispFrameWidth, (float)pos.y + dispFrameHeight),
+            ImVec2((float)pos.x + dispFrameWidth * scale, (float)pos.y + dispFrameHeight * scale),
             0xffffffff);
 
         const uint16_t scrBitmapAddress = GetScreenBitmapAddress(xp, yp);
@@ -169,9 +200,9 @@ void FC64Display::DrawUI()
 
         if (scrCharAddress != 0)
         {
-            const int rx = static_cast<int>(pos.x) + borderOffsetX + (xp & ~0x7);
-            const int ry = static_cast<int>(pos.y) + borderOffsetY + (yp & ~0x7);
-            dl->AddRect(ImVec2((float)rx, (float)ry), ImVec2((float)rx + 8, (float)ry + 8), 0xffffffff);
+            const float rx = static_cast<int>(pos.x) + (borderOffsetX + (xp & ~0x7)) * scale;
+            const float ry = static_cast<int>(pos.y) + (borderOffsetY + (yp & ~0x7)) * scale;
+            dl->AddRect(ImVec2(rx, ry), ImVec2(rx + 8 * scale, ry + 8 * scale), 0xffffffff);
             ImGui::BeginTooltip();
             ImGui::Text("Screen Pos (%d,%d)", xp, yp);
             if(bBitmapMode)
@@ -186,17 +217,25 @@ void FC64Display::DrawUI()
             if (bBitmapMode)
             {
                 ImGui::Text("Bitmap Writer: ");
-                ImGui::SameLine();
-                DrawCodeAddress(*CodeAnalysis, viewState, lastBitmapWriter);
+                if(lastBitmapWriter.IsValid())
+                {
+                    ImGui::SameLine();
+                    DrawCodeAddress(*CodeAnalysis, viewState, lastBitmapWriter);
+                }
             }
             ImGui::Text("Char Writer: ");
             ImGui::SameLine();
             if(lastCharWriter.IsValid())
+            { 
+                ImGui::SameLine();
                 DrawCodeAddress(*CodeAnalysis, viewState, lastCharWriter);
+            }
             ImGui::Text("Colour RAM Writer: ");
-            ImGui::SameLine();
             if (lastColourRamWriter.IsValid())
+            {
+                ImGui::SameLine();
                 DrawCodeAddress(*CodeAnalysis, viewState, lastColourRamWriter);
+            }
             ImGui::EndTooltip();
             //ImGui::Text("Pixel Writer: %04X, Attrib Writer: %04X", lastPixWriter, lastAttrWriter);
 
@@ -233,21 +272,120 @@ void FC64Display::DrawUI()
     {
         ImDrawList* dl = ImGui::GetWindowDrawList();
         const ImU32 col = 0xffffffff;	// TODO: pulse
-        dl->AddRect(ImVec2((float)SelectedCharX, (float)SelectedCharY), ImVec2((float)SelectedCharX + 8, (float)SelectedCharY + 8), col);
+        dl->AddRect(ImVec2(SelectedCharX, SelectedCharY), ImVec2(SelectedCharX + 8 * scale, SelectedCharY + 8 * scale), col);
 
         if (bBitmapMode)
         {
             const FAddressRef lastBitmapWriter = CodeAnalysis->GetLastWriterForAddress(SelectBitmapAddr);
             ImGui::Text("Bitmap Address: $%X, Last Writer:", SelectBitmapAddr);
-            DrawAddressLabel(*CodeAnalysis, viewState, lastBitmapWriter);
+            if (lastBitmapWriter.IsValid())
+                DrawAddressLabel(*CodeAnalysis, viewState, lastBitmapWriter);
         }
         const FAddressRef lastCharWriter = CodeAnalysis->GetLastWriterForAddress(SelectCharAddr);
         ImGui::Text("Char Address: $%X, Last Writer:", SelectCharAddr);
-        DrawAddressLabel(*CodeAnalysis, viewState, lastCharWriter);
+        if (lastCharWriter.IsValid())
+            (*CodeAnalysis, viewState, lastCharWriter);
 
         const FAddressRef lastColourRamWriter = CodeAnalysis->GetLastWriterForAddress(SelectColourRamAddr);
         ImGui::Text("Colour RAM Address: $%X, Last Writer:", SelectColourRamAddr);
-        DrawAddressLabel(*CodeAnalysis, viewState, lastColourRamWriter);
+        if(lastColourRamWriter.IsValid())
+            DrawAddressLabel(*CodeAnalysis, viewState, lastColourRamWriter);
     }
+
+	bWindowFocused = ImGui::IsWindowFocused();
+
 }
 
+
+int C64KeyFromImGuiKey(ImGuiKey key)
+{
+    const bool bShift = ImGui::IsKeyDown(ImGuiKey_LeftShift) || ImGui::IsKeyDown(ImGuiKey_RightShift);
+
+    switch (key)
+    {
+        case ImGuiKey_Space:
+            return C64_KEY_SPACE;
+		case ImGuiKey_Enter:
+			return C64_KEY_RETURN;
+		case ImGuiKey_LeftCtrl:
+			return C64_KEY_CTRL;
+		case ImGuiKey_Delete:
+			return C64_KEY_DEL;
+        case ImGuiKey_LeftArrow:
+            return C64_KEY_CSRLEFT;
+        case ImGuiKey_RightArrow:
+            return C64_KEY_CSRRIGHT;
+        case ImGuiKey_UpArrow:
+            return C64_KEY_CSRUP;
+        case ImGuiKey_DownArrow:
+            return C64_KEY_CSRDOWN;
+
+        // Alphanumeric range
+        default:
+        {
+			if (key >= ImGuiKey_0 && key <= ImGuiKey_9)
+			{
+				return '0' + (key - ImGuiKey_0);
+			}
+			else if (key >= ImGuiKey_A && key <= ImGuiKey_Z)
+			{
+                char c = (bShift ? 'A' : 'a') + (key - ImGuiKey_A);
+
+                if (isupper(c))
+                    c = tolower(c);
+                else if (islower(c)) 
+                    c = toupper(c);
+                    
+                return c;
+			}
+            else if (key >= ImGuiKey_F1 && key <= ImGuiKey_F8)
+            {
+                return C64_KEY_F1 + (key - ImGuiKey_F1);
+            }
+        }
+        break;
+    }
+
+    return 0;
+}
+
+uint8_t GetJoystickMaskFromImGui()
+{
+    uint8_t mask = 0;
+	if (ImGui::IsKeyDown(ImGuiNavInput_DpadRight))
+        mask |= C64_JOYSTICK_RIGHT;
+	if (ImGui::IsKeyDown(ImGuiNavInput_DpadLeft))
+        mask |= C64_JOYSTICK_LEFT;
+	if (ImGui::IsKeyDown(ImGuiNavInput_DpadDown))
+        mask |= C64_JOYSTICK_DOWN;
+	if (ImGui::IsKeyDown(ImGuiNavInput_DpadUp))
+        mask |= C64_JOYSTICK_UP;
+	if (ImGui::IsKeyDown(ImGuiNavInput_Activate))
+        mask |= C64_JOYSTICK_BTN;
+
+    return mask;
+}
+
+void FC64Display::Tick()
+{
+	// Check keys - not event driven, hopefully perf isn't too bad
+	for (ImGuiKey key = ImGuiKey_NamedKey_BEGIN; key < ImGuiKey_COUNT; key++)
+	{
+		if (ImGui::IsKeyPressed(key, false))
+		{
+			const int c64Key = C64KeyFromImGuiKey(key);
+			if (c64Key != 0 && bWindowFocused)
+				c64_key_down(C64Emu->GetEmu(), c64Key);
+		}
+		else if (ImGui::IsKeyReleased(key))
+		{
+			const int c64Key = C64KeyFromImGuiKey(key);
+			if (c64Key != 0)
+                c64_key_up(C64Emu->GetEmu(), c64Key);
+		}
+	}
+
+	const uint8_t keyMask = GetJoystickMaskFromImGui();
+
+	c64_joystick(C64Emu->GetEmu(), 0, keyMask);
+}

@@ -3,13 +3,13 @@
 #include <Util/FileUtil.h>
 #include <imgui.h>
 
-bool FC64GamesList::EnumerateGames()
+bool FC64GamesList::EnumerateGames(const char *pDirectory)
 {
     FDirFileList listing;
     
     SelectedGame = -1;
     GamesList.clear();
-    if (EnumerateDirectory("./Games", listing) == false)
+    if (EnumerateDirectory(pDirectory, listing) == false)
         return false;
 
     for (const auto& file : listing)
@@ -19,12 +19,23 @@ bool FC64GamesList::EnumerateGames()
         {
             FGameInfo game;
             game.Name = RemoveFileExtension(file.FileName.c_str());
-            game.PRGFile = file.FileName;
+            game.PRGFile = std::string(pDirectory) + file.FileName;
             GamesList.push_back(game);
         }
     }
     return true;
 
+}
+
+const FGameInfo* FC64GamesList::GetGameInfo(const char* pName)
+{
+    for (int gameNo = 0; gameNo < (int)GamesList.size(); gameNo++)
+    {
+        if(GamesList[gameNo].Name == pName)
+            return &GamesList[gameNo];
+    }
+
+    return nullptr;
 }
 
 

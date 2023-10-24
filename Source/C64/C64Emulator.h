@@ -48,12 +48,17 @@
 #include "IOAnalysis/C64IOAnalysis.h"
 #include "GraphicsViewer/C64GraphicsViewer.h"
 
+struct FC64Config;
+struct FC64GameConfig;
+
 class FC64Emulator : public ICPUInterface
 {
 public:
 
 	bool    Init();
 	void    Shutdown();
+	void	DrawUI();
+	bool	DrawDockingView();
 	void    Tick();
 
 	// Begin IInputEventHandler interface implementation
@@ -84,10 +89,7 @@ public:
 
 	FAddressRef GetPC() override
 	{
-		uint16_t address = m6502_pc(&C64Emu.cpu);
-		FAddressRef result(0, address);
-
-		return result;
+		return CodeAnalysis.Debugger.GetPC();
 	}
 
 	uint16_t	GetSP(void) override
@@ -95,15 +97,22 @@ public:
 		return m6502_s(&C64Emu.cpu) + 0x100;    // stack begins at 0x100
 	}
 
+	void* GetCPUEmulator(void) const override
+	{
+		return (void*)&C64Emu.cpu;
+	}
+
 	// End ICPUInterface interface implementation
 
 	c64_desc_t GenerateC64Desc(c64_joystick_type_t joy_type);
 	void SetupCodeAnalysisLabels(void);
 	void UpdateCodeAnalysisPages(uint8_t cpuPort);
-	bool LoadGame(const FGameInfo* pGameInfo);
+	bool StartGame(const char* pGameName, bool bLoadGame);
+	bool StartGame(FC64GameConfig *pConfig, bool bLoadGame);
+	bool NewGameFromSnapshot(const FGameInfo* pGameInfo);
 	void ResetCodeAnalysis(void);
-	bool SaveCodeAnalysis(const FGameInfo* pGameInfo);
-	bool LoadCodeAnalysis(const FGameInfo* pGameInfo);
+	bool SaveCurrentGame(void);
+	//bool LoadCodeAnalysis(const FGameInfo* pGameInfo);
 
 	// Emulator Event Handlers
 	void    OnBoot(void);
@@ -111,10 +120,16 @@ public:
 	uint64_t    OnCPUTick(uint64_t pins);
 
 	c64_t*	GetEmu() {return &C64Emu;}
+	FCodeAnalysisState& GetCodeAnalysis(){ return CodeAnalysis; }
+
+	const FC64Config*	GetGlobalConfig() { return pGlobalConfig;}
 private:
 	c64_t       C64Emu;
 	ui_c64_t    C64UI;
 	double      ExecTime;
+
+	FC64Config*			pGlobalConfig = nullptr;
+	FC64GameConfig*		pCurrentGameConfig = nullptr;
 
 	FC64GamesList       GamesList;
 	const FGameInfo* CurrentGame = nullptr;
@@ -123,19 +138,14 @@ private:
 
 	FCodeAnalysisState  CodeAnalysis;
 
-	// Analysis pages
-	FCodeAnalysisPage   KernelROM[8];       // 8K Kernel ROM
-	FCodeAnalysisPage   BasicROM[8];        // 8K Basic ROM
-	FCodeAnalysisPage   CharacterROM[4];    // 4K Character ROM
-	FCodeAnalysisPage   IOSystem[4];        // 4K IO System
-	FCodeAnalysisPage   RAM[64];            // 64K RAM
+	uint8_t				IOMemBuffer[0x1000];	// Buffer for IO memory
 
 	uint8_t             LastMemPort = 0x7;  // Default startup
-	uint16_t            LastPC = 0;
+	uint16_t            PreviousPC = 0;
 
 	FC64IOAnalysis      IOAnalysis;
 	FC64GraphicsViewer  GraphicsViewer;
-	std::set<uint16_t>  InterruptHandlers;
+	std::set<FAddressRef>  InterruptHandlers;
 
 	// Mapping status
 	bool                bBasicROMMapped = true;
@@ -153,5 +163,4 @@ private:
 	uint16_t            RAMBehindKernelROMId = -1;
 	uint16_t            CharacterROMId = -1;
 	uint16_t            RAMBehindCharROMId = -1;
-	uint16_t            ColourRAMId = -1;
 };
