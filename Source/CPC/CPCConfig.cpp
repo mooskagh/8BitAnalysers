@@ -15,7 +15,11 @@ bool FCPCConfig::Init(void)
 		return false;
 
 	LuaBaseFiles.push_back("Lua/CPCBase.lua");
-	
+	SnapshotFolder = GetDocumentsPath("CPCGames");
+	WorkspaceRoot = GetDocumentsPath("CPCAnalyserProjects");
+
+	FixupPaths();
+
 	return true;
 }
 
@@ -23,12 +27,12 @@ void FCPCConfig::ReadFromJson(const nlohmann::json& jsonConfigFile)
 {
 	FGlobalConfig::ReadFromJson(jsonConfigFile);
 
-	if (jsonConfigFile.contains("SnapshotFolder128"))
-		SnapshotFolder128 = jsonConfigFile["SnapshotFolder128"];
+	//if (jsonConfigFile.contains("SnapshotFolder128"))
+	//	SnapshotFolder128 = jsonConfigFile["SnapshotFolder128"];
 
 	// fixup paths
-	if (SnapshotFolder128.back() != '/')
-		SnapshotFolder128 += "/";
+	//if (SnapshotFolder128.back() != '/')
+	//	SnapshotFolder128 += "/";
 
 	for (int i = 1; i < UpperROMSlot.size(); i++)
 	{
@@ -40,12 +44,14 @@ void FCPCConfig::ReadFromJson(const nlohmann::json& jsonConfigFile)
 			UpperROMSlot[i] = jsonConfigFile[temp];
 		}
 	}
+
+	FixupPaths();
 }
 
 void FCPCConfig::WriteToJson(nlohmann::json& jsonConfigFile) const
 {
 	FGlobalConfig::WriteToJson(jsonConfigFile);
-	jsonConfigFile["SnapshotFolder128"] = SnapshotFolder128;
+	//jsonConfigFile["SnapshotFolder128"] = SnapshotFolder128;
 
 	for (int i = 1; i < UpperROMSlot.size(); i++)
 	{

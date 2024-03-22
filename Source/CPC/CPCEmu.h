@@ -66,7 +66,6 @@ enum class ECPCModel
 {
 	CPC_464,
 	CPC_6128,
-	CPC_KCKompact,
 };
 
 // Built in ROM banks
@@ -85,7 +84,8 @@ struct FCPCLaunchConfig : public FEmulatorLaunchConfig
 {
 	void ParseCommandline(int argc, char** argv) override;
 
-	ECPCModel Model = ECPCModel::CPC_464;
+	// todo feels like we need to get rid of this and store this in the globalconfig?
+	ECPCModel Model = ECPCModel::CPC_6128;
 };
 
 struct FGame
@@ -104,6 +104,7 @@ public:
 	}
 
 	bool				Init(const FEmulatorLaunchConfig& config) override;
+	bool				InitForModel(ECPCModel model);
 	void				Shutdown() override;
 	bool				StartGame(FGameConfig* pGameConfig, bool bLoadGameData) override;
 	bool				SaveCurrentGameData() override;
@@ -111,7 +112,7 @@ public:
 	bool				LoadGameState(const char* fname);
 
 	void				OnInstructionExecuted(int ticks, uint64_t pins);
-	uint64_t		Z80Tick(int num, uint64_t pins);
+	uint64_t			Z80Tick(int num, uint64_t pins);
 
 	void				Reset() override;
 	void				Tick() override;
@@ -142,8 +143,8 @@ public:
 	bool				CanSelectUpperROM(uint8_t romSlot);
 	bool				InitBankMappings();
 	void				UpdateBankMappings();
+	ECPCModel		GetCurrentCPCModel() const { return CPCEmuState.type == CPC_TYPE_6128 ? ECPCModel::CPC_6128 : ECPCModel::CPC_464; }
 	void				SetRAMBank(int slot, int bankNo, EBankAccess access);
-	void				SetRAMBanksPreset(int bankPresetIndex);
 
 	void				UpdatePalette();
 
@@ -195,8 +196,6 @@ public:
 	uint16_t		PreviousPC = 0;		// store previous pc
 	int			InstructionsTicks = 0;
 
-	const FGamesList& GetGamesList() const { return GamesList;  }
-
 	FCPCScreen	Screen;
 
 
@@ -214,5 +213,7 @@ private:
 	bool				bExportAsm = false;
 
 	bool				bInitialised = false;
-	bool				bExternalROMSupport = true;
+	
+	// temporarily disabled
+	bool				bExternalROMSupport = false;
 };

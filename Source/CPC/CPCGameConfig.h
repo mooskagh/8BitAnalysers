@@ -1,6 +1,7 @@
 #pragma once
 
 #include <Misc/GameConfig.h>
+#include "CPCEmu.h"    // for ECPCModel enum
 
 struct FGame;
 struct FGameSnapshot;
@@ -12,7 +13,10 @@ struct FCPCGameConfig : FGameConfig
 	void	LoadFromJson(const nlohmann::json& jsonConfig) override;
 	void	SaveToJson(nlohmann::json& jsonConfig) const override;
 
-	bool	bCPC6128Game = false;
+	ECPCModel  GetCPCModel() const { return bCPC6128Game ? ECPCModel::CPC_6128 : ECPCModel::CPC_464; }
+
+	// todo set this from the launch model?
+	bool	bCPC6128Game = true;
 };
 
 FCPCGameConfig* CreateNewCPCGameConfigFromSnapshot(const FGameSnapshot& snapshot);

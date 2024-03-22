@@ -1065,6 +1065,8 @@ void FCodeAnalysisState::Init(FEmuBase* pEmu)
 	{
 		bank.Description.clear();
 		bank.ItemList.clear();
+		bank.bEverBeenMapped = false;
+		bank.PrimaryMappedPage = -1;
 	}
 
 	pEmulator = pEmu;

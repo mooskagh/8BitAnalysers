@@ -1156,6 +1156,7 @@ void EventShowPixValue(FCodeAnalysisState& state, const FEvent& event)
 	ImVec2 pos = ImGui::GetCursorScreenPos();
 	const float line_height = ImGui::GetTextLineHeight();
 	const float rectSize = line_height / 2;
+	pos.y += line_height / 4;
 	const uint8_t pixels = event.Value;
 	//dl->AddRect(ImVec2(pos.x, pos.y), ImVec2(pos.x + rectSize * 8, pos.y + rectSize), 0xffffffff);
 
