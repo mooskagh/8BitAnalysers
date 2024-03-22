@@ -103,28 +103,30 @@ public:
 		CPUType = ECPUType::Z80;
 	}
 
+	// FEmuBase Begin
 	bool				Init(const FEmulatorLaunchConfig& config) override;
-	bool				InitForModel(ECPCModel model);
 	void				Shutdown() override;
+	bool				NewGameFromSnapshot(const FGameSnapshot& snaphot) override;
 	bool				StartGame(FGameConfig* pGameConfig, bool bLoadGameData) override;
 	bool				SaveCurrentGameData() override;
+	void				Reset() override;
+	void				Tick() override;
+	bool				LoadLua() override;
+	void				DrawEmulatorUI(void) override;
+	// ~FEmuBase End
+
 	bool				SaveGameState(const char* fname);
 	bool				LoadGameState(const char* fname);
 
 	void				OnInstructionExecuted(int ticks, uint64_t pins);
-	uint64_t			Z80Tick(int num, uint64_t pins);
+	uint64_t		Z80Tick(int num, uint64_t pins);
 
-	void				Reset() override;
-	void				Tick() override;
-
-	bool				LoadLua();
-
-	void				DrawEmulatorUI(void);
-
+	// FEmuBase Begin
 	void				FileMenuAdditions(void) override;		
 	void				SystemMenuAdditions(void) override;
 	void				OptionsMenuAdditions(void) override;
 	void				WindowsMenuAdditions(void) override;
+	// ~FEmuBase End
 
 	// disable copy & assign because this class is big!
 	FCPCEmu(const FCPCEmu&) = delete;
@@ -140,6 +142,7 @@ public:
 	void*						GetCPUEmulator(void) const override;
 	//ICPUInterface End
 	
+	bool				InitForModel(ECPCModel model);
 	bool				CanSelectUpperROM(uint8_t romSlot);
 	bool				InitBankMappings();
 	void				UpdateBankMappings();
@@ -148,7 +151,6 @@ public:
 
 	void				UpdatePalette();
 
-	bool				NewGameFromSnapshot(const FGameSnapshot& snaphot) override;
 
 	const FCPCConfig* GetCPCGlobalConfig() { return (const FCPCConfig*)pGlobalConfig; }
 
@@ -198,6 +200,7 @@ public:
 
 	FCPCScreen	Screen;
 
+	const FGamesList& GetGamesList() const { return GamesList; }
 
 private:
 	//FGamesList		GamesList;
@@ -215,5 +218,8 @@ private:
 	bool				bInitialised = false;
 	
 	// temporarily disabled
-	bool				bExternalROMSupport = false;
+	bool				bExternalROMSupport = true;
+
+	// todo move somewhere better. into the global config?
+	ECPCModel LaunchModel = ECPCModel::CPC_6128;
 };

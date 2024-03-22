@@ -167,9 +167,14 @@ bool LoadSNAFromMemory(FCPCEmu * pEmu, uint8_t * pData, size_t dataSize, ECPCMod
 	{
 		SNAPSHOT_LOG("Version %d. Machine type: '%s'. Dump size %d", pHdr->Version, machine.c_str(), dumpSize);
 
+		// todo: deal with machineType 3 - unknown?
 		if (pHdr->MachineType == 0)
 		{
 			type = CPC_TYPE_464;
+		}
+		else if (pHdr->MachineType == 2)
+		{
+			type = CPC_TYPE_6128;
 		}
 		else if (pHdr->MachineType == 1 || pHdr->MachineType > 3)
 		{
@@ -259,10 +264,9 @@ bool LoadSNAFromMemory(FCPCEmu * pEmu, uint8_t * pData, size_t dataSize, ECPCMod
 	// Dump size can be either 64 or 128.
 	if (dumpSize)
 	{
-		// do we still need this check? does it make sense any more?
 		if (pEmu->CPCEmuState.type == CPC_TYPE_464 && dumpSize > 64)
 		{
-			pEmu->SetLastError("Snapshot is not a 464 snapshot.");
+			pEmu->SetLastError("Snapshot is not a 464 snapshot. Memory dump size is too big: %dk", dumpSize);
 			return false;
 		}
 

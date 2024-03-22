@@ -32,6 +32,7 @@
 #include "CPCLuaAPI.h"
 
 //#define RUN_AHEAD_TO_GENERATE_SCREEN
+#define BANK_SWITCH_DEBUG
 
 const std::string kAppTitle = "CPC Analyser";
 const char* kGlobalConfigFilename = "GlobalConfig.json";
@@ -465,7 +466,7 @@ void FCPCEmu::UpdateBankMappings()
 		SetRAMBank(3, bankIndex3, EBankAccess::Write);	
 	}
 
-
+#ifdef BANK_SWITCH_DEBUG
 	std::string wBanks; // writeable banks (could be read/write or write only)
 	std::string rBanks; // read only banks
 	uint16_t addr = 0;
@@ -483,6 +484,7 @@ void FCPCEmu::UpdateBankMappings()
 	}
 	LOGINFO("Ram Preset: %d [%x %x %x %x]. Mapped banks: ReadOnly = [%s] Writable = [%s]", 
 		ramPreset, bankIndex0, bankIndex1, bankIndex2, bankIndex3, rBanks.c_str(), wBanks.c_str());
+#endif
 
 	// could we check our banks match the chips ones?
 	// it would be a great sanity test
@@ -760,6 +762,8 @@ bool FCPCEmu::Init(const FEmulatorLaunchConfig& launchConfig)
 	FEmuBase::Init(launchConfig);
 
 	FCPCLaunchConfig& cpcLaunchConfig = (FCPCLaunchConfig&)launchConfig;
+	LaunchModel = cpcLaunchConfig.Model;
+
 #ifndef NDEBUG
 	LOGINFO("Init CPCEmu...");
 #endif
@@ -1078,8 +1082,6 @@ bool FCPCEmu::StartGame(FGameConfig* pGameConfig, bool bLoadGameData)
 	const ECPCModel gameCPCModel = pCPCGameConfig->GetCPCModel();
 	InitForModel(gameCPCModel);
 
-	// todo is this correct when creating a new game? 
-	// doesnt bCPC6128Game get set in NewGameFromSnapshot() after this has been called?
 	GameLoader.SetFallbackCPCModel(gameCPCModel);
 
 	// Initialise code analysis
@@ -1121,11 +1123,10 @@ bool FCPCEmu::StartGame(FGameConfig* pGameConfig, bool bLoadGameData)
 			InitForModel(pCPCGameConfig->GetCPCModel());
 		}
 
-		if (LoadGameState(saveStateFName.c_str()) == false)
+		if (LoadGameState(saveStateFName.c_str()))
 		{
 			// if the game state loaded then we don't need the snapshot
 			bLoadSnapshot = false;
-			//GamesList.LoadGame(pGameConfig->Name.c_str());
 		}
 		
 		// not sure this makes sense to be here now we're not loading the game here any more?
@@ -1349,9 +1350,9 @@ bool FCPCEmu::NewGameFromSnapshot(const FGameSnapshot& snaphot)
 	RemoveGameConfig(snaphot.DisplayName.c_str());
 
 	FCPCGameConfig* pNewConfig = CreateNewCPCGameConfigFromSnapshot(snaphot);
-
-	// todo set bCPC6128Game here so we fallback to this machine type in the loader
-	// setting bCPC6128Game is like saying "if we cant get the machine type from the snapshot, use this machine"
+	
+	// Set the preferred CPC model. The snapshot can override this.
+	pNewConfig->bCPC6128Game = LaunchModel == ECPCModel::CPC_6128;
 
 	if (pNewConfig != nullptr)
 	{
