@@ -32,7 +32,9 @@
 #include "CPCLuaAPI.h"
 
 //#define RUN_AHEAD_TO_GENERATE_SCREEN
-#define BANK_SWITCH_DEBUG
+#ifndef NDEBUG
+//#define BANK_SWITCH_DEBUG
+#endif
 
 const std::string kAppTitle = "CPC Analyser";
 const char* kGlobalConfigFilename = "GlobalConfig.json";
@@ -467,23 +469,19 @@ void FCPCEmu::UpdateBankMappings()
 	}
 
 #ifdef BANK_SWITCH_DEBUG
-	std::string wBanks; // writeable banks (could be read/write or write only)
-	std::string rBanks; // read only banks
-	uint16_t addr = 0;
-	for (int i = 0; i < 4; i++, addr += 0x4000)
+	std::string wBanks[4]; // writeable banks (could be read/write or write only)
+	std::string rBanks[4]; // read only banks
+	for (uint16_t i = 0, addr = 0; i < 4; i++, addr += 0x4000)
 	{
 		const uint16_t r = CodeAnalysis.GetReadBankFromAddress(addr);
 		const uint16_t w = CodeAnalysis.GetWriteBankFromAddress(addr);
-		rBanks += (r != w) ? CodeAnalysis.GetBank(r)->Name : "-";
-		wBanks += CodeAnalysis.GetBank(w)->Name;
-		if (i != 3)
-		{
-			rBanks += ", ";
-			wBanks += ", ";
-		}
+		rBanks[i] = (r != w) ? CodeAnalysis.GetBank(r)->Name : "-";
+		wBanks[i] = CodeAnalysis.GetBank(w)->Name;
 	}
-	LOGINFO("Ram Preset: %d [%x %x %x %x]. Mapped banks: ReadOnly = [%s] Writable = [%s]", 
-		ramPreset, bankIndex0, bankIndex1, bankIndex2, bankIndex3, rBanks.c_str(), wBanks.c_str());
+	LOGINFO("Preset %d: [%x %x %x %x] ReadOnly = [%-6s, %s, %s, %-10s] Writable = [%-5s, %-5s, %-5s, %-5s]",
+		ramPreset, bankIndex0, bankIndex1, bankIndex2, bankIndex3,
+		rBanks[0].c_str(), rBanks[1].c_str(), rBanks[2].c_str(), rBanks[3].c_str(),
+		wBanks[0].c_str(), wBanks[1].c_str(), wBanks[2].c_str(), wBanks[3].c_str());
 #endif
 
 	// could we check our banks match the chips ones?

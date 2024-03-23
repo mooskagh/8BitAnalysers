@@ -218,7 +218,7 @@ private:
 	bool				bInitialised = false;
 	
 	// temporarily disabled
-	bool				bExternalROMSupport = true;
+	bool				bExternalROMSupport = false;
 
 	// todo move somewhere better. into the global config?
 	ECPCModel LaunchModel = ECPCModel::CPC_6128;
