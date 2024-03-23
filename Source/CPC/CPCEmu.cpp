@@ -760,15 +760,10 @@ bool FCPCEmu::Init(const FEmulatorLaunchConfig& launchConfig)
 	FEmuBase::Init(launchConfig);
 
 	FCPCLaunchConfig& cpcLaunchConfig = (FCPCLaunchConfig&)launchConfig;
-	LaunchModel = cpcLaunchConfig.Model;
 
 #ifndef NDEBUG
 	LOGINFO("Init CPCEmu...");
 #endif
-
-	const std::string memStr = cpcLaunchConfig.Model == ECPCModel::CPC_6128 ? " (CPC 6128)" : " (CPC 464)";
-	SetWindowTitle((std::string(kAppTitle) + memStr).c_str());
-	SetWindowIcon("CPCALogo.png");
 
 	// Initialise the CPC emulator
 	pGlobalConfig = new FCPCConfig();
@@ -776,6 +771,11 @@ bool FCPCEmu::Init(const FEmulatorLaunchConfig& launchConfig)
 	pGlobalConfig->Load(kGlobalConfigFilename);
 	CodeAnalysis.SetGlobalConfig(pGlobalConfig);
 	SetNumberDisplayMode(pGlobalConfig->NumberDisplayMode);
+
+	const FCPCConfig* pCPCConfig = GetCPCGlobalConfig();
+	const std::string memStr = pCPCConfig->bDefaultMachineIs6128 ? " (CPC 6128)" : " (CPC 464)";
+	SetWindowTitle((std::string(kAppTitle) + memStr).c_str());
+	SetWindowIcon("CPCALogo.png");
 
 	// temp hack to stop it crashing with a null pointer exception.
 	static const uint32_t ColourLUT[8] = { 0 };
@@ -791,8 +791,7 @@ bool FCPCEmu::Init(const FEmulatorLaunchConfig& launchConfig)
 	}
 
 	// A class that deals with loading games.
-	const FCPCConfig* pCPCConfig = GetCPCGlobalConfig();
-	GameLoader.Init(this, cpcLaunchConfig.Model);
+	GameLoader.Init(this, pCPCConfig->GetDefaultModel());
 	GamesList.SetLoader(&GameLoader);
 	GamesList.EnumerateGames(pCPCConfig->SnapshotFolder.c_str());
 	
@@ -835,7 +834,7 @@ bool FCPCEmu::Init(const FEmulatorLaunchConfig& launchConfig)
 		RAMBanks[bankNo] = CodeAnalysis.CreateBank(bankName, 16, CPCEmuState.ram[bankNo], false, 0x0000);
 	}
 
-	if (InitForModel(cpcLaunchConfig.Model) == false)
+	if (InitForModel(pCPCConfig->GetDefaultModel()) == false)
 		return false;
 
 	// Clear UI
@@ -962,8 +961,8 @@ bool FCPCEmu::InitForModel(ECPCModel model)
 	const FCPCConfig* pCPCConfig = GetCPCGlobalConfig();
 	InitExternalROMs(pCPCConfig, CPCEmuState.type == CPC_TYPE_6128);
 
-	// Resetting banks here for re-use.
-	// Without doing this we can run into issues
+	// Reset banks for re-use.
+	// Without doing this we can run into issues.
 	// We probably need a better way to do this.
 	for (FCodeAnalysisBank& bank : CodeAnalysis.GetBanks())
 	{
@@ -1356,7 +1355,7 @@ bool FCPCEmu::NewGameFromSnapshot(const FGameSnapshot& snaphot)
 	FCPCGameConfig* pNewConfig = CreateNewCPCGameConfigFromSnapshot(snaphot);
 	
 	// Set the preferred CPC model. The snapshot can override this.
-	pNewConfig->bCPC6128Game = LaunchModel == ECPCModel::CPC_6128;
+	pNewConfig->bCPC6128Game = GetCPCGlobalConfig()->bDefaultMachineIs6128;
 
 	if (pNewConfig != nullptr)
 	{
@@ -1383,12 +1382,14 @@ void FCPCEmu::Reset()
 	CPCEmuState.ga.rom_select = 0;
 	ui_dbg_reset(&UICPC.dbg);
 
-	FCPCGameConfig* pBasicConfig = (FCPCGameConfig*)GetGameConfigForName("AmstradBasic");
+	const bool bIs6128 = GetCPCGlobalConfig()->bDefaultMachineIs6128;
+	FCPCGameConfig* pBasicConfig = (FCPCGameConfig*)GetGameConfigForName(bIs6128 ? "AmstradBasic6128" : "AmstradBasic464");
 
 	if (pBasicConfig == nullptr)
-		pBasicConfig = CreateNewAmstradBasicConfig();
+		pBasicConfig = CreateNewAmstradBasicConfig(bIs6128);
 
-	InitBankMappings();
+	// don't think we need this? we do it in StartGame()
+	//InitBankMappings();
 	
 	StartGame(pBasicConfig, false);	// reset code analysis
 
@@ -1484,6 +1485,9 @@ void	FCPCEmu::SystemMenuAdditions(void)
 		}
 		ImGui::EndMenu();
 	}
+
+	FCPCConfig* pCPCConfig = GetCPCGlobalConfig();
+	ImGui::MenuItem("Default Model Is 6128", 0, &pCPCConfig->bDefaultMachineIs6128);
 }
 
 void	FCPCEmu::OptionsMenuAdditions(void)
@@ -1562,10 +1566,10 @@ void FCPCLaunchConfig::ParseCommandline(int argc, char** argv)
 	argIt++;	// skip exe name
 	while (argIt != argList.end())
 	{
-		if (*argIt == std::string("-128"))
+		/*if (*argIt == std::string("-128"))
 		{
 			Model = ECPCModel::CPC_6128;
-		}
+		}*/
 
 		++argIt;
 	}

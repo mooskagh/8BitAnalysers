@@ -15,10 +15,9 @@ struct FCPCGameConfig : FGameConfig
 
 	ECPCModel  GetCPCModel() const { return bCPC6128Game ? ECPCModel::CPC_6128 : ECPCModel::CPC_464; }
 
-	// todo set this from the launch model?
 	bool	bCPC6128Game = true;
 };
 
 FCPCGameConfig* CreateNewCPCGameConfigFromSnapshot(const FGameSnapshot& snapshot);
-FCPCGameConfig* CreateNewAmstradBasicConfig(void);
+FCPCGameConfig* CreateNewAmstradBasicConfig(bool bIs6128);
 bool LoadCPCGameConfigs(FCPCEmu* pUI);

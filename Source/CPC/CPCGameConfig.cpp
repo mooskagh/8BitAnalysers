@@ -37,11 +37,11 @@ FCPCGameConfig* CreateNewCPCGameConfigFromSnapshot(const FGameSnapshot& snapshot
 	return pNewConfig;
 }
 
-FCPCGameConfig* CreateNewAmstradBasicConfig(void)
+FCPCGameConfig* CreateNewAmstradBasicConfig(bool bIs6128)
 {
 	FCPCGameConfig* pNewConfig = new FCPCGameConfig;
-
-	pNewConfig->Name = "AmstradBasic";
+	pNewConfig->bCPC6128Game = bIs6128;
+	pNewConfig->Name = bIs6128 ? "AmstradBasic6128" : "AmstradBasic464";
 	pNewConfig->SnapshotFile = "";
 
 	return pNewConfig;
