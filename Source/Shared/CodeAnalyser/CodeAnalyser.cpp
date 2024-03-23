@@ -1065,9 +1065,6 @@ void FCodeAnalysisState::Init(FEmuBase* pEmu)
 	{
 		bank.Description.clear();
 		bank.ItemList.clear();
-		bank.bEverBeenMapped = false;
-		// this causes a crash in the c64 version because it maps banks before it calls CodeAnalysis.Init()
-		bank.PrimaryMappedPage = -1;
 	}
 
 	pEmulator = pEmu;

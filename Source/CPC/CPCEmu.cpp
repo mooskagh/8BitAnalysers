@@ -962,6 +962,16 @@ bool FCPCEmu::InitForModel(ECPCModel model)
 	const FCPCConfig* pCPCConfig = GetCPCGlobalConfig();
 	InitExternalROMs(pCPCConfig, CPCEmuState.type == CPC_TYPE_6128);
 
+	// Resetting banks here for re-use.
+	// Without doing this we can run into issues
+	// We probably need a better way to do this.
+	for (FCodeAnalysisBank& bank : CodeAnalysis.GetBanks())
+	{
+		bank.bEverBeenMapped = false;
+		bank.Mapping = EBankAccess::None;
+		bank.PrimaryMappedPage = -1;
+	}
+
 	// Setup initial machine memory config
 	if (model == ECPCModel::CPC_464)
 	{
@@ -974,12 +984,6 @@ bool FCPCEmu::InitForModel(ECPCModel model)
 		SetRAMBank(1, 1, EBankAccess::ReadWrite);	// 0x4000 - 0x7fff
 		SetRAMBank(2, 2, EBankAccess::ReadWrite);	// 0x8000 - 0xBfff
 		SetRAMBank(3, 3, EBankAccess::ReadWrite);	// 0xc000 - 0xffff
-
-		// We don't want these banks to show up in the Code Analysis view, so set primary mapped page to -1.
-		//CodeAnalysis.SetBankPrimaryPage(RAMBanks[4], -1);
-		//CodeAnalysis.SetBankPrimaryPage(RAMBanks[5], -1);
-		//CodeAnalysis.SetBankPrimaryPage(RAMBanks[6], -1);
-		//CodeAnalysis.SetBankPrimaryPage(RAMBanks[7], -1);
 	}
 	else
 	{
@@ -988,10 +992,12 @@ bool FCPCEmu::InitForModel(ECPCModel model)
 		CodeAnalysis.SetBankPrimaryPage(RAMBanks[2], 32);
 		CodeAnalysis.SetBankPrimaryPage(RAMBanks[3], 48);
 
-		//CodeAnalysis.SetBankPrimaryPage(RAMBanks[4], 48);
-		//CodeAnalysis.SetBankPrimaryPage(RAMBanks[5], 48);
-		//CodeAnalysis.SetBankPrimaryPage(RAMBanks[6], 48);
-		//CodeAnalysis.SetBankPrimaryPage(RAMBanks[7], 48);
+		// Set a primary mapped page so the banks appear in the code analysis view.
+		// It will get overwritten next time is gets mapped but we just need a default that is not -1.
+		CodeAnalysis.SetBankPrimaryPage(RAMBanks[4], 48);
+		CodeAnalysis.SetBankPrimaryPage(RAMBanks[5], 48);
+		CodeAnalysis.SetBankPrimaryPage(RAMBanks[6], 48);
+		CodeAnalysis.SetBankPrimaryPage(RAMBanks[7], 48);
 
 		SetRAMBank(0, 0, EBankAccess::ReadWrite);	// 0x0000 - 0x3fff
 		SetRAMBank(1, 1, EBankAccess::ReadWrite);	// 0x4000 - 0x7fff
