@@ -1487,7 +1487,18 @@ void	FCPCEmu::SystemMenuAdditions(void)
 	}
 
 	FCPCConfig* pCPCConfig = GetCPCGlobalConfig();
-	ImGui::MenuItem("Default Model Is 6128", 0, &pCPCConfig->bDefaultMachineIs6128);
+	if (ImGui::BeginMenu("Default Model"))
+	{
+		if (ImGui::MenuItem("CPC 464", 0, (pCPCConfig->bDefaultMachineIs6128 == false)))
+		{
+			pCPCConfig->bDefaultMachineIs6128 = false;
+		}
+		if (ImGui::MenuItem("CPC 6128", 0, (pCPCConfig->bDefaultMachineIs6128 == true)))
+		{
+			pCPCConfig->bDefaultMachineIs6128 = true;
+		}
+		ImGui::EndMenu();
+	}
 }
 
 void	FCPCEmu::OptionsMenuAdditions(void)
