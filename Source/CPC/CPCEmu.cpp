@@ -33,7 +33,7 @@
 
 //#define RUN_AHEAD_TO_GENERATE_SCREEN
 #ifndef NDEBUG
-//#define BANK_SWITCH_DEBUG
+#define BANK_SWITCH_DEBUG
 #endif
 
 const std::string kAppTitle = "CPC Analyser";
@@ -418,6 +418,7 @@ static const int gCPCRAMConfig[8][4] =
 
 void FCPCEmu::UpdateBankMappings()
 {
+	int16_t prevRAMBank[4] = { CurRAMBank[0], CurRAMBank[1], CurRAMBank[2], CurRAMBank[3] };
 	const uint8_t romEnable = CPCEmuState.ga.regs.config;
 	uint8_t ramPreset = 0;
 	int16_t upperRomBank = ROMBanks[EROMBank::BASIC];
@@ -475,15 +476,26 @@ void FCPCEmu::UpdateBankMappings()
 	{
 		const uint16_t r = CodeAnalysis.GetReadBankFromAddress(addr);
 		const uint16_t w = CodeAnalysis.GetWriteBankFromAddress(addr);
-		rBanks[i] = (r != w) ? CodeAnalysis.GetBank(r)->Name : "-";
-		wBanks[i] = CodeAnalysis.GetBank(w)->Name;
+		if (const FCodeAnalysisBank* pReadBank = CodeAnalysis.GetBank(r))
+			rBanks[i] = (r != w) ? pReadBank->Name : "-";
+		if (const FCodeAnalysisBank* pWriteBank = CodeAnalysis.GetBank(w))
+			wBanks[i] = pWriteBank->Name;
 	}
 	LOGINFO("Preset %d: [%x %x %x %x] ReadOnly = [%-6s, %s, %s, %-10s] Writable = [%-5s, %-5s, %-5s, %-5s]",
 		ramPreset, bankIndex0, bankIndex1, bankIndex2, bankIndex3,
 		rBanks[0].c_str(), rBanks[1].c_str(), rBanks[2].c_str(), rBanks[3].c_str(),
 		wBanks[0].c_str(), wBanks[1].c_str(), wBanks[2].c_str(), wBanks[3].c_str());
-#endif
 
+	for (int r = 0; r < 4; r++)
+	{
+		if (CurRAMBank[r] != prevRAMBank[r])
+		{
+			const FCodeAnalysisBank* pOldBank = CodeAnalysis.GetBank(prevRAMBank[r]);
+			const FCodeAnalysisBank* pNewBank = CodeAnalysis.GetBank(CurRAMBank[r]);
+			LOGINFO("Slot %d changed. %s switched OUT. %s switched IN", r, pOldBank ? pOldBank->Name.c_str() : "unknown", pNewBank ? pNewBank->Name.c_str() : "unknown");
+		}
+	}
+#endif
 	// could we check our banks match the chips ones?
 	// it would be a great sanity test
 	
