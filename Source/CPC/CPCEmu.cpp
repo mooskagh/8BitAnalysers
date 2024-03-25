@@ -101,7 +101,7 @@ public:
 			if (pCPCEmu->Screen.GetScreenAddressCoords(addr.Address, xp, yp))
 				sprintf(DescStr, "Screen: %d,%d", xp, yp);
 			else
-				sprintf(DescStr, "Screen: ?,?");
+				sprintf(DescStr, "Screen: ?,? (%s)", NumStr(addr.Address));
 			return DescStr;
 		}
 		return nullptr;
@@ -1133,10 +1133,10 @@ bool FCPCEmu::StartGame(FGameConfig* pGameConfig, bool bLoadGameData)
 		}
 		
 		// not sure this makes sense to be here now we're not loading the game here any more?
-		/*if (!InitBankMappings())
+		if (!InitBankMappings())
 		{
 			return false;
-		}*/
+		}
 		
 		if (FileExists(analysisJsonFName.c_str()))
 		{
@@ -1175,6 +1175,9 @@ bool FCPCEmu::StartGame(FGameConfig* pGameConfig, bool bLoadGameData)
 	ReAnalyseCode(CodeAnalysis);
 	GenerateGlobalInfo(CodeAnalysis);
 	CodeAnalysis.SetAddressRangeDirty();
+
+	CodeAnalysis.MemoryAnalyser.SetScreenMemoryArea(Screen.GetScreenAddrStart(), Screen.GetScreenAddrEnd());
+	pScreenMemDescGenerator->UpdateScreenMemoryLocation();
 
 #ifdef RUN_AHEAD_TO_GENERATE_SCREEN
 	// Run the cpc for long enough to generate a frame buffer, otherwise the user will be staring at a black screen.
