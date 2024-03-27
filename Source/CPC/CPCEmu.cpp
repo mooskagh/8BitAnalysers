@@ -416,6 +416,36 @@ static const int gCPCRAMConfig[8][4] =
 	 { 0, 7, 2, 3 }  // 7
 };
 
+void FixupBankAddressRefs(FCodeAnalysisState& state, FCodeAnalysisBank* pBank)
+{
+	const uint16_t startAddr = pBank->GetMappedAddress();
+	const uint16_t endAddr = startAddr + pBank->GetSizeBytes();
+
+	uint16_t addr = startAddr;
+	while (addr < endAddr)
+	{
+		FCodeInfo* pCodeInfo = state.GetCodeInfoForPhysicalAddress(addr);
+		if (pCodeInfo)
+		{
+			if (pCodeInfo->OperandAddress.IsValid())
+			{
+				//LOGINFO("%x Code found with operand address %d %x", addr, pCodeInfo->OperandAddress.BankId, pCodeInfo->OperandAddress.Address);
+				// todo: fix this up
+			}
+		}
+
+		FDataInfo* pDataInfo = state.GetWriteDataInfoForAddress(addr);
+		if (pDataInfo->DataType == EDataType::InstructionOperand)
+		{
+			//LOGINFO("%x Operand found with instruction address %d %x", addr, pDataInfo->InstructionAddress.BankId, pDataInfo->InstructionAddress.Address);
+			assert(pDataInfo->InstructionAddress.BankId == pBank->Id);
+			const uint16_t bankOffset = (pDataInfo->InstructionAddress.Address & pBank->SizeMask);
+			pDataInfo->InstructionAddress.Address = startAddr + bankOffset;
+		}
+		addr++;
+	}
+}
+
 void FCPCEmu::UpdateBankMappings()
 {
 	int16_t prevRAMBank[4] = { CurRAMBank[0], CurRAMBank[1], CurRAMBank[2], CurRAMBank[3] };
@@ -486,20 +516,30 @@ void FCPCEmu::UpdateBankMappings()
 		rBanks[0].c_str(), rBanks[1].c_str(), rBanks[2].c_str(), rBanks[3].c_str(),
 		wBanks[0].c_str(), wBanks[1].c_str(), wBanks[2].c_str(), wBanks[3].c_str());
 
+#endif
+
 	for (int r = 0; r < 4; r++)
 	{
 		if (CurRAMBank[r] != prevRAMBank[r])
 		{
-			const FCodeAnalysisBank* pOldBank = CodeAnalysis.GetBank(prevRAMBank[r]);
-			const FCodeAnalysisBank* pNewBank = CodeAnalysis.GetBank(CurRAMBank[r]);
-			LOGINFO("Slot %d changed. %s switched OUT. %s switched IN", r, pOldBank ? pOldBank->Name.c_str() : "unknown", pNewBank ? pNewBank->Name.c_str() : "unknown");
+			FCodeAnalysisBank* pOldBank = CodeAnalysis.GetBank(prevRAMBank[r]);
+			FCodeAnalysisBank* pNewBank = CodeAnalysis.GetBank(CurRAMBank[r]);
+			if (pNewBank)
+			{
+				FixupBankAddressRefs(CodeAnalysis, pNewBank);
+
+#ifdef BANK_SWITCH_DEBUG
+				LOGINFO("Slot %d changed. %s switched OUT. %s switched IN", r, pOldBank ? pOldBank->Name.c_str() : "unknown", pNewBank->Name.c_str());
+#endif
+			}
 		}
 	}
-#endif
+
 	// could we check our banks match the chips ones?
 	// it would be a great sanity test
 	
 	// sam. Do I need to do this here?
+	// Setting a bank as dirty will force it to update it's item list.
 	CodeAnalysis.SetAllBanksDirty();
 }
 
@@ -998,6 +1038,7 @@ bool FCPCEmu::InitForModel(ECPCModel model)
 	}
 	else
 	{
+		
 		CodeAnalysis.SetBankPrimaryPage(RAMBanks[0], 0);
 		CodeAnalysis.SetBankPrimaryPage(RAMBanks[1], 16);
 		CodeAnalysis.SetBankPrimaryPage(RAMBanks[2], 32);
@@ -1014,6 +1055,7 @@ bool FCPCEmu::InitForModel(ECPCModel model)
 		SetRAMBank(1, 1, EBankAccess::ReadWrite);	// 0x4000 - 0x7fff
 		SetRAMBank(2, 2, EBankAccess::ReadWrite);	// 0x8000 - 0xBfff
 		SetRAMBank(3, 3, EBankAccess::ReadWrite);	// 0xc000 - 0xffff
+		
 	}
 
 	if (bExternalROMSupport)
