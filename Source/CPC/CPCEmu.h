@@ -204,10 +204,7 @@ public:
 	const FGamesList& GetGamesList() const { return GamesList; }
 
 private:
-	//FGamesList		GamesList;
 	FCPCGameLoader	GameLoader;
-
-	//std::vector<FViewerBase*>	Viewers;
 
 	FScreenPixMemDescGenerator* pScreenMemDescGenerator = 0;
 

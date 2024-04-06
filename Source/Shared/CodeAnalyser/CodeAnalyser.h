@@ -180,6 +180,8 @@ struct FCodeAnalysisViewState
 		return false;
 	}
 	
+	void FixupAddressRefs(FCodeAnalysisState& state);
+	
 	bool			Enabled = false;
 	bool			TrackPCFrame = false;
 	FAddressRef		HoverAddress;			// address being hovered over
@@ -748,3 +750,6 @@ void BatchFormatData(FCodeAnalysisState& state, const FBatchDataFormattingOption
 FMachineState* AllocateMachineState(FCodeAnalysisState& state);
 void FreeMachineStates(FCodeAnalysisState& state);
 void CaptureMachineState(FMachineState* pMachineState, ICPUInterface* pCPUInterface);
+
+void FixupAddressRef(FCodeAnalysisState& state, FAddressRef& addr);
+void FixupAddressRefList(FCodeAnalysisState& state, std::vector<FAddressRef>& addrList);

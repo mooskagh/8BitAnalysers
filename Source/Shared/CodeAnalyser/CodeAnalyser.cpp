@@ -1329,3 +1329,20 @@ void CaptureMachineState(FMachineState* pMachineState, ICPUInterface* pCPUInterf
     break;
 	}
 }
+
+void FixupAddressRef(FCodeAnalysisState& state, FAddressRef& addr)
+{
+	if (FCodeAnalysisBank* pBank = state.GetBank(addr.BankId))
+	{
+		const uint16_t bankOffset = (addr.Address & pBank->SizeMask);
+		addr.Address = pBank->GetMappedAddress() + bankOffset;
+	}
+}
+
+void FixupAddressRefList(FCodeAnalysisState& state, std::vector<FAddressRef>& addrList)
+{
+	for (FAddressRef& addr : addrList)
+	{
+		FixupAddressRef(state, addr);
+	}
+}

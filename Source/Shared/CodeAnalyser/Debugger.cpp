@@ -1398,3 +1398,21 @@ void FDebugger::DrawUI(void)
 		ImGui::EndTabBar();
 	}
 }
+
+void FDebugger::FixupAddresRefs(void)
+{
+	for (auto& watch : Watches)
+	{
+		FixupAddressRef(*pCodeAnalysis, watch);
+	}
+
+	for (int i = 0; i < Breakpoints.size(); i++)
+	{
+		FixupAddressRef(*pCodeAnalysis, Breakpoints[i].Address);
+	}
+
+	FixupAddressRefList(*pCodeAnalysis, FrameTrace);
+	FixupAddressRefList(*pCodeAnalysis, StackSetLocations);
+
+	// sam todo: events, callstack, stack
+}

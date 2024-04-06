@@ -53,6 +53,18 @@ bool FCodeAnalysisViewState::GoToPreviousAddress()
 	return true;
 }
 
+void FCodeAnalysisViewState::FixupAddressRefs(FCodeAnalysisState& state)
+{
+	FixupAddressRef(state, HoverAddress);
+	FixupAddressRef(state, HighlightAddress);
+	FixupAddressRef(state, GoToAddressRef);
+	for (int i = 0; i < kNoBookmarks; i++)
+	{
+		FixupAddressRef(state, Bookmarks[i]);
+	}
+	FixupAddressRefList(state, AddressStack);
+}
+
 int GetItemIndexForAddress(const FCodeAnalysisState &state, FAddressRef addr)
 {
 	const FCodeAnalysisBank* pBank = state.GetBank(addr.BankId);

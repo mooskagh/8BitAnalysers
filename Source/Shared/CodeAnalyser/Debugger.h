@@ -178,6 +178,8 @@ public:
 	void	DrawBreakpoints(void);
 	void	DrawEvents(void);
 	void	DrawUI(void);
+
+	void FixupAddresRefs(void);
 private:
 	int		GetFrameTraceItemIndex(FAddressRef address);
 

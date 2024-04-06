@@ -35,6 +35,11 @@
 #ifndef NDEBUG
 #define BANK_SWITCH_DEBUG
 #endif
+#ifdef BANK_SWITCH_DEBUG
+#define BANK_LOG(...)  { LOGINFO("[BNK] " __VA_ARGS__); }
+#else
+#define BANK_LOG(...)
+#endif
 
 const std::string kAppTitle = "CPC Analyser";
 const char* kGlobalConfigFilename = "GlobalConfig.json";
@@ -416,38 +421,63 @@ static const int gCPCRAMConfig[8][4] =
 	 { 0, 7, 2, 3 }  // 7
 };
 
-void FixupBankAddressRefs(FCodeAnalysisState& state, FCodeAnalysisBank* pBank)
+// Fixup any address refs for a bank's address range.
+// Use this after a bank changes address range.
+void FixupAddressRefsForBank(FCodeAnalysisState& state, const FCodeAnalysisBank& bank)
 {
-	const uint16_t startAddr = pBank->GetMappedAddress();
-	const uint16_t endAddr = startAddr + pBank->GetSizeBytes();
+	const uint16_t startAddr = bank.GetMappedAddress();
+	const uint16_t endAddr = startAddr + bank.GetSizeBytes() - 1;
 
 	uint16_t addr = startAddr;
-	while (addr < endAddr)
+	while (addr <= endAddr)
 	{
 		FCodeInfo* pCodeInfo = state.GetCodeInfoForPhysicalAddress(addr);
 		if (pCodeInfo)
 		{
 			if (pCodeInfo->OperandAddress.IsValid())
 			{
-				//LOGINFO("%x Code found with operand address %d %x", addr, pCodeInfo->OperandAddress.BankId, pCodeInfo->OperandAddress.Address);
-				// todo: fix this up
+				//if (!bank.AddressValid(pCodeInfo->OperandAddress.Address))
+				//	LOGINFO("%x Code found with operand address %d %x", addr, pCodeInfo->OperandAddress.BankId, pCodeInfo->OperandAddress.Address);
+				FixupAddressRef(state, pCodeInfo->OperandAddress);
 			}
 		}
 
 		FDataInfo* pDataInfo = state.GetWriteDataInfoForAddress(addr);
 		if (pDataInfo->DataType == EDataType::InstructionOperand)
 		{
+			//if (!bank.AddressValid(pDataInfo->InstructionAddress.Address))
 			//LOGINFO("%x Operand found with instruction address %d %x", addr, pDataInfo->InstructionAddress.BankId, pDataInfo->InstructionAddress.Address);
-			assert(pDataInfo->InstructionAddress.BankId == pBank->Id);
-			const uint16_t bankOffset = (pDataInfo->InstructionAddress.Address & pBank->SizeMask);
-			pDataInfo->InstructionAddress.Address = startAddr + bankOffset;
+			assert(pDataInfo->InstructionAddress.BankId == bank.Id);
+			FixupAddressRef(state, pDataInfo->InstructionAddress);
 		}
 		addr++;
 	}
 }
 
+// Fixup address refs tool-wide.
+void FixupAddressRefs(FCodeAnalysisState& state)
+{
+	state.Debugger.FixupAddresRefs();
+	state.MemoryAnalyser.FixupAddressRefs();
+
+	for (int i = 0; i < FCodeAnalysisState::kNoViewStates; i++)
+	{
+		state.ViewState[i].FixupAddressRefs(state);
+	}
+}
+
 void FCPCEmu::UpdateBankMappings()
 {
+	int prevMappedPage[kNoRAMBanks];
+	if (CPCEmuState.type == CPC_TYPE_6128)
+	{
+		for (int b = 0; b < kNoRAMBanks; b++)
+		{
+			const FCodeAnalysisBank* pBank = CodeAnalysis.GetBank(RAMBanks[b]);
+			prevMappedPage[b] = pBank ? pBank->PrimaryMappedPage : -1;
+		}
+	}
+
 	int16_t prevRAMBank[4] = { CurRAMBank[0], CurRAMBank[1], CurRAMBank[2], CurRAMBank[3] };
 	const uint8_t romEnable = CPCEmuState.ga.regs.config;
 	uint8_t ramPreset = 0;
@@ -460,31 +490,28 @@ void FCPCEmu::UpdateBankMappings()
 			upperRomBank = ROMBanks[EROMBank::AMSDOS];
 	}
 
-	const int bankIndex0 = gCPCRAMConfig[ramPreset][0];
-	const int bankIndex1 = gCPCRAMConfig[ramPreset][1];
-	const int bankIndex2 = gCPCRAMConfig[ramPreset][2];
-	const int bankIndex3 = gCPCRAMConfig[ramPreset][3];
+	const int bankIndex[4] = { gCPCRAMConfig[ramPreset][0], gCPCRAMConfig[ramPreset][1], gCPCRAMConfig[ramPreset][2], gCPCRAMConfig[ramPreset][3] };
 
 	// 0x0000 - 0x3fff
 	if (romEnable & AM40010_CONFIG_LROMEN)
 	{
-		SetRAMBank(0, bankIndex0, EBankAccess::ReadWrite);	
+		SetRAMBank(0, bankIndex[0], EBankAccess::ReadWrite);	
 	}
 	else
 	{
 		// ROM now shares the same address space as RAM.
 		// Reads go to ROM and writes go to RAM. RAM behind ROM.
 		CodeAnalysis.MapBank(ROMBanks[EROMBank::OS], 0, EBankAccess::Read);
-		SetRAMBank(0, bankIndex0, EBankAccess::Write);
+		SetRAMBank(0, bankIndex[0], EBankAccess::Write);
 	}
 
-	SetRAMBank(1, bankIndex1, EBankAccess::ReadWrite);	// 0x4000 - 0x7fff
-	SetRAMBank(2, bankIndex2, EBankAccess::ReadWrite);	// 0x8000 - 0xbfff
+	SetRAMBank(1, bankIndex[1], EBankAccess::ReadWrite);	// 0x4000 - 0x7fff
+	SetRAMBank(2, bankIndex[2], EBankAccess::ReadWrite);	// 0x8000 - 0xbfff
 
 	// 0xc000 - 0xffff
 	if (romEnable & AM40010_CONFIG_HROMEN)
 	{
-		SetRAMBank(3, bankIndex3, EBankAccess::ReadWrite);
+		SetRAMBank(3, bankIndex[3], EBankAccess::ReadWrite);
 	}
 	else
 	{
@@ -496,7 +523,7 @@ void FCPCEmu::UpdateBankMappings()
 		{
 			CodeAnalysis.MapBank(upperRomBank, 48, EBankAccess::Read);
 		}
-		SetRAMBank(3, bankIndex3, EBankAccess::Write);	
+		SetRAMBank(3, bankIndex[3], EBankAccess::Write);	
 	}
 
 #ifdef BANK_SWITCH_DEBUG
@@ -512,7 +539,7 @@ void FCPCEmu::UpdateBankMappings()
 			wBanks[i] = pWriteBank->Name;
 	}
 	LOGINFO("Preset %d: [%x %x %x %x] ReadOnly = [%-6s, %s, %s, %-10s] Writable = [%-5s, %-5s, %-5s, %-5s]",
-		ramPreset, bankIndex0, bankIndex1, bankIndex2, bankIndex3,
+		ramPreset, bankIndex[0], bankIndex[1], bankIndex[2], bankIndex[3],
 		rBanks[0].c_str(), rBanks[1].c_str(), rBanks[2].c_str(), rBanks[3].c_str(),
 		wBanks[0].c_str(), wBanks[1].c_str(), wBanks[2].c_str(), wBanks[3].c_str());
 
@@ -522,15 +549,22 @@ void FCPCEmu::UpdateBankMappings()
 	{
 		if (CurRAMBank[r] != prevRAMBank[r])
 		{
-			FCodeAnalysisBank* pOldBank = CodeAnalysis.GetBank(prevRAMBank[r]);
-			FCodeAnalysisBank* pNewBank = CodeAnalysis.GetBank(CurRAMBank[r]);
+			const FCodeAnalysisBank* const pOldBank = CodeAnalysis.GetBank(prevRAMBank[r]);
+			const FCodeAnalysisBank* const pNewBank = CodeAnalysis.GetBank(CurRAMBank[r]);
 			if (pNewBank)
 			{
-				FixupBankAddressRefs(CodeAnalysis, pNewBank);
-
-#ifdef BANK_SWITCH_DEBUG
-				LOGINFO("Slot %d changed. %s switched OUT. %s switched IN", r, pOldBank ? pOldBank->Name.c_str() : "unknown", pNewBank->Name.c_str());
-#endif
+				BANK_LOG("Slot %d changed. '%s' switched OUT. '%s' switched IN", r, pOldBank ? pOldBank->Name.c_str() : "unknown", pNewBank->Name.c_str());
+				
+				if (pNewBank->PrimaryMappedPage != prevMappedPage[bankIndex[r]])
+				{
+					// Fixup any address refs for the bank being switched in.
+					FixupAddressRefsForBank(CodeAnalysis, *pNewBank);
+				
+					// Fixup tool address refs.
+					FixupAddressRefs(CodeAnalysis);
+					
+					BANK_LOG("Bank '%s' changed mapped address: 0x%x -> 0x%x", pNewBank->Name.c_str(), prevMappedPage[bankIndex[r]] * FCodeAnalysisPage::kPageSize, pNewBank->GetMappedAddress());
+				}
 			}
 		}
 	}
@@ -538,13 +572,12 @@ void FCPCEmu::UpdateBankMappings()
 	// could we check our banks match the chips ones?
 	// it would be a great sanity test
 	
-	// sam. Do I need to do this here?
 	// Setting a bank as dirty will force it to update it's item list.
 	CodeAnalysis.SetAllBanksDirty();
 }
 
 // Slot is physical 16K memory region (0-3) 
-// Bank is a 16K CPC RAM bank (0-7)
+// bankNo is a 16K CPC RAM bank (0-7)
 void FCPCEmu::SetRAMBank(int slot, int bankNo, EBankAccess access)
 {
 	const int16_t bankId = RAMBanks[bankNo];
