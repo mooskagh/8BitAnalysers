@@ -251,10 +251,9 @@ uint64_t FCPCEmu::Z80Tick(int num, uint64_t pins)
 	}
 
 	// sam. need to do this somewhere better. like when the screen ram address gets set 
-	CodeAnalysis.MemoryAnalyser.SetScreenMemoryArea(Screen.GetScreenAddrStart(), Screen.GetScreenAddrEnd());
-	pScreenMemDescGenerator->UpdateScreenMemoryLocation();
+	//CodeAnalysis.MemoryAnalyser.SetScreenMemoryArea(Screen.GetScreenAddrStart(), Screen.GetScreenAddrEnd());
+	//pScreenMemDescGenerator->UpdateScreenMemoryLocation();
 
-	//debugger.CPUTick(pins);
 	CodeAnalysis.OnCPUTick(pins);
 
 	const am40010_t& ga = CPCEmuState.ga;
@@ -1683,4 +1682,10 @@ void FCPCEmu::UpdatePalette()
 	{
 		palette.SetColour(i, CPCEmuState.ga.hw_colors[CPCEmuState.ga.regs.ink[i]]);
 	}
+}
+
+void FCPCEmu::OnScreenRAMAddressChanged()
+{
+	CodeAnalysis.MemoryAnalyser.SetScreenMemoryArea(Screen.GetScreenAddrStart(), Screen.GetScreenAddrEnd());
+	pScreenMemDescGenerator->UpdateScreenMemoryLocation();
 }

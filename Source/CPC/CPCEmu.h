@@ -152,6 +152,8 @@ public:
 	void				UpdatePalette();
 
 
+	void				OnScreenRAMAddressChanged();
+	
 	const FCPCConfig* GetCPCGlobalConfig() const { return (const FCPCConfig*)pGlobalConfig; }
 	FCPCConfig* GetCPCGlobalConfig() { return (FCPCConfig*)pGlobalConfig; }
 
