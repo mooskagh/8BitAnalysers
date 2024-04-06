@@ -55,14 +55,26 @@ bool FCodeAnalysisViewState::GoToPreviousAddress()
 
 void FCodeAnalysisViewState::FixupAddressRefs(FCodeAnalysisState& state)
 {
+	FixupAddressRef(state, CursorItem.AddressRef);
 	FixupAddressRef(state, HoverAddress);
 	FixupAddressRef(state, HighlightAddress);
 	FixupAddressRef(state, GoToAddressRef);
+	FixupAddressRefList(state, AddressStack);
+
+	for (FCodeAnalysisItem& item : FilteredGlobalDataItems)
+		FixupAddressRef(state, item.AddressRef);
+	for (FCodeAnalysisItem& item : FilteredGlobalFunctions)
+		FixupAddressRef(state, item.AddressRef);
+
 	for (int i = 0; i < kNoBookmarks; i++)
 	{
 		FixupAddressRef(state, Bookmarks[i]);
 	}
-	FixupAddressRefList(state, AddressStack);
+	
+	for (FAddressCoord& coord : AddressCoords)
+	{
+		FixupAddressRef(state, coord.Address);
+	}
 }
 
 int GetItemIndexForAddress(const FCodeAnalysisState &state, FAddressRef addr)

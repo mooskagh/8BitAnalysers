@@ -269,7 +269,6 @@ struct FLabelInfo : FItem
 	bool					Edited = false;	// has the name been changed since generation?
 	ELabelType				LabelType = ELabelType::Data;
 	
-	// will the references here need to change?
 	FItemReferenceTracker	References;
 	//std::map<uint16_t, int>	References;
 private:
@@ -292,7 +291,6 @@ struct FCodeInfo : FItem
 	int				StructId = -1;
 	std::string		Text;				// Disassembly text
 
-	// recalculate this? 
 	FAddressRef		OperandAddress;	// optional operand address
 	int				FrameLastExecuted = -1;
 	int				ExecutionCount = 0;
@@ -380,7 +378,6 @@ struct FDataInfo : FItem
 	// Address references
 	union
 	{
-		// recalculate these?
 		FAddressRef	CharSetAddress;	// address of character set
 		FAddressRef	GraphicsSetRef;	// for bitmap data
 		FAddressRef	InstructionAddress;	// for operand data types

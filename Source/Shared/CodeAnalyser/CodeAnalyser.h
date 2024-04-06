@@ -467,6 +467,8 @@ public:
 	//bool	EnsureUniqueLabelName(std::string& lableName);
 	//bool	RemoveLabelName(const std::string& labelName);	// for changing label names
 
+	void FixupAddressRefs();
+
 public:
 
 	bool					bRegisterDataAccesses = true;

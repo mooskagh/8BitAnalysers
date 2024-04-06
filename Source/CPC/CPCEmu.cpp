@@ -456,13 +456,7 @@ void FixupAddressRefsForBank(FCodeAnalysisState& state, const FCodeAnalysisBank&
 // Fixup address refs tool-wide.
 void FixupAddressRefs(FCodeAnalysisState& state)
 {
-	state.Debugger.FixupAddresRefs();
-	state.MemoryAnalyser.FixupAddressRefs();
-
-	for (int i = 0; i < FCodeAnalysisState::kNoViewStates; i++)
-	{
-		state.ViewState[i].FixupAddressRefs(state);
-	}
+	state.FixupAddressRefs();
 }
 
 void FCPCEmu::UpdateBankMappings()
@@ -571,7 +565,8 @@ void FCPCEmu::UpdateBankMappings()
 	// could we check our banks match the chips ones?
 	// it would be a great sanity test
 	
-	// Setting a bank as dirty will force it to update it's item list.
+	// Force all banks to update their item list.
+	// Also force the code analysis state to update it's ItemList too
 	CodeAnalysis.SetAllBanksDirty();
 }
 

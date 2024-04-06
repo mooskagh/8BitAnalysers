@@ -1151,6 +1151,17 @@ void FCodeAnalysisState::OnCPUTick(uint64_t pins)
 	Debugger.CPUTick(pins);
 }
 
+void FCodeAnalysisState::FixupAddressRefs()
+{
+	FixupAddressRef(*this, CopiedAddress);
+	Debugger.FixupAddresRefs();
+	MemoryAnalyser.FixupAddressRefs();
+	for (int i = 0; i < FCodeAnalysisState::kNoViewStates; i++)
+	{
+		ViewState[i].FixupAddressRefs(*this);
+	}
+}
+
 void SetItemCode(FCodeAnalysisState &state, FAddressRef address)
 {
 	DoCommand(state, new FSetItemCodeCommand(address));
