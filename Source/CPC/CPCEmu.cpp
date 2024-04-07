@@ -420,43 +420,66 @@ static const int gCPCRAMConfig[8][4] =
 	 { 0, 7, 2, 3 }  // 7
 };
 
-// Fixup any address refs for a bank's address range.
-// Use this after a bank changes address range.
-void FixupAddressRefsForBank(FCodeAnalysisState& state, const FCodeAnalysisBank& bank)
+void FixupDataInfoAddressRefs(FCodeAnalysisState& state, FDataInfo* pDataInfo)
 {
-	const uint16_t startAddr = bank.GetMappedAddress();
-	const uint16_t endAddr = startAddr + bank.GetSizeBytes() - 1;
-
-	uint16_t addr = startAddr;
-	while (addr <= endAddr)
+	if (pDataInfo->InstructionAddress.IsValid())
 	{
-		FCodeInfo* pCodeInfo = state.GetCodeInfoForPhysicalAddress(addr);
-		if (pCodeInfo)
-		{
-			if (pCodeInfo->OperandAddress.IsValid())
-			{
-				//if (!bank.AddressValid(pCodeInfo->OperandAddress.Address))
-				//	LOGINFO("%x Code found with operand address %d %x", addr, pCodeInfo->OperandAddress.BankId, pCodeInfo->OperandAddress.Address);
-				FixupAddressRef(state, pCodeInfo->OperandAddress);
-			}
-		}
-
-		FDataInfo* pDataInfo = state.GetWriteDataInfoForAddress(addr);
-		if (pDataInfo->DataType == EDataType::InstructionOperand)
-		{
-			//if (!bank.AddressValid(pDataInfo->InstructionAddress.Address))
-			//LOGINFO("%x Operand found with instruction address %d %x", addr, pDataInfo->InstructionAddress.BankId, pDataInfo->InstructionAddress.Address);
-			assert(pDataInfo->InstructionAddress.BankId == bank.Id);
-			FixupAddressRef(state, pDataInfo->InstructionAddress);
-		}
-		addr++;
+		// Because this is a union, it will also fixup GraphicsSetRef and CharSetAddress
+		FixupAddressRef(state, pDataInfo->InstructionAddress);
 	}
+	if (pDataInfo->LastWriter.IsValid())
+	{
+		FixupAddressRef(state, pDataInfo->LastWriter);
+	}
+	FixupAddressRefList(state, pDataInfo->Reads.GetReferences());
+	FixupAddressRefList(state, pDataInfo->Writes.GetReferences());
+}
+
+void FixupCodeInfoAddressRefs(FCodeAnalysisState& state, FCodeInfo* pCodeInfo)
+{
+	if (pCodeInfo->OperandAddress.IsValid())
+	{
+		FixupAddressRef(state, pCodeInfo->OperandAddress);
+	}
+	FixupAddressRefList(state, pCodeInfo->Reads.GetReferences());
+	FixupAddressRefList(state, pCodeInfo->Writes.GetReferences());
 }
 
 // Fixup address refs tool-wide.
-void FixupAddressRefs(FCodeAnalysisState& state)
+void FCPCEmu::FixupAddressRefs()
 {
-	state.FixupAddressRefs();
+	CodeAnalysis.FixupAddressRefs();
+
+	if (pActiveGame != nullptr)
+	{
+		if (FGameConfig* pGameConfig = pActiveGame->pConfig)
+		{
+			for (int i = 0; i < FCodeAnalysisState::kNoViewStates; i++)
+			{
+				FixupAddressRef(CodeAnalysis, pGameConfig->ViewConfigs[i].ViewAddress);
+			}
+		}
+	}
+
+	int addr = 0;
+	while (addr <= 0xffff)
+	{
+		FCodeInfo* pCodeInfo = CodeAnalysis.GetCodeInfoForPhysicalAddress(addr);
+		if (pCodeInfo)
+		{
+			FixupCodeInfoAddressRefs(CodeAnalysis, pCodeInfo);
+		}
+
+		FDataInfo* pWriteData = CodeAnalysis.GetWriteDataInfoForAddress(addr);
+		FixupDataInfoAddressRefs(CodeAnalysis, pWriteData);
+		FDataInfo* pReadData = CodeAnalysis.GetReadDataInfoForAddress(addr);
+		if (pReadData != pWriteData)
+		{
+			// If we have RAM behind ROM then fixup the ROM too
+			FixupDataInfoAddressRefs(CodeAnalysis, pReadData);
+		}
+		addr++;
+	}
 }
 
 void FCPCEmu::UpdateBankMappings()
@@ -550,11 +573,8 @@ void FCPCEmu::UpdateBankMappings()
 				
 				if (pNewBank->PrimaryMappedPage != prevMappedPage[bankIndex[r]])
 				{
-					// Fixup any address refs for the bank being switched in.
-					FixupAddressRefsForBank(CodeAnalysis, *pNewBank);
-				
 					// Fixup tool address refs.
-					FixupAddressRefs(CodeAnalysis);
+					FixupAddressRefs();
 					
 					BANK_LOG("Bank '%s' changed mapped address: 0x%x -> 0x%x", pNewBank->Name.c_str(), prevMappedPage[bankIndex[r]] * FCodeAnalysisPage::kPageSize, pNewBank->GetMappedAddress());
 				}
@@ -927,18 +947,6 @@ bool FCPCEmu::Init(const FEmulatorLaunchConfig& launchConfig)
 		desc.dbg_texture.create_cb = gfx_create_texture;
 		desc.dbg_texture.update_cb = gfx_update_texture;
 		desc.dbg_texture.destroy_cb = gfx_destroy_texture;
-
-		/*desc.dbg_keys.stop.keycode = ImGui::GetKeyIndex(ImGuiKey_Space);
-		desc.dbg_keys.stop.name = "F5";
-		desc.dbg_keys.cont.keycode = ImGui::GetKeyIndex(ImGuiKey_F5);
-		desc.dbg_keys.cont.name = "F5";
-		desc.dbg_keys.step_over.keycode = ImGui::GetKeyIndex(ImGuiKey_F6);
-		desc.dbg_keys.step_over.name = "F6";
-		desc.dbg_keys.step_into.keycode = ImGui::GetKeyIndex(ImGuiKey_F7);
-		desc.dbg_keys.step_into.name = "F7";
-		desc.dbg_keys.toggle_breakpoint.keycode = ImGui::GetKeyIndex(ImGuiKey_F9);
-		desc.dbg_keys.toggle_breakpoint.name = "F9";*/
-
 		desc.snapshot.load_cb = UISnapshotLoadCB;
 		desc.snapshot.save_cb = UISnapshotSaveCB;
 
@@ -1053,6 +1061,9 @@ bool FCPCEmu::InitForModel(ECPCModel model)
 	// Setup initial machine memory config
 	if (model == ECPCModel::CPC_464)
 	{
+		CodeAnalysis.SetBankPrimaryPage(ROMBanks[EROMBank::OS], 0);
+		CodeAnalysis.SetBankPrimaryPage(ROMBanks[EROMBank::BASIC], 48);
+
 		CodeAnalysis.SetBankPrimaryPage(RAMBanks[0], 0);
 		CodeAnalysis.SetBankPrimaryPage(RAMBanks[1], 16);
 		CodeAnalysis.SetBankPrimaryPage(RAMBanks[2], 32);
@@ -1065,14 +1076,17 @@ bool FCPCEmu::InitForModel(ECPCModel model)
 	}
 	else
 	{
-		
+		CodeAnalysis.SetBankPrimaryPage(ROMBanks[EROMBank::OS], 0);
+		CodeAnalysis.SetBankPrimaryPage(ROMBanks[EROMBank::BASIC], 48);
+		CodeAnalysis.SetBankPrimaryPage(ROMBanks[EROMBank::AMSDOS], 48);
+
 		CodeAnalysis.SetBankPrimaryPage(RAMBanks[0], 0);
 		CodeAnalysis.SetBankPrimaryPage(RAMBanks[1], 16);
 		CodeAnalysis.SetBankPrimaryPage(RAMBanks[2], 32);
 		CodeAnalysis.SetBankPrimaryPage(RAMBanks[3], 48);
 
 		// Set a primary mapped page so the banks appear in the code analysis view.
-		// It will get overwritten next time is gets mapped but we just need a default that is not -1.
+		// It could get overwritten next time is gets mapped but we just need a default that is not -1.
 		CodeAnalysis.SetBankPrimaryPage(RAMBanks[4], 48);
 		CodeAnalysis.SetBankPrimaryPage(RAMBanks[5], 48);
 		CodeAnalysis.SetBankPrimaryPage(RAMBanks[6], 48);

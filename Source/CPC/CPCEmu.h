@@ -150,10 +150,9 @@ public:
 	void				SetRAMBank(int slot, int bankNo, EBankAccess access);
 
 	void				UpdatePalette();
-
-
 	void				OnScreenRAMAddressChanged();
-	
+	void				FixupAddressRefs();
+
 	const FCPCConfig* GetCPCGlobalConfig() const { return (const FCPCConfig*)pGlobalConfig; }
 	FCPCConfig* GetCPCGlobalConfig() { return (FCPCConfig*)pGlobalConfig; }
 
