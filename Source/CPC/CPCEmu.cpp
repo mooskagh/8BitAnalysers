@@ -574,6 +574,7 @@ void FCPCEmu::UpdateBankMappings()
 
 #endif
 
+	bool bFixupNeeded = false;
 	for (int r = 0; r < 4; r++)
 	{
 		if (CurRAMBank[r] != prevRAMBank[r])
@@ -586,13 +587,18 @@ void FCPCEmu::UpdateBankMappings()
 				
 				if (pNewBank->PrimaryMappedPage != prevMappedPage[bankIndex[r]])
 				{
-					// Fixup tool address refs.
-					FixupAddressRefs();
-					
+					bFixupNeeded = true;
+
 					BANK_LOG("Bank '%s' changed mapped address: 0x%x -> 0x%x", pNewBank->Name.c_str(), prevMappedPage[bankIndex[r]] * FCodeAnalysisPage::kPageSize, pNewBank->GetMappedAddress());
 				}
 			}
 		}
+	}
+
+	if (bFixupNeeded)
+	{
+		// Fixup tool address refs.
+		FixupAddressRefs();
 	}
 
 	// could we check our banks match the chips ones?
