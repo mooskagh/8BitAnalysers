@@ -461,23 +461,36 @@ void FCPCEmu::FixupAddressRefs()
 		}
 	}
 
+	// Go through the entire physical address range to fix up labels, code and data items.
 	int addr = 0;
 	while (addr <= 0xffff)
 	{
-		FCodeInfo* pCodeInfo = CodeAnalysis.GetCodeInfoForPhysicalAddress(addr);
-		if (pCodeInfo)
-		{
-			FixupCodeInfoAddressRefs(CodeAnalysis, pCodeInfo);
-		}
+		const FAddressRef wAddressRef(CodeAnalysis.GetWriteBankFromAddress(addr), addr);
+		const FAddressRef rAddressRef(CodeAnalysis.GetReadBankFromAddress(addr), addr);
 
-		FDataInfo* pWriteData = CodeAnalysis.GetWriteDataInfoForAddress(addr);
-		FixupDataInfoAddressRefs(CodeAnalysis, pWriteData);
-		FDataInfo* pReadData = CodeAnalysis.GetReadDataInfoForAddress(addr);
-		if (pReadData != pWriteData)
+		// Fixup the RAM code and data items.
+		if (FCodeInfo* pWriteCode = CodeAnalysis.GetCodeInfoForAddress(wAddressRef))
+			FixupCodeInfoAddressRefs(CodeAnalysis, pWriteCode);
+		
+		if (FDataInfo* pWriteData = CodeAnalysis.GetDataInfoForAddress(wAddressRef))
+			FixupDataInfoAddressRefs(CodeAnalysis, pWriteData);
+
+		if (FLabelInfo* pWriteLabel = CodeAnalysis.GetLabelForAddress(wAddressRef))
+			FixupAddressRefList(CodeAnalysis, pWriteLabel->References.GetReferences());
+
+		if (wAddressRef.BankId != rAddressRef.BankId)
 		{
-			// If we have RAM behind ROM then fixup the ROM too
-			FixupDataInfoAddressRefs(CodeAnalysis, pReadData);
+			// If we have RAM behind ROM then fixup the ROM separately
+			if (FCodeInfo* pReadCode = CodeAnalysis.GetCodeInfoForAddress(rAddressRef))
+				FixupCodeInfoAddressRefs(CodeAnalysis, pReadCode);
+
+			if (FDataInfo* pReadData = CodeAnalysis.GetDataInfoForAddress(rAddressRef))
+				FixupDataInfoAddressRefs(CodeAnalysis, pReadData);
+
+			if (FLabelInfo* pReadLabel = CodeAnalysis.GetLabelForAddress(wAddressRef))
+				FixupAddressRefList(CodeAnalysis, pReadLabel->References.GetReferences());
 		}
+		
 		addr++;
 	}
 }
@@ -554,7 +567,7 @@ void FCPCEmu::UpdateBankMappings()
 		if (const FCodeAnalysisBank* pWriteBank = CodeAnalysis.GetBank(w))
 			wBanks[i] = pWriteBank->Name;
 	}
-	LOGINFO("Preset %d: [%x %x %x %x] ReadOnly = [%-6s, %s, %s, %-10s] Writable = [%-5s, %-5s, %-5s, %-5s]",
+	BANK_LOG("Preset %d: [%x %x %x %x] ReadOnly = [%-6s, %s, %s, %-10s] Writable = [%-5s, %-5s, %-5s, %-5s]",
 		ramPreset, bankIndex[0], bankIndex[1], bankIndex[2], bankIndex[3],
 		rBanks[0].c_str(), rBanks[1].c_str(), rBanks[2].c_str(), rBanks[3].c_str(),
 		wBanks[0].c_str(), wBanks[1].c_str(), wBanks[2].c_str(), wBanks[3].c_str());
