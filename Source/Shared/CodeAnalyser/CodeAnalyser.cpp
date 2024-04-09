@@ -1160,6 +1160,11 @@ void FCodeAnalysisState::FixupAddressRefs()
 	{
 		ViewState[i].FixupAddressRefs(*this);
 	}
+
+	for (FCommand* pCommand : CommandStack)
+	{
+		pCommand->FixupAddressRefs(*this);
+	}
 }
 
 void SetItemCode(FCodeAnalysisState &state, FAddressRef address)

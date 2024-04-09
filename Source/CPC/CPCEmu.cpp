@@ -589,31 +589,34 @@ void FCPCEmu::UpdateBankMappings()
 
 #endif
 
-	bool bFixupNeeded = false;
-	for (int r = 0; r < 4; r++)
+	if (CPCEmuState.type == CPC_TYPE_6128)
 	{
-		if (CurRAMBank[r] != prevRAMBank[r])
+		bool bFixupNeeded = false;
+		for (int r = 0; r < 4; r++)
 		{
-			const FCodeAnalysisBank* const pOldBank = CodeAnalysis.GetBank(prevRAMBank[r]);
-			const FCodeAnalysisBank* const pNewBank = CodeAnalysis.GetBank(CurRAMBank[r]);
-			if (pNewBank)
+			if (CurRAMBank[r] != prevRAMBank[r])
 			{
-				BANK_LOG("Slot %d changed. '%s' switched OUT. '%s' switched IN", r, pOldBank ? pOldBank->Name.c_str() : "unknown", pNewBank->Name.c_str());
-				
-				if (pNewBank->PrimaryMappedPage != prevMappedPage[bankIndex[r]])
+				const FCodeAnalysisBank* const pOldBank = CodeAnalysis.GetBank(prevRAMBank[r]);
+				const FCodeAnalysisBank* const pNewBank = CodeAnalysis.GetBank(CurRAMBank[r]);
+				if (pNewBank)
 				{
-					bFixupNeeded = true;
+					BANK_LOG("Slot %d changed. '%s' switched OUT. '%s' switched IN", r, pOldBank ? pOldBank->Name.c_str() : "unknown", pNewBank->Name.c_str());
+				
+					if (pNewBank->PrimaryMappedPage != prevMappedPage[bankIndex[r]])
+					{
+						bFixupNeeded = true;
 
-					BANK_LOG("Bank '%s' changed mapped address: 0x%x -> 0x%x", pNewBank->Name.c_str(), prevMappedPage[bankIndex[r]] * FCodeAnalysisPage::kPageSize, pNewBank->GetMappedAddress());
+						BANK_LOG("Bank '%s' changed mapped address: 0x%x -> 0x%x", pNewBank->Name.c_str(), prevMappedPage[bankIndex[r]] * FCodeAnalysisPage::kPageSize, pNewBank->GetMappedAddress());
+					}
 				}
 			}
 		}
-	}
 
-	if (bFixupNeeded)
-	{
-		// Fixup tool address refs.
-		FixupAddressRefs();
+		if (bFixupNeeded)
+		{
+			// Fixup tool address refs.
+			FixupAddressRefs();
+		}
 	}
 
 	// could we check our banks match the chips ones?

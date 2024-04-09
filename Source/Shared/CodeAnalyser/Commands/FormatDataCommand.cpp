@@ -202,6 +202,11 @@ void FFormatDataCommand::Undo(FCodeAnalysisState& state)
 
 }
 
+void FFormatDataCommand::FixupAddressRefs(FCodeAnalysisState& state)
+{
+	// todo
+}
+
 
 FBatchFormatDataCommand::FBatchFormatDataCommand(const FBatchDataFormattingOptions& options)
 	:BatchFormatOptions(options)
@@ -242,4 +247,9 @@ void FBatchFormatDataCommand::Undo(FCodeAnalysisState& state)
 	{
 		cmd.Undo(state);
 	}
+}
+
+void FBatchFormatDataCommand::FixupAddressRefs(FCodeAnalysisState& state)
+{
+	// todo
 }

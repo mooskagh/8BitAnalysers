@@ -68,6 +68,11 @@ void FSetItemDataCommand::Undo(FCodeAnalysisState& state)
 	state.SetCodeAnalysisDirty(Item.AddressRef);
 }
 
+void FSetItemDataCommand::FixupAddressRefs(FCodeAnalysisState& state)
+{
+	FixupAddressRef(state, Item.AddressRef);
+}
+
 
 // Set Data Item Display Type 
 void FSetDataItemDisplayTypeCommand::Do(FCodeAnalysisState& state)
@@ -88,6 +93,11 @@ void FSetDataItemDisplayTypeCommand::Undo(FCodeAnalysisState& state)
 		FDataInfo* pDataItem = static_cast<FDataInfo*>(Item.Item);
 		pDataItem->DisplayType = OldDisplayType;
 	}
+}
+
+void FSetDataItemDisplayTypeCommand::FixupAddressRefs(FCodeAnalysisState& state)
+{
+	FixupAddressRef(state, Item.AddressRef);
 }
 
 // Set Item Code
@@ -112,4 +122,9 @@ void FSetItemCodeCommand::Undo(FCodeAnalysisState& state)
 {
 	state.SetCodeInfoForAddress(Addr,nullptr);
 	state.SetCodeAnalysisDirty(Addr);
+}
+
+void FSetItemCodeCommand::FixupAddressRefs(FCodeAnalysisState& state)
+{
+	FixupAddressRef(state, Addr);
 }
