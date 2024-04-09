@@ -450,6 +450,7 @@ void FCPCEmu::FixupAddressRefs()
 {
 	CodeAnalysis.FixupAddressRefs();
 
+	// Fixup code analysis views
 	if (pActiveGame != nullptr)
 	{
 		if (FGameConfig* pGameConfig = pActiveGame->pConfig)
@@ -459,6 +460,20 @@ void FCPCEmu::FixupAddressRefs()
 				FixupAddressRef(CodeAnalysis, pGameConfig->ViewConfigs[i].ViewAddress);
 			}
 		}
+	}
+
+	// Fixup character sets and character maps
+	for (int i = 0; i < GetNoCharacterSets(); i++)
+	{
+		FCharacterSet* pCharSet = GetCharacterSetFromIndex(i);
+		FixupAddressRef(CodeAnalysis, pCharSet->Params.Address);
+	}
+
+	for (int i = 0; i < GetNoCharacterMaps(); i++)
+	{
+		FCharacterMap* pCharMap = GetCharacterMapFromIndex(i);
+		FixupAddressRef(CodeAnalysis, pCharMap->Params.Address);
+		FixupAddressRef(CodeAnalysis, pCharMap->Params.CharacterSet);
 	}
 
 	// Go through the entire physical address range to fix up labels, code and data items.
