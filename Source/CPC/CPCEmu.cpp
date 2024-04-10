@@ -422,25 +422,16 @@ static const int gCPCRAMConfig[8][4] =
 
 void FixupDataInfoAddressRefs(FCodeAnalysisState& state, FDataInfo* pDataInfo)
 {
-	if (pDataInfo->InstructionAddress.IsValid())
-	{
-		// Because this is a union, it will also fixup GraphicsSetRef and CharSetAddress
-		FixupAddressRef(state, pDataInfo->InstructionAddress);
-	}
-	if (pDataInfo->LastWriter.IsValid())
-	{
-		FixupAddressRef(state, pDataInfo->LastWriter);
-	}
+	// Because this is a union, it will also fixup GraphicsSetRef and CharSetAddress
+	FixupAddressRef(state, pDataInfo->InstructionAddress);
+	FixupAddressRef(state, pDataInfo->LastWriter);
 	FixupAddressRefList(state, pDataInfo->Reads.GetReferences());
 	FixupAddressRefList(state, pDataInfo->Writes.GetReferences());
 }
 
 void FixupCodeInfoAddressRefs(FCodeAnalysisState& state, FCodeInfo* pCodeInfo)
 {
-	if (pCodeInfo->OperandAddress.IsValid())
-	{
-		FixupAddressRef(state, pCodeInfo->OperandAddress);
-	}
+	FixupAddressRef(state, pCodeInfo->OperandAddress);
 	FixupAddressRefList(state, pCodeInfo->Reads.GetReferences());
 	FixupAddressRefList(state, pCodeInfo->Writes.GetReferences());
 }

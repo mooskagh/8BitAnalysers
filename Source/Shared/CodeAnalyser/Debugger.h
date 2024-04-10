@@ -94,7 +94,7 @@ struct FEvent
 	uint16_t		Address;
 	uint8_t			Value;
 	uint16_t		ScanlinePos;
-	FAddressRef		PC; // what if this bank gets paged out? 
+	FAddressRef		PC;
 };
 
 typedef void (*ShowEventInfoCB)(FCodeAnalysisState& state, const FEvent& event);
