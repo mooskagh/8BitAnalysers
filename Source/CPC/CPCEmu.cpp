@@ -467,6 +467,10 @@ void FCPCEmu::FixupAddressRefs()
 		FixupAddressRef(CodeAnalysis, pCharMap->Params.CharacterSet);
 	}
 
+	// Fixup viewers
+	pCharacterMapViewer->FixupAddressRefs();
+	pGraphicsViewer->FixupAddressRefs();
+
 	// Go through the entire physical address range to fix up labels, code and data items.
 	int addr = 0;
 	while (addr <= 0xffff)
@@ -927,7 +931,9 @@ bool FCPCEmu::Init(const FEmulatorLaunchConfig& launchConfig)
 	// This is where we add the viewers we want
 	AddViewer(new FCrtcViewer(this));
 	AddViewer(new FOverviewViewer(this));
-	AddViewer(new FCharacterMapViewer(this));
+	pCharacterMapViewer = new FCharacterMapViewer(this);
+	pCharacterMapViewer->SetGridSize(25, 20); // Based on Mode 0
+	AddViewer(pCharacterMapViewer);
 	pGraphicsViewer = new FCPCGraphicsViewer(this);
 	AddViewer(pGraphicsViewer);
 

@@ -22,6 +22,9 @@ public:
 	void	GoToAddress(FAddressRef addr);
 
 	void	SetGridSize(int x,int y);
+
+	void	FixupAddressRefs() {}
+
 private:
 	void	DrawCharacterMapViewer(void);
 
