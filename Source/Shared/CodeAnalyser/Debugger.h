@@ -73,7 +73,7 @@ struct FCPUFunctionCall
 	FAddressRef		ReturnAddr;
 };
 
-struct FStackInfo
+/*struct FStackInfo
 {
 	FStackInfo(uint16_t basePtr) :BasePtr(basePtr) {}
 
@@ -82,7 +82,7 @@ struct FStackInfo
 
 	uint16_t				StackMin = 0xffff;
 	uint16_t				StackMax = 0;
-};
+};*/
 
 
 struct FEvent
@@ -212,7 +212,8 @@ private:
 	int														SelectedCallstackNo = -1;
 
 	std::vector<FAddressRef>	StackSetLocations;
-	std::vector<FStackInfo>		Stacks;
+	// sam. this is not used. remove?
+	//std::vector<FStackInfo>		Stacks;
 	int							CurrentStackNo = -1;
 
 	uint16_t				StackMin = 0xffff;

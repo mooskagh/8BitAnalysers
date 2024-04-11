@@ -37,7 +37,8 @@ void FDebugger::Init(FCodeAnalysisState* pCA)
 		StackMax = 0x1ff;
 	}
     Watches.clear();
-	Stacks.clear();
+	// sam. this is not used. remove?
+	//Stacks.clear();
 	Breakpoints.clear();
 
 }
@@ -1414,5 +1415,17 @@ void FDebugger::FixupAddresRefs(void)
 	FixupAddressRefList(*pCodeAnalysis, FrameTrace);
 	FixupAddressRefList(*pCodeAnalysis, StackSetLocations);
 
-	// sam todo: events, callstack, stack
+	for (FCPUFunctionCall& functionCall : CallStack)
+	{
+		FixupAddressRef(*pCodeAnalysis, functionCall.CallAddr);
+		FixupAddressRef(*pCodeAnalysis, functionCall.FunctionAddr);
+		FixupAddressRef(*pCodeAnalysis, functionCall.ReturnAddr);
+	}
+
+	for (FEvent& event : EventTrace)
+	{
+		FixupAddressRef(*pCodeAnalysis, event.PC);
+	}
+
+	// sam todo: stack?
 }
