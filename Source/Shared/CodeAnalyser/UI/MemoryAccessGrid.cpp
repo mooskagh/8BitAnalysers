@@ -222,3 +222,8 @@ void FMemoryAccessGrid::Draw()
 	const ImVec2 pos = ImGui::GetCursorScreenPos();
 	DrawAtInternal(pos.x,pos.y);
 }
+
+void FMemoryAccessGrid::FixupAddressRefs()
+{
+	FixupAddressRef(*CodeAnalysis, SelectedCharAddress);
+}

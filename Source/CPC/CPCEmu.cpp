@@ -932,8 +932,8 @@ bool FCPCEmu::Init(const FEmulatorLaunchConfig& launchConfig)
 	AddViewer(new FCrtcViewer(this));
 	AddViewer(new FOverviewViewer(this));
 	pCharacterMapViewer = new FCharacterMapViewer(this);
-	pCharacterMapViewer->SetGridSize(25, 20); // Based on Mode 0
 	AddViewer(pCharacterMapViewer);
+	pCharacterMapViewer->SetGridSize(25, 20); // Based on Mode 0
 	pGraphicsViewer = new FCPCGraphicsViewer(this);
 	AddViewer(pGraphicsViewer);
 

@@ -19,15 +19,20 @@ public:
 	void	Shutdown() override;
 	void	DrawUI(void) override;
 
+
 	void	GoToAddress(FAddressRef addr);
 
 	void	SetGridSize(int x,int y);
 
-	void	FixupAddressRefs() {}
+	void	FixupAddressRefs();
 
 private:
 	void	DrawCharacterMapViewer(void);
+	void	DrawCharacterSetViewer(void);
 
 	// Viewer setup
 	FCharacterMapGrid*	ViewerGrid = nullptr;
+
+	FAddressRef SelectedCharSetAddr;
+	FCharSetCreateParams CharSetParams;
 };
