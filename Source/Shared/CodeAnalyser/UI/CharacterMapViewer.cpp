@@ -172,27 +172,20 @@ void FCharacterMapViewer::DrawCharacterSetViewer()
 	ImGui::EndChild();
 }
 
-struct FCharacterMapViewerUIState
-{
-	FAddressRef				SelectedCharMapAddr;
-	FCharMapCreateParams	Params;
-
-	FAddressRef				SelectedCharAddress;
-	int						SelectedCharX = -1;
-	int						SelectedCharY = -1;
-};
-
 // this assumes the character map is in address space
-void DrawCharacterMap(FCharacterMapViewerUIState& uiState, FCodeAnalysisState& state, FCodeAnalysisViewState& viewState)
+void FCharacterMapViewer::DrawCharacterMap()
 {
-	FCharacterMap* pCharMap = GetCharacterMapFromAddress(uiState.SelectedCharMapAddr);
+	FCodeAnalysisState& state = pEmulator->GetCodeAnalysis();
+	FCodeAnalysisViewState& viewState = state.GetFocussedViewState();
+
+	FCharacterMap* pCharMap = GetCharacterMapFromAddress(UIState.SelectedCharMapAddr);
 
 	if (pCharMap == nullptr)
 		return;
 	
-	FCharMapCreateParams& params = uiState.Params;
+	FCharMapCreateParams& params = UIState.Params;
 	
-	DrawAddressLabel(state, viewState, uiState.SelectedCharMapAddr);
+	DrawAddressLabel(state, viewState, UIState.SelectedCharMapAddr);
 
 	// Display and edit params
 	DrawAddressInput(state, "Address", params.Address);
@@ -308,9 +301,9 @@ void DrawCharacterMap(FCharacterMapViewerUIState& uiState, FCodeAnalysisState& s
 
 		if (ImGui::IsMouseClicked(0))
 		{
-			uiState.SelectedCharAddress = FAddressRef(pCharMap->Params.Address.BankId,charAddress);
-			uiState.SelectedCharX = xChar;
-			uiState.SelectedCharY = yChar;
+			UIState.SelectedCharAddress = FAddressRef(pCharMap->Params.Address.BankId,charAddress);
+			UIState.SelectedCharX = xChar;
+			UIState.SelectedCharY = yChar;
 		}
 
 		// Tool Tip
@@ -320,10 +313,10 @@ void DrawCharacterMap(FCharacterMapViewerUIState& uiState, FCodeAnalysisState& s
 		ImGui::EndTooltip();
 	}
 
-	if (uiState.SelectedCharX != -1 && uiState.SelectedCharY != -1)
+	if (UIState.SelectedCharX != -1 && UIState.SelectedCharY != -1)
 	{
-		const float xp = pos.x + (uiState.SelectedCharX * rectSize);
-		const float yp = pos.y + (uiState.SelectedCharY * rectSize);
+		const float xp = pos.x + (UIState.SelectedCharX * rectSize);
+		const float yp = pos.y + (UIState.SelectedCharY * rectSize);
 		const ImVec2 rectMin(xp, yp);
 		const ImVec2 rectMax(xp + rectSize, yp + rectSize);
 		dl->AddRect(rectMin, rectMax, 0xffffffff);
@@ -352,11 +345,11 @@ void DrawCharacterMap(FCharacterMapViewerUIState& uiState, FCodeAnalysisState& s
 	ImGui::SetCursorScreenPos(pos);
 
 	ImGui::Checkbox("Show Reads & Writes", &bShowReadWrites);
-	if (uiState.SelectedCharAddress.IsValid())
+	if (UIState.SelectedCharAddress.IsValid())
 	{
 		// Show data reads & writes
 		// 
-		FDataInfo* pDataInfo = state.GetDataInfoForAddress(uiState.SelectedCharAddress);
+		FDataInfo* pDataInfo = state.GetDataInfoForAddress(UIState.SelectedCharAddress);
 		// List Data accesses
 		if (pDataInfo->Reads.IsEmpty() == false)
 		{
@@ -384,14 +377,12 @@ void DrawCharacterMap(FCharacterMapViewerUIState& uiState, FCodeAnalysisState& s
 			}
 		}
 	}
-
-	
-	
 }
 
-void DrawCharacterMaps(FCodeAnalysisState& state, FCodeAnalysisViewState& viewState)
+void FCharacterMapViewer::DrawCharacterMaps()
 {
-	static FCharacterMapViewerUIState uiState;
+	FCodeAnalysisState& state = pEmulator->GetCodeAnalysis();
+	FCodeAnalysisViewState& viewState = state.GetFocussedViewState();
 
 	if (ImGui::BeginChild("##charmapselect", ImVec2(ImGui::GetContentRegionAvail().x * 0.25f, 0), true))
 	{
@@ -402,7 +393,7 @@ void DrawCharacterMaps(FCodeAnalysisState& state, FCodeAnalysisViewState& viewSt
 		{
 			const FCharacterMap* pCharMap = GetCharacterMapFromIndex(i);
 			const FLabelInfo* pSetLabel = state.GetLabelForAddress(pCharMap->Params.Address);
-			const bool bSelected = uiState.SelectedCharMapAddr == pCharMap->Params.Address;
+			const bool bSelected = UIState.SelectedCharMapAddr == pCharMap->Params.Address;
 
 			if (pSetLabel == nullptr)
 				continue;
@@ -411,13 +402,13 @@ void DrawCharacterMaps(FCodeAnalysisState& state, FCodeAnalysisViewState& viewSt
 
 			if (ImGui::Selectable(pSetLabel->GetName(), bSelected))
 			{
-				uiState.SelectedCharMapAddr = pCharMap->Params.Address;
-				if (uiState.SelectedCharMapAddr != uiState.Params.Address)
+				UIState.SelectedCharMapAddr = pCharMap->Params.Address;
+				if (UIState.SelectedCharMapAddr != UIState.Params.Address)
 				{
-					uiState.Params = pCharMap->Params;	// copy params
-					uiState.SelectedCharAddress.SetInvalid();
-					uiState.SelectedCharX = -1;
-					uiState.SelectedCharY = -1;
+					UIState.Params = pCharMap->Params;	// copy params
+					UIState.SelectedCharAddress.SetInvalid();
+					UIState.SelectedCharX = -1;
+					UIState.SelectedCharY = -1;
 				}
 			}			
 
@@ -442,12 +433,12 @@ void DrawCharacterMaps(FCodeAnalysisState& state, FCodeAnalysisViewState& viewSt
 	ImGui::SameLine();
 	if (ImGui::BeginChild("##charmapdetails", ImVec2(0, 0), true))
 	{
-		if (uiState.SelectedCharMapAddr.IsValid())
+		if (UIState.SelectedCharMapAddr.IsValid())
 		{
-			FCodeAnalysisBank* pBank = state.GetBank(uiState.SelectedCharMapAddr.BankId);
+			FCodeAnalysisBank* pBank = state.GetBank(UIState.SelectedCharMapAddr.BankId);
 			assert(pBank != nullptr);
 			state.MapBankForAnalysis(*pBank);	// map bank in so it can be read ok
-			DrawCharacterMap(uiState, state, viewState);
+			DrawCharacterMap();
 			state.UnMapAnalysisBanks();	// map bank out
 		}
 	}
@@ -552,8 +543,6 @@ void	FCharacterMapViewer::Shutdown()
 
 void FCharacterMapViewer::DrawCharacterMapViewer(void)
 {
-	FCodeAnalysisState& state = pEmulator->GetCodeAnalysis();
-	
 	ViewerGrid->Draw();
 }
 
@@ -570,9 +559,6 @@ void FCharacterMapViewer::SetGridSize(int x, int y)
 
 void FCharacterMapViewer::DrawUI(void)
 {
-	FCodeAnalysisState& state = pEmulator->GetCodeAnalysis();
-	FCodeAnalysisViewState& viewState = state.GetFocussedViewState();
-
 	if (ImGui::BeginTabBar("CharacterMapTabs"))
 	{
 		if (ImGui::BeginTabItem("Character Map Viewer"))
@@ -589,7 +575,7 @@ void FCharacterMapViewer::DrawUI(void)
 
 		if (ImGui::BeginTabItem("Character Maps"))
 		{
-			DrawCharacterMaps(state, viewState);
+			DrawCharacterMaps();
 			ImGui::EndTabItem();
 		}
 
@@ -600,9 +586,15 @@ void FCharacterMapViewer::DrawUI(void)
 void FCharacterMapViewer::FixupAddressRefs()
 {
 	ViewerGrid->FixupAddressRefs();
-	FixupAddressRef(pEmulator->GetCodeAnalysis(), SelectedCharSetAddr);
-	FixupAddressRef(pEmulator->GetCodeAnalysis(), CharSetParams.Address);
-	FixupAddressRef(pEmulator->GetCodeAnalysis(), CharSetParams.AttribsAddress);
 
-	// todo FCharacterMapViewerUIState
+	FCodeAnalysisState& state = pEmulator->GetCodeAnalysis();
+
+	FixupAddressRef(state, SelectedCharSetAddr);
+	FixupAddressRef(state, CharSetParams.Address);
+	FixupAddressRef(state, CharSetParams.AttribsAddress);
+
+	FixupAddressRef(state, UIState.SelectedCharAddress);
+	FixupAddressRef(state, UIState.SelectedCharMapAddr);
+	FixupAddressRef(state, UIState.Params.Address);
+	FixupAddressRef(state, UIState.Params.CharacterSet);
 }

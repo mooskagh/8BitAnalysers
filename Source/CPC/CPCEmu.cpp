@@ -1274,6 +1274,8 @@ bool FCPCEmu::StartGame(FGameConfig* pGameConfig, bool bLoadGameData)
 		}
 
 		pGraphicsViewer->LoadGraphicsSets(graphicsSetsJsonFName.c_str());
+
+		FixupAddressRefs();
 	}
 	
 	if (bLoadSnapshot)
@@ -1295,6 +1297,8 @@ bool FCPCEmu::StartGame(FGameConfig* pGameConfig, bool bLoadGameData)
 	{
 		return false;
 	}
+
+	//FixupAddressRefs();
 	//UpdateBankMappings();
 
 	const std::string memStr = CPCEmuState.type == CPC_TYPE_6128 ? " (CPC 6128)" : " (CPC 464)";
