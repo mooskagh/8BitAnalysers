@@ -420,89 +420,26 @@ static const int gCPCRAMConfig[8][4] =
 	 { 0, 7, 2, 3 }  // 7
 };
 
-void FixupDataInfoAddressRefs(FCodeAnalysisState& state, FDataInfo* pDataInfo)
-{
-	// Because this is a union, it will also fixup GraphicsSetRef and CharSetAddress
-	FixupAddressRef(state, pDataInfo->InstructionAddress);
-	FixupAddressRef(state, pDataInfo->LastWriter);
-	FixupAddressRefList(state, pDataInfo->Reads.GetReferences());
-	FixupAddressRefList(state, pDataInfo->Writes.GetReferences());
-}
-
-void FixupCodeInfoAddressRefs(FCodeAnalysisState& state, FCodeInfo* pCodeInfo)
-{
-	FixupAddressRef(state, pCodeInfo->OperandAddress);
-	FixupAddressRefList(state, pCodeInfo->Reads.GetReferences());
-	FixupAddressRefList(state, pCodeInfo->Writes.GetReferences());
-}
-
 // Fixup address refs tool-wide.
 void FCPCEmu::FixupAddressRefs()
 {
 	CodeAnalysis.FixupAddressRefs();
 
-	// Fixup code analysis views
+	// Fixup game config
 	if (pActiveGame != nullptr)
 	{
 		if (FGameConfig* pGameConfig = pActiveGame->pConfig)
 		{
-			for (int i = 0; i < FCodeAnalysisState::kNoViewStates; i++)
-			{
-				FixupAddressRef(CodeAnalysis, pGameConfig->ViewConfigs[i].ViewAddress);
-			}
+			pGameConfig->FixupAddressRefs(CodeAnalysis);
 		}
 	}
 
-	// Fixup character sets and character maps
-	for (int i = 0; i < GetNoCharacterSets(); i++)
-	{
-		FCharacterSet* pCharSet = GetCharacterSetFromIndex(i);
-		FixupAddressRef(CodeAnalysis, pCharSet->Params.Address);
-	}
-
-	for (int i = 0; i < GetNoCharacterMaps(); i++)
-	{
-		FCharacterMap* pCharMap = GetCharacterMapFromIndex(i);
-		FixupAddressRef(CodeAnalysis, pCharMap->Params.Address);
-		FixupAddressRef(CodeAnalysis, pCharMap->Params.CharacterSet);
-	}
+	FixupCharacterMapAddressRefs(CodeAnalysis);
+	FixupCharacterSetAddressRefs(CodeAnalysis);
 
 	// Fixup viewers
 	pCharacterMapViewer->FixupAddressRefs();
 	pGraphicsViewer->FixupAddressRefs();
-
-	// Go through the entire physical address range to fix up labels, code and data items.
-	int addr = 0;
-	while (addr <= 0xffff)
-	{
-		const FAddressRef wAddressRef(CodeAnalysis.GetWriteBankFromAddress(addr), addr);
-		const FAddressRef rAddressRef(CodeAnalysis.GetReadBankFromAddress(addr), addr);
-
-		// Fixup the RAM code and data items.
-		if (FCodeInfo* pWriteCode = CodeAnalysis.GetCodeInfoForAddress(wAddressRef))
-			FixupCodeInfoAddressRefs(CodeAnalysis, pWriteCode);
-		
-		if (FDataInfo* pWriteData = CodeAnalysis.GetDataInfoForAddress(wAddressRef))
-			FixupDataInfoAddressRefs(CodeAnalysis, pWriteData);
-
-		if (FLabelInfo* pWriteLabel = CodeAnalysis.GetLabelForAddress(wAddressRef))
-			FixupAddressRefList(CodeAnalysis, pWriteLabel->References.GetReferences());
-
-		if (wAddressRef.BankId != rAddressRef.BankId)
-		{
-			// If we have RAM behind ROM then fixup the ROM separately
-			if (FCodeInfo* pReadCode = CodeAnalysis.GetCodeInfoForAddress(rAddressRef))
-				FixupCodeInfoAddressRefs(CodeAnalysis, pReadCode);
-
-			if (FDataInfo* pReadData = CodeAnalysis.GetDataInfoForAddress(rAddressRef))
-				FixupDataInfoAddressRefs(CodeAnalysis, pReadData);
-
-			if (FLabelInfo* pReadLabel = CodeAnalysis.GetLabelForAddress(wAddressRef))
-				FixupAddressRefList(CodeAnalysis, pReadLabel->References.GetReferences());
-		}
-		
-		addr++;
-	}
 }
 
 void FCPCEmu::UpdateBankMappings()

@@ -1151,6 +1151,22 @@ void FCodeAnalysisState::OnCPUTick(uint64_t pins)
 	Debugger.CPUTick(pins);
 }
 
+void FixupDataInfoAddressRefs(FCodeAnalysisState& state, FDataInfo* pDataInfo)
+{
+	// Because this is a union, it will also fixup GraphicsSetRef and CharSetAddress
+	FixupAddressRef(state, pDataInfo->InstructionAddress);
+	FixupAddressRef(state, pDataInfo->LastWriter);
+	FixupAddressRefList(state, pDataInfo->Reads.GetReferences());
+	FixupAddressRefList(state, pDataInfo->Writes.GetReferences());
+}
+
+void FixupCodeInfoAddressRefs(FCodeAnalysisState& state, FCodeInfo* pCodeInfo)
+{
+	FixupAddressRef(state, pCodeInfo->OperandAddress);
+	FixupAddressRefList(state, pCodeInfo->Reads.GetReferences());
+	FixupAddressRefList(state, pCodeInfo->Writes.GetReferences());
+}
+
 void FCodeAnalysisState::FixupAddressRefs()
 {
 	FixupAddressRef(*this, CopiedAddress);
@@ -1164,6 +1180,39 @@ void FCodeAnalysisState::FixupAddressRefs()
 	for (FCommand* pCommand : CommandStack)
 	{
 		pCommand->FixupAddressRefs(*this);
+	}
+
+	// Go through the entire physical address range to fix up labels, code and data items.
+	int addr = 0;
+	while (addr <= 0xffff)
+	{
+		const FAddressRef wAddressRef(GetWriteBankFromAddress(addr), addr);
+		const FAddressRef rAddressRef(GetReadBankFromAddress(addr), addr);
+
+		// Fixup the code and data items in RAM.
+		if (FCodeInfo* pWriteCode = GetCodeInfoForAddress(wAddressRef))
+			FixupCodeInfoAddressRefs(*this, pWriteCode);
+
+		if (FDataInfo* pWriteData = GetDataInfoForAddress(wAddressRef))
+			FixupDataInfoAddressRefs(*this, pWriteData);
+
+		if (FLabelInfo* pWriteLabel = GetLabelForAddress(wAddressRef))
+			FixupAddressRefList(*this, pWriteLabel->References.GetReferences());
+
+		if (wAddressRef.BankId != rAddressRef.BankId)
+		{
+			// If we have RAM behind ROM then fixup the ROM separately
+			if (FCodeInfo* pReadCode = GetCodeInfoForAddress(rAddressRef))
+				FixupCodeInfoAddressRefs(*this, pReadCode);
+
+			if (FDataInfo* pReadData = GetDataInfoForAddress(rAddressRef))
+				FixupDataInfoAddressRefs(*this, pReadData);
+
+			if (FLabelInfo* pReadLabel = GetLabelForAddress(wAddressRef))
+				FixupAddressRefList(*this, pReadLabel->References.GetReferences());
+		}
+
+		addr++;
 	}
 }
 

@@ -144,6 +144,7 @@ FCharacterSet* GetCharacterSetFromIndex(int index);
 FCharacterSet* GetCharacterSetFromAddress(FAddressRef address);
 void UpdateCharacterSet(FCodeAnalysisState& state, FCharacterSet& characterSet, const FCharSetCreateParams& params);
 bool CreateCharacterSetAt(FCodeAnalysisState& state, const FCharSetCreateParams& params);
+void FixupCharacterSetAddressRefs(FCodeAnalysisState& state);
 
 // Character Maps
 int GetNoCharacterMaps();
@@ -152,6 +153,7 @@ bool DeleteCharacterMap(FAddressRef address);
 FCharacterMap* GetCharacterMapFromIndex(int index);
 FCharacterMap* GetCharacterMapFromAddress(FAddressRef address);
 bool CreateCharacterMap(FCodeAnalysisState& state, const FCharMapCreateParams& params);
+void FixupCharacterMapAddressRefs(FCodeAnalysisState& state);
 
 // Palette store
 

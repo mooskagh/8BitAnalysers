@@ -25,6 +25,7 @@ struct FGameConfig
 
 	virtual void	LoadFromJson(const nlohmann::json& jsonConfig);
 	virtual void	SaveToJson(nlohmann::json& jsonConfig) const;
+	virtual void	FixupAddressRefs(FCodeAnalysisState& state);
 
 	bool AddLuaSourceFile(const char *pFilename);
 	std::string		Name;
