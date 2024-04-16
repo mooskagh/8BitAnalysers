@@ -18,6 +18,11 @@ struct FCharacterMapViewerUIState
 	FAddressRef				SelectedCharAddress;
 	int						SelectedCharX = -1;
 	int						SelectedCharY = -1;
+
+	int						OffsetX = 0;
+	int						OffsetY = 0;
+
+	float					Scale = 1.0f;
 };
 
 class FCharacterMapViewer : public FViewerBase

@@ -1,5 +1,4 @@
-#pragma once
-
+#if 0
 #include "Misc/GamesList.h"
 
 class FCPCEmu;
@@ -20,3 +19,5 @@ private:
 	
 	ECPCModel FallbackCPCModel;
 };
+#endif
+

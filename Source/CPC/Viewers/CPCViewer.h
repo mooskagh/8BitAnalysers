@@ -11,7 +11,7 @@ struct FCodeAnalysisViewState;
 struct FPalette;
 
 #ifndef NDEBUG
-#define CPCVIEWER_EXTRA_DEBUG
+//#define CPCVIEWER_EXTRA_DEBUG
 #endif
 
 class FCPCViewer

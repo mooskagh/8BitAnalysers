@@ -9,6 +9,8 @@ struct FCodeAnalysisPage;
 class FC64Emulator;
 class FGraphicsView;
 
+enum class EC64Event;
+
 enum class EVicRegister
 {
 	Sprite0_X = 0,
@@ -68,6 +70,13 @@ struct FSpriteDef
 	bool		bMultiColour = false;
 };
 
+struct FCharSetDef
+{
+	FAddressRef	Address;
+	int			PaletteNo = -1;
+	bool		bMultiColour = false;
+};
+
 struct FSpriteInfo
 {
 	int		ScanlineNo = -1;
@@ -92,10 +101,13 @@ public:
 
 	void	DrawScreenOverlay(float x,float y) const;
 
-	const std::vector<FSpriteDef>&	GetFoundSprites() const { return SpriteDefs; }
+	const std::vector<FSpriteDef>& GetFoundSprites() const { return SpriteDefs; }
+	const std::vector<FCharSetDef>&	GetFoundCharSets() const { return CharSets; }
 
 private:
+	EC64Event	GetVICEvent(uint8_t reg, uint8_t val, FAddressRef pc);
 	void	DrawVICRegisterInfo(void);
+	void	DrawLastFrameSpriteInfo(void);
 	int		GetFrameSprite(int scanLine, int spriteNo);
 private:
 	static const int kScanlineMax = 320;
@@ -104,7 +116,8 @@ private:
 
 	int		SelectedRegister = -1;
 
-	std::vector<FSpriteDef>	SpriteDefs;
+	std::vector<FSpriteDef>		SpriteDefs;
+	std::vector<FCharSetDef>	CharSets;
 
 	std::vector<FSpriteInfo>	FrameSprites;
 	std::vector<FSpriteInfo>	LastFrameSprites;

@@ -11,38 +11,39 @@
 
 // CPC specific
 
-void FCPCGameConfig::LoadFromJson(const nlohmann::json& jsonConfigFile)
+void FCPCProjectConfig::LoadFromJson(const nlohmann::json& jsonConfigFile)
 {
-	FGameConfig::LoadFromJson(jsonConfigFile);
+	FProjectConfig::LoadFromJson(jsonConfigFile);
 
 	if (jsonConfigFile.contains("128KGame"))
 		bCPC6128Game = jsonConfigFile["128KGame"];
 
 }
 
-void FCPCGameConfig::SaveToJson(nlohmann::json& jsonConfigFile) const
+void FCPCProjectConfig::SaveToJson(nlohmann::json& jsonConfigFile) const
 {
-	FGameConfig::SaveToJson(jsonConfigFile);
+	FProjectConfig::SaveToJson(jsonConfigFile);
 
 	jsonConfigFile["128KGame"] = bCPC6128Game;
 }
 
-FCPCGameConfig* CreateNewCPCGameConfigFromSnapshot(const FGameSnapshot& snapshot)
+FCPCProjectConfig* CreateNewCPCProjectConfigFromEmulatorFile(const FEmulatorFile& emuFile)
 {
-	FCPCGameConfig* pNewConfig = new FCPCGameConfig;
+	FCPCProjectConfig* pNewConfig = new FCPCProjectConfig;
 
-	pNewConfig->Name = RemoveFileExtension(snapshot.DisplayName.c_str());
-	pNewConfig->SnapshotFile = GetFileFromPath(snapshot.FileName.c_str());
+	pNewConfig->Name = RemoveFileExtension(emuFile.DisplayName.c_str());
+	pNewConfig->EmulatorFile = emuFile;
 
 	return pNewConfig;
 }
 
-FCPCGameConfig* CreateNewAmstradBasicConfig(bool bIs6128)
+FCPCProjectConfig* CreateNewAmstradBasicConfig(bool bIs6128)
 {
-	FCPCGameConfig* pNewConfig = new FCPCGameConfig;
-	pNewConfig->bCPC6128Game = bIs6128;
+	FCPCProjectConfig* pNewConfig = new FCPCProjectConfig;
+
 	pNewConfig->Name = bIs6128 ? "AmstradBasic6128" : "AmstradBasic464";
-	pNewConfig->SnapshotFile = "";
+	pNewConfig->bCPC6128Game = bIs6128;
+	pNewConfig->EmulatorFile.FileName = "";
 
 	return pNewConfig;
 }
@@ -73,7 +74,7 @@ bool LoadCPCGameConfigs(FCPCEmu* pEmu)
 					if (gameFile.FileName == "Config.json")
 					{
 						const std::string& configFileName = gameDir + "/" + gameFile.FileName;
-						FCPCGameConfig* pNewConfig = new FCPCGameConfig;
+						FCPCProjectConfig* pNewConfig = new FCPCProjectConfig;
 						if (LoadGameConfigFromFile(*pNewConfig, configFileName.c_str()))
 						{
 							// todo 6128?
@@ -102,7 +103,7 @@ bool LoadCPCGameConfigs(FCPCEmu* pEmu)
 		const std::string& fn = configDir + file.FileName;
 		if ((fn.substr(fn.find_last_of(".") + 1) == "json"))
 		{
-			FCPCGameConfig* pNewConfig = new FCPCGameConfig;
+			FCPCProjectConfig* pNewConfig = new FCPCProjectConfig;
 			if (LoadGameConfigFromFile(*pNewConfig, fn.c_str()))
 			{
 				if (pNewConfig->bCPC6128Game == (pEmu->CPCEmuState.type == CPC_TYPE_6128))

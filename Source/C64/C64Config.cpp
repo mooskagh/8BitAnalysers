@@ -15,6 +15,8 @@ void FC64Config::ReadFromJson(const nlohmann::json& jsonConfigFile)
 		DisksFolder = jsonConfigFile["DisksFolder"];
 	if (jsonConfigFile.contains("PrgFolder"))
 		PrgFolder = jsonConfigFile["PrgFolder"];
+	if (jsonConfigFile.contains("CrtFolder"))
+		CrtFolder = jsonConfigFile["CrtFolder"];
 	if (jsonConfigFile.contains("ShowHCounter"))
 		bShowHCounter = jsonConfigFile["ShowHCounter"];
 	if (jsonConfigFile.contains("ShowVICOverlay"))
@@ -27,6 +29,8 @@ void FC64Config::ReadFromJson(const nlohmann::json& jsonConfigFile)
 		DisksFolder += "/";
 	if (PrgFolder.back() != '/')
 		PrgFolder += "/";
+	if (CrtFolder.back() != '/')
+		CrtFolder += "/";
 }
 
 void FC64Config::WriteToJson(nlohmann::json& jsonConfigFile) const
@@ -35,22 +39,23 @@ void FC64Config::WriteToJson(nlohmann::json& jsonConfigFile) const
 	jsonConfigFile["TapesFolder"] = TapesFolder;
 	jsonConfigFile["DisksFolder"] = DisksFolder;
 	jsonConfigFile["PrgFolder"] = PrgFolder;
+	jsonConfigFile["CrtFolder"] = CrtFolder;
 	jsonConfigFile["ShowHCounter"] = bShowHCounter;
 	jsonConfigFile["ShowVICOverlay"] = bShowVICOverlay;
 }
 
-void FC64GameConfig::LoadFromJson(const nlohmann::json& jsonConfig)
+void FC64ProjectConfig::LoadFromJson(const nlohmann::json& jsonConfig)
 {
-	FGameConfig::LoadFromJson(jsonConfig);
+	FProjectConfig::LoadFromJson(jsonConfig);
 }
 
-void FC64GameConfig::SaveToJson(nlohmann::json& jsonConfig) const 
+void FC64ProjectConfig::SaveToJson(nlohmann::json& jsonConfig) const 
 {
-	FGameConfig::SaveToJson(jsonConfig);
+	FProjectConfig::SaveToJson(jsonConfig);
 
 }
 
-bool LoadC64GameConfigs(FC64Emulator* pC64Emu)
+bool LoadC64ProjectConfigs(FC64Emulator* pC64Emu)
 {
 	FDirFileList listing;
 
@@ -76,7 +81,7 @@ bool LoadC64GameConfigs(FC64Emulator* pC64Emu)
 					if (gameFile.FileName == "Config.json")
 					{
 						const std::string& configFileName = gameDir + "/" + gameFile.FileName;
-						FC64GameConfig* pNewConfig = new FC64GameConfig;
+						FC64ProjectConfig* pNewConfig = new FC64ProjectConfig;
 						if (LoadGameConfigFromFile(*pNewConfig, configFileName.c_str()))
 						{
 							//if (pNewConfig->Spectrum128KGame == (pEmu->ZXEmuState.type == ZX_TYPE_128))
@@ -104,7 +109,7 @@ bool LoadC64GameConfigs(FC64Emulator* pC64Emu)
 		const std::string& fn = configDir + file.FileName;
 		if ((fn.substr(fn.find_last_of(".") + 1) == "json"))
 		{
-			FC64GameConfig* pNewConfig = new FC64GameConfig;
+			FC64ProjectConfig* pNewConfig = new FC64ProjectConfig;
 			if (LoadGameConfigFromFile(*pNewConfig, fn.c_str()))
 			{
 				AddGameConfig(pNewConfig);
@@ -118,13 +123,12 @@ bool LoadC64GameConfigs(FC64Emulator* pC64Emu)
 	return true;
 }
 
-FC64GameConfig* CreateNewC64GameConfigFromGameInfo(const FGameSnapshot& gameSnapshot)
+FC64ProjectConfig* CreateNewC64ProjectFromEmuFile(const FEmulatorFile& emuFile)
 {
-	FC64GameConfig* pNewConfig = new FC64GameConfig;
+	FC64ProjectConfig* pNewConfig = new FC64ProjectConfig;
 
-	pNewConfig->Name = gameSnapshot.DisplayName;
-	pNewConfig->SnapshotFile = GetFileFromPath(gameSnapshot.FileName.c_str());
-	//pNewConfig->pViewerConfig = GetViewConfigForGame(pNewConfig->Name.c_str());
+	pNewConfig->Name = emuFile.DisplayName;
+	pNewConfig->EmulatorFile = emuFile;
 
 	return pNewConfig;
 }

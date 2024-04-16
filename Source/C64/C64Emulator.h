@@ -25,75 +25,77 @@
 #include <util/m6502dasm.h>
 #include <util/z80dasm.h>
 
-// Chips UI includes
-/*
-#include <ui/ui_util.h>
-#include <ui/ui_chip.h>
-#include <ui/ui_util.h>
-#include <ui/ui_m6502.h>
-#include <ui/ui_m6526.h>
-#include <ui/ui_m6569.h>
-#include <ui/ui_m6581.h>
-#include <ui/ui_audio.h>
-#include <ui/ui_dasm.h>
-#include <ui/ui_dbg.h>
-#include <ui/ui_memedit.h>
-#include <ui/ui_memmap.h>
-#include <ui/ui_kbd.h>
-#include <ui/ui_snapshot.h>
-#include <ui/ui_c64.h>
-#include <ui/ui_ay38910.h>
-*/
 #include "C64GamesList.h"
 #include "C64Display.h"
 
 #include "IOAnalysis/C64IOAnalysis.h"
 #include "GraphicsViewer/C64GraphicsViewer.h"
+#include "FileLoaders/CRTFile.h"
 
 enum class EC64Event
 {
+	None = 0,
+
 	VICRegisterWrite,
+    VICScreenModeChar,
+    VICScreenModeBmp,
+    VICScreenModeMultiColour,
+    VICScreenModeHiRes,
+    
 	SIDRegisterWrite,
 	CIA1RegisterWrite,
 	CIA1RegisterRead,
 	CIA2RegisterWrite,
 	CIA2RegisterRead,
+
 };
 
-enum class EPRGLoadPhase
+enum class EC64FileType
+{
+	None,
+	PRG,
+	Tape,
+	Disk,
+	Cartridge
+};
+
+enum class EFileLoadPhase
 {
 	Idle,
 	Reset,
 	BasicReady,
-	LoadedPRG,
-	Run
+	Loaded,
+	Run,
+	TapePlaying
+};
+
+struct FC64BankIds
+{
+	int16_t LowerRAM = -1;
+	int16_t LowerRAM2 = -1;
+	int16_t HighRAM = -1;
+	int16_t IOArea = -1;
+	int16_t BasicROM = -1;
+	int16_t RAMBehindBasicROM = -1;
+	int16_t KernelROM = -1;
+	int16_t RAMBehindKernelROM = -1;
+	int16_t CharacterROM = -1;
+	int16_t RAMBehindCharROM = -1;
 };
 
 struct FC64Config;
-struct FC64GameConfig;
+struct FC64ProjectConfig;
 class FC64Emulator;
+
 
 struct FC64LaunchConfig : public FEmulatorLaunchConfig
 {
 };
 
-
-class FC64GameLoader : public IGameLoader
-{
-public:
-	// IGameLoader
-	bool LoadSnapshot(const FGameSnapshot& snapshot) override;
-	// ~IGameLoader
-
-	void Init(FC64Emulator* pCpc) { pC64Emu = pCpc; }
-
-private:
-	FC64Emulator* pC64Emu = nullptr;
-};
-
 class FC64Emulator : public FEmuBase
 {
 public:
+	FC64Emulator() = default;
 
 	bool    Init(const FEmulatorLaunchConfig& launchConfig) override;
 	void    Shutdown() override;
@@ -105,9 +107,6 @@ public:
 	void	SystemMenuAdditions(void) override;
 	void	OptionsMenuAdditions(void) override;
 	void	WindowsMenuAdditions(void) override;
-
-	bool	NewGameFromSnapshot(const FGameSnapshot& gameConfig);
-
 
 	// Begin IInputEventHandler interface implementation
 	void	OnKeyUp(int keyCode);
@@ -164,17 +163,34 @@ public:
 	{
 		return VICBankMapping[addr.Address >> 12] == addr.BankId;
 	}
+	
+	uint16_t GetIOAreaBankId() const { return BankIds.IOArea; }
+	const FC64BankIds& GetBankIds(void) const { return BankIds; }
+
 	FAddressRef	GetColourRAMAddress(uint16_t colRamAddress)	const // VIC address is 14bit (16K range)
 	{
-		return FAddressRef(IOAreaId, colRamAddress + 0xD800);
+		return FAddressRef(BankIds.IOArea, colRamAddress + 0xD800);
 	}
-	bool StartGame(FGameConfig *pConfig, bool bLoadGame) override;
-	//bool NewGameFromSnapshot(const FGameInfo* pGameInfo);
+
+	bool	LoadEmulatorFile(const FEmulatorFile* pEmuFile) override;
+	bool	NewProjectFromEmulatorFile(const FEmulatorFile& emuFile) override;
+	bool	LoadProject(FProjectConfig *pConfig, bool bLoadGame) override;
+	bool	SaveProject(void) override;
+
+	// Cartridge
+#if 0
+	void	SetCartridgeHandler(FCartridgeHandler* pHandler) { delete pCartridgeHandler; pCartridgeHandler = pHandler;}
+	void	ResetCartridgeBanks();
+	FCartridgeSlot&	GetCartridgeSlot(ECartridgeSlot slot) { assert(slot!=ECartridgeSlot::Unknown); return CartridgeSlots[(int)slot]; }
+	FCartridgeBank&	AddCartridgeBank(int bankNo, uint16_t address, uint32_t dataSize);
+	void	SetCartridgeType(ECartridgeType type) { CartridgeType = type;}
+	void	InitCartMapping(void);
+	bool	MapCartridgeBank(ECartridgeSlot slot, int bankNo);
+	void	UnMapCartridge(ECartridgeSlot slot);
+#endif
 	void ResetCodeAnalysis(void);
-	bool SaveCurrentGameData(void) override;
 	bool LoadMachineState(const char* fname);
 	bool SaveMachineState(const char* fname);
-	//bool LoadCodeAnalysis(const FGameInfo* pGameInfo);
 
 	// Emulator Event Handlers
 	void    OnBoot(void);
@@ -184,21 +200,16 @@ public:
 	c64_t*	GetEmu() {return &C64Emu;}
 	const FC64IOAnalysis&	GetC64IOAnalysis() { return IOAnalysis; }
 
-	const FC64Config*	GetC64GlobalConfig() { return (const FC64Config *)pGlobalConfig;}
+	const FC64Config* GetC64GlobalConfig() const { return (const FC64Config*)pGlobalConfig; }
+	FC64Config* GetC64GlobalConfig() { return (FC64Config*)pGlobalConfig; }
 
+	void	SetLoadedFileType(EC64FileType type) { LoadedFileType = type;}
 private:
 	c64_t       C64Emu;
-	//ui_c64_t    C64UI;
 	double      ExecTime;
 
-	EPRGLoadPhase	PRGLoadPhase = EPRGLoadPhase::Idle;
-
-	//FC64Config*			pGlobalConfig = nullptr;
-	//FC64GameConfig*		pCurrentGameConfig = nullptr;
-
-	//FC64GamesList       GamesList;
-	FC64GameLoader		GameLoader;
-
+	EC64FileType	LoadedFileType = EC64FileType::None;
+	EFileLoadPhase	FileLoadPhase = EFileLoadPhase::Idle;
 
 	const FGameInfo*	CurrentGame = nullptr;
 
@@ -209,8 +220,13 @@ private:
 	uint8_t             LastMemPort = 0x7;  // Default startup
 	uint16_t            PreviousPC = 0;
 
+	FCartridgeManager	CartridgeManager;
+	//FCartridgeHandler*	pCartridgeHandler = nullptr;
+	//ECartridgeType		CartridgeType = ECartridgeType::None;
+	//FCartridgeSlot		CartridgeSlots[(int)ECartridgeSlot::Max];
+	//int16_t				FirstCartridgeBankId = -1;
+
 	FC64IOAnalysis      IOAnalysis;
-	//FC64GraphicsViewer* GraphicsViewer = nullptr;
 	std::set<FAddressRef>  InterruptHandlers;
 
 	// Mapping status
@@ -219,16 +235,10 @@ private:
 	bool                bCharacterROMMapped = false;
 	bool                bIOMapped = true;
 
-	// Bank Ids
-	uint16_t            LowerRAMId = -1;
-	uint16_t            HighRAMId = -1;
-	uint16_t            IOAreaId = -1;
-	uint16_t            BasicROMId = -1;
-	uint16_t            RAMBehindBasicROMId = -1;
-	uint16_t            KernelROMId = -1;
-	uint16_t            RAMBehindKernelROMId = -1;
-	uint16_t            CharacterROMId = -1;
-	uint16_t            RAMBehindCharROMId = -1;
-
+	FC64BankIds			BankIds;
 	uint16_t			VICBankMapping[16];
+
+	FC64Emulator(const FC64Emulator&) = delete;                 // Prevent copy-construction
+	FC64Emulator& operator=(const FC64Emulator&) = delete;      // Prevent assignment
+
 };

@@ -1,3 +1,4 @@
+#if 0
 
 #include "GameLoader.h"
 
@@ -30,3 +31,5 @@ void FCPCGameLoader::SetFallbackCPCModel(ECPCModel cpcModel)
 {
 	FallbackCPCModel = cpcModel;
 }
+#endif
+

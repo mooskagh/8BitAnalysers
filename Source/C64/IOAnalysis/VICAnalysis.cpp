@@ -12,6 +12,7 @@ void VICWriteEventShowValue(FCodeAnalysisState& state, const FEvent& event);
 
 FVICAnalysis* pVIC = nullptr; // hack
 
+// Handler to describe VIC memory regions
 class FVICMemDescGenerator : public FMemoryRegionDescGenerator
 {
 	public:
@@ -32,12 +33,12 @@ class FVICMemDescGenerator : public FMemoryRegionDescGenerator
 				const int charX = charNo % 40;
 				const int charY = charNo / 40;
 
-				sprintf(DescStr, "Screen Char: %d,%d", charX, charY);
+				sprintf(DescStr, "<Screen Char: %d,%d>", charX, charY);
 				return DescStr;
 			}
 			else if(addr.Address >= spritePtrs && addr.Address < spritePtrs + 8)
 			{
-				sprintf(DescStr, "Sprite %d Image No", addr.Address - spritePtrs);
+				sprintf(DescStr, "<Sprite%dImageNo>", addr.Address - spritePtrs);
 				return DescStr;
 			}
 			else if (bBitmapMode && addr.Address >= BitmapAddress && addr.Address < BitmapAddress + (1 << 13))
@@ -47,7 +48,7 @@ class FVICMemDescGenerator : public FMemoryRegionDescGenerator
 				const int bitmapX = bitmapAddressOffset % 40;
 				const int bitmapY = bitmapAddressOffset / 40;
 
-				sprintf(DescStr, "Bitmap Screen: %d,%d",bitmapX,bitmapY);
+				sprintf(DescStr, "<Bitmap Screen: %d,%d>",bitmapX,bitmapY);
 				return DescStr;
 			}
 			return nullptr;
@@ -80,6 +81,29 @@ class FVICMemDescGenerator : public FMemoryRegionDescGenerator
 		char DescStr[32] = { 0 };
 };
 
+class FColourRAMMemDescGenerator : public FMemoryRegionDescGenerator
+{
+public:
+	FColourRAMMemDescGenerator(FC64Emulator* pEmulator)
+	{
+		RegionMin = 0xD800;
+		RegionMax = 0xDBE7;
+		RegionBankId = pEmulator->GetIOAreaBankId();
+	}
+
+	const char* GenerateAddressString(FAddressRef addr) override
+	{
+		const int ColRAMAddr = addr.Address - RegionMin;
+		const int colX = ColRAMAddr % 40;
+		const int colY = ColRAMAddr / 40;
+		sprintf(DescStr, "<Colour RAM: %d,%d>", colX, colY);
+		return DescStr;
+	}
+private:
+	char DescStr[32] = { 0 };
+};
+
+
 void FVICAnalysis::Init(FC64Emulator* pEmulator)
 {
 	Name = "VIC-II";
@@ -89,7 +113,15 @@ void FVICAnalysis::Init(FC64Emulator* pEmulator)
 	pVIC = this;
 
 	AddMemoryRegionDescGenerator(new FVICMemDescGenerator(pEmulator));
+	AddMemoryRegionDescGenerator(new FColourRAMMemDescGenerator(pEmulator));
+    
+    // Register Events
 	pCodeAnalyser->Debugger.RegisterEventType((uint8_t)EC64Event::VICRegisterWrite, "VIC Write", 0xff0000ff, VICWriteEventShowAddress, VICWriteEventShowValue);
+    
+    pCodeAnalyser->Debugger.RegisterEventType((uint8_t)EC64Event::VICScreenModeChar, "VIC Screen Mode Char", 0xff0010ff);
+    pCodeAnalyser->Debugger.RegisterEventType((uint8_t)EC64Event::VICScreenModeBmp, "VIC Screen Mode Bmp", 0xff0020ff);
+    pCodeAnalyser->Debugger.RegisterEventType((uint8_t)EC64Event::VICScreenModeMultiColour, "VIC Screen Mode MultiCol", 0xff0030ff);
+    pCodeAnalyser->Debugger.RegisterEventType((uint8_t)EC64Event::VICScreenModeHiRes, "VIC Screen Mode HiRes", 0xff0040ff);
 }
 
 void FVICAnalysis::Reset(void)
@@ -190,10 +222,7 @@ void FVICAnalysis::DrawScreenOverlay(float x,float y) const
 	}
 }
 
-void FVICAnalysis::OnRegisterRead(uint8_t reg, FAddressRef pc)
-{
-	
-}
+
 
 int	 FVICAnalysis::GetFrameSprite(int scanline, int spriteNo)
 {
@@ -206,20 +235,85 @@ int	 FVICAnalysis::GetFrameSprite(int scanline, int spriteNo)
 	return -1;
 }
 
+EC64Event FVICAnalysis::GetVICEvent(uint8_t reg, uint8_t val, FAddressRef pc)
+{
+
+	return EC64Event::VICRegisterWrite;
+}
+
+void FVICAnalysis::OnRegisterRead(uint8_t reg, FAddressRef pc)
+{
+    
+}
 
 void FVICAnalysis::OnRegisterWrite(uint8_t reg, uint8_t val, FAddressRef pc)
 {
 	c64_t* pC64 = pC64Emu->GetEmu();
+	const int scanline = pC64->vic.rs.v_count;
+
 	FC64IORegisterInfo& vicRegister = VICRegisters[reg];
 	const uint8_t regChange = vicRegister.LastVal ^ val;	// which bits have changed
 
-	pCodeAnalyser->Debugger.RegisterEvent((uint8_t)EC64Event::VICRegisterWrite,pc,reg,val, pC64->vic.rs.v_count);
+    // BMP <-> Char mode
+    if(reg == (uint8_t)EVicRegister::ScreenControl1 && regChange & (1<<5))
+    {
+        if( val & (1<<5))
+            pCodeAnalyser->Debugger.RegisterEvent((uint8_t)EC64Event::VICScreenModeBmp,pc,reg,val, scanline);
+        else
+            pCodeAnalyser->Debugger.RegisterEvent((uint8_t)EC64Event::VICScreenModeChar,pc,reg,val, scanline);
+    }
+    
+    // Multicolour On/Off
+    if(reg == (uint8_t)EVicRegister::ScreenControl2 && regChange & (1<<4))
+    {
+        if( val & (1<<4))
+            pCodeAnalyser->Debugger.RegisterEvent((uint8_t)EC64Event::VICScreenModeMultiColour,pc,reg,val, scanline);
+        else
+            pCodeAnalyser->Debugger.RegisterEvent((uint8_t)EC64Event::VICScreenModeHiRes,pc,reg,val, scanline);
+    }
+
+	if(reg == (uint8_t)EVicRegister::MemorySetup)
+	{
+		if((regChange >> 1) & 7)	// character address changed
+		{
+			const uint16_t vicMemBase = pC64->vic_bank_select;
+			const uint16_t charAddr = (((val >> 1) & 7) << 11);
+			FAddressRef charAddress = pC64Emu->GetVICMemoryAddress(charAddr);
+			bool bFound = false;
+			for(auto charAddrRef : CharSets)
+			{
+				if (charAddress == charAddrRef.Address)
+				{
+					bFound = true;
+					break;
+				}
+			}
+
+			if(bFound == false)
+			{
+				uint32_t charCols[4];
+				charCols[0] = m6569_color(pC64->vic.reg.bc[0]);
+				charCols[1] = m6569_color(pC64->vic.reg.bc[1]);
+				charCols[2] = m6569_color(pC64->vic.reg.bc[2]);
+				charCols[3] = 0;//m6569_color(pC64->vic.reg.bc[3]);
+
+				FCharSetDef newCharSet;
+				newCharSet.Address = charAddress;
+				newCharSet.bMultiColour = pC64->vic.reg.ctrl_1 & (1 << 4);
+				newCharSet.PaletteNo = GetPaletteNo(charCols, newCharSet.bMultiColour ? 4 : 2);
+
+				CharSets.push_back(newCharSet);
+			}
+		}
+	}
+    
+	// Events
+	pCodeAnalyser->Debugger.RegisterEvent((uint8_t)GetVICEvent(reg,val,pc),pc,reg,val, scanline);
 	vicRegister.Accesses[pc].WriteVals.insert(val);
 
 	vicRegister.LastVal = val;
 
 	// check for sprite register updates
-	const int scanline = pC64->vic.rs.v_count;
 	if (reg <= (int)EVicRegister::Sprite7_Y)	// set sprite coordinate
 	{
 		const int spriteNo = reg >> 1;
@@ -330,9 +424,7 @@ void DrawRegValueScanline(FC64IODevice* pDevice, uint8_t val)
 {
 	ImGui::Text("%d", val);
 	if (ImGui::IsItemHovered())
-	{
 		pDevice->GetC64()->SetScanlineHighlight(val);
-	}
 }
 
 
@@ -355,14 +447,19 @@ Write: Raster line to generate interrupt at (bit #8).
 
 void DrawRegValueScreenControlReg1(FC64IODevice* pDevice, uint8_t val)
 {
-	ImGui::Text("($%X) VScroll:%d, Height:%d, Scr:%s, %s, ExtBG:%s, RastMSB:%d",
-		val,
-		val & 7,
-		val & (1 << 3) ? 25 : 24,
-		val & (1 << 4) ? "ON" : "OFF",
-		val & (1 << 5) ? "BMP" : "TXT",
-		val & (1 << 6) ? "ON" : "OFF",
-		val & (1 << 7) ? 1 : 0);
+	ImGui::Text("$%X",val);
+	if(ImGui::IsItemHovered())
+	{
+		ImGui::BeginTooltip();
+		ImGui::Text("VScroll:%d, Height:%d, Scr:%s, %s, ExtBG:%s, RastMSB:%d",
+			val & 7,
+			val & (1 << 3) ? 25 : 24,
+			val & (1 << 4) ? "ON" : "OFF",
+			val & (1 << 5) ? "BMP" : "TXT",
+			val & (1 << 6) ? "ON" : "OFF",
+			val & (1 << 7) ? 1 : 0);
+		ImGui::EndTooltip();
+	}
 }
 
 /*
@@ -377,24 +474,33 @@ Bit #4: 1 = Multicolor mode on.
 
 void DrawRegValueScreenControlReg2(FC64IODevice* pDevice, uint8_t val)
 {
-	ImGui::Text("($%X) HScroll:%d, Width:%d, MultiColour:%s",
-		val,
-		val & 7,
-		val & (1 << 3) ? 40 : 38,
-		val & (1 << 4) ? "ON" : "OFF");
+	ImGui::Text("$%X", val);
+	if (ImGui::IsItemHovered())
+	{
+		ImGui::BeginTooltip();
+		ImGui::Text("HScroll:%d, Width:%d, MultiColour:%s",
+			val & 7,
+			val & (1 << 3) ? 40 : 38,
+			val & (1 << 4) ? "ON" : "OFF");
+		ImGui::EndTooltip();
+	}
 
 }
 
 void DrawRegValueMemorySetup(FC64IODevice* pDevice, uint8_t val)
 {
-	ImGui::Text("($%X) Char Addr: $%04X, Bitmap Address: $%04X, Screen Address: $%04X",
-		val,
-		((val >> 1) & 7) << 11,
-		((val >> 3) & 1) << 13,
-		(val >> 4) << 10
-	);
-	ImGui::Text("\t$%X", val);
+	ImGui::Text("$%X", val);
+	if (ImGui::IsItemHovered())
+	{
+		const uint16_t vicMemBase = pDevice->GetC64()->GetEmu()->vic_bank_select;
 
+		ImGui::BeginTooltip();
+		ImGui::Text("Char Addr: $%04X, Bitmap Address: $%04X, Screen Address: $%04X",
+			vicMemBase + (((val >> 1) & 7) << 11),
+			vicMemBase + (((val >> 3) & 1) << 13),
+			vicMemBase + ((val >> 4) << 10));
+		ImGui::EndTooltip();
+	}
 }
 
 static std::vector<FRegDisplayConfig>	g_VICRegDrawInfo = 
@@ -415,22 +521,22 @@ static std::vector<FRegDisplayConfig>	g_VICRegDrawInfo =
 	{"Sprite 6 Y",	DrawRegValueYPos}, 	// 0x0d
 	{"Sprite 7 X",	DrawRegValueXPos}, 	// 0x0e
 	{"Sprite 7 Y",	DrawRegValueYPos}, 	// 0x0f
-	{"Sprite X MSB",	DrawRegValueHex},	// 0x10
-	{"Screen Ctrl 1",	DrawRegValueScreenControlReg1},	// 0x11
+	{"Sprite X MSB",	DrawRegValueHex, EDataItemDisplayType::Binary},	// 0x10
+	{"Screen Ctrl 1",	DrawRegValueScreenControlReg1, EDataItemDisplayType::Hex},	// 0x11
 	{"Raster Line",	DrawRegValueScanline},	// 0x12
 	{"Light Pen X",	DrawRegValueDecimal},	// 0x13
 	{"Light Pen Y",	DrawRegValueDecimal},	// 0x14
-	{"Sprite Enable",	DrawRegValueSpriteEnable},	// 0x15
+	{"Sprite Enable",	DrawRegValueSpriteEnable, EDataItemDisplayType::Binary},	// 0x15
 	{"Screen Ctrl 2",		DrawRegValueScreenControlReg2},	// 0x16
-	{"Sprite Dbl Height",	DrawRegValueSpriteEnable},	// 0x17
-	{"Memory Setup",		DrawRegValueMemorySetup},	// 0x18
-	{"Interrupt Status",		DrawRegValueHex},	// 0x19
+	{"Sprite Dbl Height",	DrawRegValueSpriteEnable, EDataItemDisplayType::Binary},	// 0x17
+	{"Memory Setup",		DrawRegValueMemorySetup, EDataItemDisplayType::Hex},	// 0x18
+	{"Interrupt Status",		DrawRegValueHex, EDataItemDisplayType::Hex},	// 0x19
 	{"Interrupt Control",	DrawRegValueHex},// 0x1a
-	{"Sprite Priority",		DrawRegValueHex},// 0x1b
-	{"Sprite Multi Col",		DrawRegValueSpriteEnable},// 0x1c
-	{"Sprite Dbl Width",		DrawRegValueSpriteEnable},// 0x1d
-	{"Sprite-SpriteCol",		DrawRegValueSpriteEnable},// 0x1e
-	{"Sprite-BackCol",	DrawRegValueSpriteEnable},	// 0x1f
+	{"Sprite Priority",		DrawRegValueHex, EDataItemDisplayType::Binary},// 0x1b
+	{"Sprite Multi Col",		DrawRegValueSpriteEnable, EDataItemDisplayType::Binary},// 0x1c
+	{"Sprite Dbl Width",		DrawRegValueSpriteEnable, EDataItemDisplayType::Binary},// 0x1d
+	{"Sprite-SpriteCol",		DrawRegValueSpriteEnable, EDataItemDisplayType::Binary},// 0x1e
+	{"Sprite-BackCol",	DrawRegValueSpriteEnable, EDataItemDisplayType::Binary},	// 0x1f
 	{"Border Colour",		DrawRegValueColour},// 0x20
 	{"Background Colour",		DrawRegValueColour},// 0x21
 	{"Extra BackColour 1",		DrawRegValueColour},// 0x22
@@ -459,21 +565,25 @@ void VICWriteEventShowValue(FCodeAnalysisState& state, const FEvent& event)
 	//ImGui::Text("VIC Value: %s", NumStr(event.Value));
 }
 
-void FVICAnalysis::DrawDetailsUI(void)
+void FVICAnalysis::DrawLastFrameSpriteInfo(void)
 {
 	for (const auto& frameSprite : LastFrameSprites)
 	{
 		ImGui::Text("Sprite No %d", frameSprite.SpriteNo);
 		ImGui::SameLine();
-		ImGui::Text("Pos: %d,%d", frameSprite.XPosition,frameSprite.YPosition);
-		
-		if(frameSprite.CodeAddress.IsValid())
-		{ 
+		ImGui::Text("Pos: %d,%d", frameSprite.XPosition, frameSprite.YPosition);
+
+		if (frameSprite.CodeAddress.IsValid())
+		{
 			ImGui::SameLine();
 			ImGui::Text("Set by:");	ImGui::SameLine();
-			DrawCodeAddress(*pCodeAnalyser,pCodeAnalyser->GetFocussedViewState(),frameSprite.CodeAddress);
+			DrawCodeAddress(*pCodeAnalyser, pCodeAnalyser->GetFocussedViewState(), frameSprite.CodeAddress);
 		}
 	}
+}
+
+void FVICAnalysis::DrawDetailsUI(void)
+{
 	DrawVICRegisterInfo();
 }
 
@@ -497,9 +607,12 @@ void FVICAnalysis::DrawVICRegisterInfo(void)
 	if (ImGui::BeginChild("VIC Reg Details"))
 	{
 		if (SelectedRegister != -1)
+			DrawRegDetails(this, VICRegisters[SelectedRegister], g_VICRegDrawInfo[SelectedRegister], pCodeAnalyser);
+#if 0
 		{
 			FC64IORegisterInfo& vicRegister = VICRegisters[SelectedRegister];
 			const FRegDisplayConfig& regConfig = g_VICRegDrawInfo[SelectedRegister];
+
 
 			if (ImGui::Button("Clear"))
 			{
@@ -516,24 +629,40 @@ void FVICAnalysis::DrawVICRegisterInfo(void)
 
 				ShowCodeAccessorActivity(*pCodeAnalyser, access.first);
 				ImGui::Text("   ");
-				ImGui::SameLine(); DrawCodeAddress(*pCodeAnalyser, pCodeAnalyser->GetFocussedViewState(), access.first);
+				ImGui::SameLine(); 
+				DrawCodeAddress(*pCodeAnalyser, pCodeAnalyser->GetFocussedViewState(), access.first);
 
-				ImGui::Text("Values:");
-
-				for (auto& val : access.second.WriteVals)
+				if(ImGui::CollapsingHeader("Values"))
 				{
-					regConfig.UIDrawFunction(this, val);
+					for (auto& val : access.second.WriteVals)
+						regConfig.UIDrawFunction(this, val);
 				}
 			}
 		}
+#endif
 	}
 	ImGui::EndChild();
 }
 
+std::string GetVICLabelName(int reg)
+{
+	std::string displayName = g_VICRegDrawInfo[reg].Name;
+	std::string labelName = "VIC_";
 
+	for (auto ch : displayName)
+	{
+		if(ch != ' ')
+			labelName += ch;
+	}
+
+	return labelName;
+}
 
 void AddVICRegisterLabels(FCodeAnalysisPage& IOPage)
 {
 	for(int reg=0;reg< (int)g_VICRegDrawInfo.size();reg++)
-		IOPage.SetLabelAtAddress(g_VICRegDrawInfo[reg].Name, ELabelType::Data, reg);
+	{
+		IOPage.SetLabelAtAddress(GetVICLabelName(reg).c_str(), ELabelType::Data, reg, true);
+		IOPage.DataInfo[reg].DisplayType = g_VICRegDrawInfo[reg].DisplayType;
+	}
 }

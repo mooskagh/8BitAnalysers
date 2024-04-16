@@ -203,13 +203,41 @@ void FC64GraphicsViewer::DrawCharactersViewer()
 	// Colour selection
 	ImGui::Text("Character Colours");
 	DrawColourPicker(CharCols);
-	c64_t* pC64 = C64Emu->GetEmu();
+	const c64_t* pC64 = C64Emu->GetEmu();
 	if (ImGui::Button("Get from VIC"))
 	{
 		CharCols[0] = m6569_color(pC64->vic.reg.bc[0]);
 		CharCols[1] = m6569_color(pC64->vic.reg.bc[1]);
 		CharCols[2] = m6569_color(pC64->vic.reg.bc[2]);	
-		CharCols[3] = m6569_color(pC64->vic.reg.bc[3]);
+		CharCols[3] = 0;//m6569_color(pC64->vic.reg.bc[3]);
+	}
+
+	// Found char sets
+	const auto& foundCharSets = C64Emu->GetC64IOAnalysis().GetVICAnalysis().GetFoundCharSets();
+	if (foundCharSets.size() > 0)
+	{
+		ImGui::Text("Char sets found by VIC Analyser");
+		if (ImGui::BeginChild("foundChars"))
+		{
+
+			for (auto charSet : foundCharSets)
+			{
+				ImGui::PushID(charSet.Address.Val);
+				ImGui::Text("%s",NumStr(charSet.Address.Address));
+				DrawAddressLabel(*CodeAnalysis,CodeAnalysis->GetFocussedViewState(), charSet.Address);
+				ImGui::SameLine();
+				if (ImGui::Button("Create"))
+				{
+					FCharSetCreateParams params;
+					params.Address = charSet.Address;
+					params.BitmapFormat = charSet.bMultiColour ? EBitmapFormat::ColMapMulticolour_C64 : EBitmapFormat::Bitmap_1Bpp;	// TODO: handle multicolour
+					params.PaletteNo = charSet.PaletteNo;
+					CreateCharacterSetAt(*CodeAnalysis, params);
+				}
+				ImGui::PopID();
+			}
+		}
+		ImGui::EndChild();
 	}
 }
 
@@ -537,7 +565,7 @@ void DrawColourPicker(uint32_t colours[4])
 		ImGui::PushID(col);
 		const ImVec2 size(18, 18);
 		ImVec4 c = ImColor(colours[col]);
-		ImGui::Text("Sprite Col: %d", col);
+		ImGui::Text("Colour: %d", col);
 		ImGui::SameLine();
 
 		ImGui::ColorButton("##cur_col", c, ImGuiColorEditFlags_NoAlpha, size);

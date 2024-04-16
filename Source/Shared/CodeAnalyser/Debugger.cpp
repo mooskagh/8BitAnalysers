@@ -9,6 +9,7 @@
 #include "Z80/Z80Disassembler.h"
 #include "6502/M6502Disassembler.h"
 #include <Util/GraphicsView.h>
+#include "Misc/EmuBase.h"
 
 static const uint32_t	BPMask_Exec			= 0x0001;
 static const uint32_t	BPMask_DataWrite	= 0x0002;
@@ -290,6 +291,17 @@ int FDebugger::OnInstructionExecuted(uint64_t pins)
 	return trapId;
 }
 
+// called at the start of every scanline
+void FDebugger::OnScanlineStart(int scanlineNo)
+{
+	//if (BreakpointMask & BPMask_Scanline)
+	{
+		// TODO: check for scanline breakpoint
+		if(scanlineNo == ScanlineBreakpoint)
+			Break();
+	}
+}
+
 // called every machine frame
 // will get called in the middle of emulation
 void FDebugger::OnMachineFrameStart()
@@ -358,7 +370,7 @@ bool FDebugger::FrameTick(void)
 	return bDebuggerStopped;
 }
 
-static const uint32_t kVersionNo = 3;
+static const uint32_t kVersionNo = 4;
 
 // Load state - breakpoints, watches etc.
 void	FDebugger::LoadFromFile(FILE* fp)
@@ -405,6 +417,9 @@ void	FDebugger::LoadFromFile(FILE* fp)
 	// PC
 	if (versionNo > 2)
 		fread(&PC.Val, sizeof(uint32_t), 1, fp);	
+
+	if (versionNo > 3)
+		fread(&ScanlineBreakpoint, sizeof(int), 1, fp);
 }
 
 // Save state - breakpoints, watches etc.
@@ -445,6 +460,9 @@ void	FDebugger::SaveToFile(FILE* fp)
 
 	// PC
 	fwrite(&PC.Val,sizeof(uint32_t), 1, fp);
+
+	// Scanline BP
+	fwrite(&ScanlineBreakpoint, sizeof(int), 1, fp);
 }
 
 
@@ -1211,6 +1229,7 @@ void FDebugger::DrawEvents(void)
 {
 	std::vector<FEventTypeInfo>& eventTypeInfo = g_EventTypeInfo;
 	FCodeAnalysisState& state = *pCodeAnalysis;
+	FEmuBase* pEmuBase = state.GetEmulator();
 
 	if (ImGui::Button("Clear"))
 		ClearEvents();
@@ -1291,8 +1310,22 @@ void FDebugger::DrawEvents(void)
 				ImGui::TableNextRow();
 
 				ImGui::TableSetColumnIndex(0);
+				const bool bSelected = SelectedEventIndex == i;
+				ImGuiSelectableFlags selectableFlags = ImGuiSelectableFlags_SpanAllColumns | ImGuiSelectableFlags_AllowOverlap;
+				if (ImGui::Selectable("##eventselect", bSelected, selectableFlags, ImVec2(0, 0)))
+				{
+					SelectedEventIndex = i;
+				}
+				ImGui::SetItemAllowOverlap();	// allow buttons
+				ImGui::SameLine();
 				ImGui::Text("%d", event.ScanlinePos);
-
+				
+				// highlight scanline
+				if (bSelected)
+				{
+					const uint32_t col = GetEventColour(event.Type);
+					pEmuBase->SetScanlineHighlight(event.ScanlinePos, col);
+				}
 				ImGui::TableSetColumnIndex(1);
 				ImVec2 pos = ImGui::GetCursorScreenPos();
 					

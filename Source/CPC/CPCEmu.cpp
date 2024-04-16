@@ -30,6 +30,7 @@
 
 #include "LuaScripting/LuaSys.h"
 #include "CPCLuaAPI.h"
+#include "SnapshotLoaders/SNALoader.h"
 
 //#define RUN_AHEAD_TO_GENERATE_SCREEN
 #ifndef NDEBUG
@@ -428,9 +429,9 @@ void FCPCEmu::FixupAddressRefs()
 	// Fixup game config
 	if (pActiveGame != nullptr)
 	{
-		if (FGameConfig* pGameConfig = pActiveGame->pConfig)
+		if (FProjectConfig* pProjectConfig = pActiveGame->pConfig)
 		{
-			pGameConfig->FixupAddressRefs(CodeAnalysis);
+			pProjectConfig->FixupAddressRefs(CodeAnalysis);
 		}
 	}
 
@@ -858,11 +859,8 @@ bool FCPCEmu::Init(const FEmulatorLaunchConfig& launchConfig)
 		CodeAnalysis.ViewState[i].CurBitmapFormat = EBitmapFormat::ColMap2Bpp_CPC;
 	}
 
-	// A class that deals with loading games.
-	GameLoader.Init(this, pCPCConfig->GetDefaultModel());
-	GamesList.SetLoader(&GameLoader);
-	GamesList.EnumerateGames(pCPCConfig->SnapshotFolder.c_str());
-	
+	AddGamesList("Snapshot File", pGlobalConfig->SnapshotFolder.c_str());
+
 	Screen.Init(this);
 
 	// This is where we add the viewers we want
@@ -1100,7 +1098,7 @@ void FCPCEmu::Shutdown()
 {
 	FEmuBase::Shutdown();
 
-	SaveCurrentGameData();	// save on close
+	SaveProject();	// save on close
 
 	// Save Global Config - move to function?
 
@@ -1117,13 +1115,12 @@ void FCPCEmu::Shutdown()
 	//GraphicsViewer.Shutdown();
 }
 
-bool FCPCEmu::StartGame(FGameConfig* pGameConfig, bool bLoadGameData)
+bool FCPCEmu::LoadProject(FProjectConfig* pProjectConfig, bool bLoadGameData)
 {
-	assert(pGameConfig != nullptr);
-	FCPCGameConfig* pCPCGameConfig = (FCPCGameConfig*)pGameConfig;
+	FCPCProjectConfig* pCPCProjectConfig = (FCPCProjectConfig*)pProjectConfig;
 
 #ifndef NDEBUG
-	LOGINFO("Start game '%s'", pGameConfig->Name.c_str());
+	LOGINFO("Start game '%s'", pProjectConfig->Name.c_str());
 #endif
 
 	// reset systems
@@ -1138,20 +1135,20 @@ bool FCPCEmu::StartGame(FGameConfig* pGameConfig, bool bLoadGameData)
 	const chips_display_info_t dispInfo = cpc_display_info(&CPCEmuState);
 	memset(dispInfo.frame.buffer.ptr, 0, dispInfo.frame.buffer.size);
 	
+
 	// start up game
 	delete pActiveGame;
 
 	FGame* pNewGame = new FGame;
-	pNewGame->pConfig = pGameConfig;
-	//pCPCGameConfig->bCPC6128Game = CPCEmuState.type == CPC_TYPE_6128;
+	pNewGame->pConfig = pProjectConfig;
+	//pCPCProjectConfig->bCPC6128Game = CPCEmuState.type == CPC_TYPE_6128;
+
 	pActiveGame = pNewGame;
 
 	//GenerateSpriteListsFromConfig(GraphicsViewer, pGameConfig);
 
-	const ECPCModel gameCPCModel = pCPCGameConfig->GetCPCModel();
+	const ECPCModel gameCPCModel = pCPCProjectConfig->GetCPCModel();
 	InitForModel(gameCPCModel);
-
-	GameLoader.SetFallbackCPCModel(gameCPCModel);
 
 	// Initialise code analysis
 	CodeAnalysis.Init(this);
@@ -1161,24 +1158,24 @@ bool FCPCEmu::StartGame(FGameConfig* pGameConfig, bool bLoadGameData)
 	// Set options from config
 	for (int i = 0; i < FCodeAnalysisState::kNoViewStates; i++)
 	{
-		CodeAnalysis.ViewState[i].Enabled = pGameConfig->ViewConfigs[i].bEnabled;
-		CodeAnalysis.ViewState[i].GoToAddress(pGameConfig->ViewConfigs[i].ViewAddress);
+		CodeAnalysis.ViewState[i].Enabled = pProjectConfig->ViewConfigs[i].bEnabled;
+		CodeAnalysis.ViewState[i].GoToAddress(pProjectConfig->ViewConfigs[i].ViewAddress);
 	}
 
-	bool bLoadSnapshot = pGameConfig->SnapshotFile.empty() == false;
+	bool bLoadSnapshot = pCPCProjectConfig->EmulatorFile.FileName.empty() == false;
 
 	// Are we loading a previously saved game
 	if (bLoadGameData)
 	{
 		const std::string root = pGlobalConfig->WorkspaceRoot;
 
-		std::string analysisJsonFName = root + "AnalysisJson/" + pGameConfig->Name + ".json";
-		std::string graphicsSetsJsonFName = root + "GraphicsSets/" + pGameConfig->Name + ".json";
-		std::string analysisStateFName = root + "AnalysisState/" + pGameConfig->Name + ".astate";
-		std::string saveStateFName = root + "SaveStates/" + pGameConfig->Name + ".state";
+		std::string analysisJsonFName = root + "AnalysisJson/" + pProjectConfig->Name + ".json";
+		std::string graphicsSetsJsonFName = root + "GraphicsSets/" + pProjectConfig->Name + ".json";
+		std::string analysisStateFName = root + "AnalysisState/" + pProjectConfig->Name + ".astate";
+		std::string saveStateFName = root + "SaveStates/" + pProjectConfig->Name + ".state";
 
 		// check for new location & adjust paths accordingly
-		const std::string gameRoot = pGlobalConfig->WorkspaceRoot + pGameConfig->Name + "/";
+		const std::string gameRoot = pGlobalConfig->WorkspaceRoot + pProjectConfig->Name + "/";
 		if (FileExists((gameRoot + "Config.json").c_str()))
 		{
 			analysisJsonFName = gameRoot + "Analysis.json";
@@ -1187,9 +1184,9 @@ bool FCPCEmu::StartGame(FGameConfig* pGameConfig, bool bLoadGameData)
 			saveStateFName = gameRoot + "SaveState.bin";
 		}
 
-		if (pCPCGameConfig->GetCPCModel() != GetCurrentCPCModel())
+		if (pCPCProjectConfig->GetCPCModel() != GetCurrentCPCModel())
 		{
-			InitForModel(pCPCGameConfig->GetCPCModel());
+			InitForModel(pCPCProjectConfig->GetCPCModel());
 		}
 
 		if (LoadGameState(saveStateFName.c_str()))
@@ -1218,13 +1215,13 @@ bool FCPCEmu::StartGame(FGameConfig* pGameConfig, bool bLoadGameData)
 	if (bLoadSnapshot)
 	{
 		// if the game state didn't load then reload the snapshot
-		const FGameSnapshot* snapshot = GamesList.GetGame(RemoveFileExtension(pGameConfig->SnapshotFile.c_str()).c_str());
+		/*const FEmulatorFile* snapshot = GamesList.GetGame(RemoveFileExtension(pProjectConfig->EmulatorFile.c_str()).c_str());
 		if (snapshot == nullptr)
 		{
-			SetLastError("Could not find '%s%s'", pGlobalConfig->SnapshotFolder.c_str(), pGameConfig->SnapshotFile.c_str());
+			SetLastError("Could not find '%s%s'", pGlobalConfig->SnapshotFolder.c_str(), pProjectConfig->EmulatorFile.c_str());
 			return false;
-		}
-		if (!GameLoader.LoadSnapshot(*snapshot))
+		}*/
+		if (!LoadEmulatorFile(&pProjectConfig->EmulatorFile))
 		{
 			return false;
 		}
@@ -1239,7 +1236,7 @@ bool FCPCEmu::StartGame(FGameConfig* pGameConfig, bool bLoadGameData)
 	//UpdateBankMappings();
 
 	const std::string memStr = CPCEmuState.type == CPC_TYPE_6128 ? " (CPC 6128)" : " (CPC 464)";
-	const std::string windowTitle = kAppTitle + " - " + pGameConfig->Name + memStr;
+	const std::string windowTitle = kAppTitle + " - " + pProjectConfig->Name + memStr;
 	SetWindowTitle(windowTitle.c_str());
 
 	ReAnalyseCode(CodeAnalysis);
@@ -1289,9 +1286,9 @@ bool FCPCEmu::StartGame(FGameConfig* pGameConfig, bool bLoadGameData)
 		CodeAnalysis.Debugger.SetPC(initialPC);
 	}
 	
-	pGraphicsViewer->SetImagesRoot((pGlobalConfig->WorkspaceRoot + "/" + pGameConfig->Name + "/GraphicsSets/").c_str());
+	pGraphicsViewer->SetImagesRoot((pGlobalConfig->WorkspaceRoot + "/" + pProjectConfig->Name + "/GraphicsSets/").c_str());
 
-	pCurrentGameConfig = pGameConfig;
+	pCurrentProjectConfig = pProjectConfig;
 
 	LoadLua();
 	return true;
@@ -1300,12 +1297,12 @@ bool FCPCEmu::StartGame(FGameConfig* pGameConfig, bool bLoadGameData)
 bool FCPCEmu::LoadLua()
 {
 	// Setup Lua - reinitialised for each game
-	const std::string gameRoot = pGlobalConfig->WorkspaceRoot + pCurrentGameConfig->Name + "/";
+	const std::string gameRoot = pGlobalConfig->WorkspaceRoot + pCurrentProjectConfig->Name + "/";
 	if (LuaSys::Init(this))
 	{
 		RegisterCPCLuaAPI(LuaSys::GetGlobalState());
 
-		for (const auto& gameScript : pCurrentGameConfig->LuaSourceFiles)
+		for (const auto& gameScript : pCurrentProjectConfig->LuaSourceFiles)
 		{
 			std::string luaScriptFName = gameRoot + gameScript;
 			LuaSys::LoadFile(luaScriptFName.c_str(), true);
@@ -1366,16 +1363,16 @@ bool FCPCEmu::LoadGameState(const char* fname)
 }
 
 // save config & data
-bool FCPCEmu::SaveCurrentGameData(void)
+bool FCPCEmu::SaveProject(void)
 {
 	if (pActiveGame != nullptr)
 	{
-		FGameConfig* pGameConfig = pActiveGame->pConfig;
-		if (pGameConfig == nullptr || pGameConfig->Name.empty())
+		FProjectConfig* pProjectConfig = pActiveGame->pConfig;
+		if (pProjectConfig == nullptr || pProjectConfig->Name.empty())
 			return false;
 
 #if SAVE_NEW_DIRS
-		const std::string root = pGlobalConfig->WorkspaceRoot + pGameConfig->Name + "/";
+		const std::string root = pGlobalConfig->WorkspaceRoot + pProjectConfig->Name + "/";
 		const std::string configFName = root + "Config.json";
 		const std::string analysisJsonFName = root + "Analysis.json";
 		const std::string graphicsSetsJsonFName = root + "GraphicsSets.json";
@@ -1403,13 +1400,13 @@ bool FCPCEmu::SaveCurrentGameData(void)
 		for (int i = 0; i < FCodeAnalysisState::kNoViewStates; i++)
 		{
 			const FCodeAnalysisViewState& viewState = CodeAnalysis.ViewState[i];
-			FCodeAnalysisViewConfig& viewConfig = pGameConfig->ViewConfigs[i];
+			FCodeAnalysisViewConfig& viewConfig = pProjectConfig->ViewConfigs[i];
 
 			viewConfig.bEnabled = viewState.Enabled;
 			viewConfig.ViewAddress = viewState.GetCursorItem().IsValid() ? viewState.GetCursorItem().AddressRef : FAddressRef();
 		}
 
-		SaveGameConfigToFile(*pGameConfig, configFName.c_str());
+		SaveGameConfigToFile(*pProjectConfig, configFName.c_str());
 		SaveGameState(saveStateFName.c_str());
 		ExportAnalysisJson(CodeAnalysis, analysisJsonFName.c_str());
 		ExportAnalysisState(CodeAnalysis, analysisStateFName.c_str());
@@ -1420,29 +1417,49 @@ bool FCPCEmu::SaveCurrentGameData(void)
 	return true;
 }
 
-bool FCPCEmu::NewGameFromSnapshot(const FGameSnapshot& snaphot)
+bool FCPCEmu::LoadEmulatorFile(const FEmulatorFile* pEmuFile)
+{
+	auto findIt = GamesLists.find(pEmuFile->ListName);
+	if (findIt == GamesLists.end())
+		return false;
+
+	const std::string fileName = findIt->second.GetRootDir() + pEmuFile->FileName;
+
+	switch (pEmuFile->Type)
+	{
+		case EEmuFileType::SNA:
+		{
+			return LoadSNAFile(this, fileName.c_str(), GetCPCGlobalConfig()->GetDefaultModel());
+		}
+
+		default: 
+			return false;
+	}
+}
+
+bool FCPCEmu::NewProjectFromEmulatorFile(const FEmulatorFile& emuFile)
 {
 	// Remove any existing config 
-	RemoveGameConfig(snaphot.DisplayName.c_str());
+	RemoveGameConfig(emuFile.DisplayName.c_str());
 
-	FCPCGameConfig* pNewConfig = CreateNewCPCGameConfigFromSnapshot(snaphot);
+	FCPCProjectConfig* pNewConfig = CreateNewCPCProjectConfigFromEmulatorFile(emuFile);
 	
 	// Set the preferred CPC model. The snapshot can override this.
 	pNewConfig->bCPC6128Game = GetCPCGlobalConfig()->bDefaultMachineIs6128;
 
 	if (pNewConfig != nullptr)
 	{
-		if (!StartGame(pNewConfig, /* bLoadGameData */ false))
+		if (!LoadProject(pNewConfig, /* bLoadGameData */ false))
 			return false;
 		
 		// Set the machine type based on the snapshot we read in StartGame().
 		pNewConfig->bCPC6128Game = GetCurrentCPCModel() == ECPCModel::CPC_6128;
 
 		AddGameConfig(pNewConfig);
-		SaveCurrentGameData();
+		SaveProject();
 
 		return true;
-	}
+	} 
 
 	return false;
 }
@@ -1456,7 +1473,7 @@ void FCPCEmu::Reset()
 	ui_dbg_reset(&UICPC.dbg);
 
 	const bool bIs6128 = GetCPCGlobalConfig()->bDefaultMachineIs6128;
-	FCPCGameConfig* pBasicConfig = (FCPCGameConfig*)GetGameConfigForName(bIs6128 ? "AmstradBasic6128" : "AmstradBasic464");
+	FCPCProjectConfig* pBasicConfig = (FCPCProjectConfig*)GetGameConfigForName(bIs6128 ? "AmstradBasic6128" : "AmstradBasic464");
 
 	if (pBasicConfig == nullptr)
 		pBasicConfig = CreateNewAmstradBasicConfig(bIs6128);
@@ -1464,7 +1481,7 @@ void FCPCEmu::Reset()
 	// don't think we need this? we do it in StartGame()
 	//InitBankMappings();
 	
-	StartGame(pBasicConfig, false);	// reset code analysis
+	LoadProject(pBasicConfig, false);	// reset code analysis
 
 	CodeAnalysis.Debugger.Continue();
 }

@@ -11,6 +11,7 @@ FMemoryAccessGrid::FMemoryAccessGrid(FCodeAnalysisState* pCodeAnalysis, int xGri
 	: CodeAnalysis(pCodeAnalysis)
 	, GridSizeX(xGridSize)
 	, GridSizeY(yGridSize)
+	, GridStride(xGridSize)
 {
 
 }
@@ -31,15 +32,15 @@ bool FMemoryAccessGrid::GetAddressGridPosition(FAddressRef address, int& outX, i
 			address.Address <= endAddr.Address)
 		{
 			const uint16_t addrOffset = address.Address - startAddr.Address;
-			outX = addrOffset % GridSizeX;
-			outY = addrOffset / GridSizeX;
+			outX = addrOffset % GridStride;
+			outY = addrOffset / GridStride;
 			return true;
 		}
 	}
 	return false;
 }
 
-void FMemoryAccessGrid::DrawAtInternal(float x, float y)
+void FMemoryAccessGrid::DrawGrid(float x, float y)
 {
 	// Display Character Map
 	FCodeAnalysisState& state = *CodeAnalysis;
@@ -117,7 +118,7 @@ void FMemoryAccessGrid::DrawAtInternal(float x, float y)
 		const int xChar = (int)floor(mousePosX / rectSize);
 		const int yChar = (int)floor(mousePosY / rectSize);
 
-		FAddressRef charAddress = GetGridSquareAddress(xChar, yChar);
+		const FAddressRef charAddress = GetGridSquareAddress(xChar, yChar);
 		if(charAddress.IsValid())
 		{
 			const uint8_t charVal = state.ReadByte(charAddress);
@@ -141,7 +142,7 @@ void FMemoryAccessGrid::DrawAtInternal(float x, float y)
 
 			// Tool Tip
 			ImGui::BeginTooltip();
-			ImGui::Text("Char Pos (%d,%d)", xChar, yChar);
+			ImGui::Text("Char Pos (%d,%d)", xChar + OffsetX, yChar + OffsetY);
 			ImGui::Text("Value: %s", NumStr(charVal));
 			ImGui::EndTooltip();
 		}
@@ -213,14 +214,18 @@ void FMemoryAccessGrid::DrawAtInternal(float x, float y)
 void FMemoryAccessGrid::DrawAt(float x, float y)
 {
 	OnDraw();
-	DrawAtInternal(x, y);
+	DrawBackground(x,y);
+	if(bDrawGrid)
+		DrawGrid(x, y);
 }
 
 void FMemoryAccessGrid::Draw()
 {
 	OnDraw();
 	const ImVec2 pos = ImGui::GetCursorScreenPos();
-	DrawAtInternal(pos.x,pos.y);
+	DrawBackground(pos.x, pos.y);
+	if(bDrawGrid)
+		DrawGrid(pos.x,pos.y);
 }
 
 void FMemoryAccessGrid::FixupAddressRefs()

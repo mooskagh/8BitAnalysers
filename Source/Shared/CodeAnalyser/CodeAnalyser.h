@@ -153,6 +153,7 @@ struct FCodeAnalysisViewState
 	const FAddressRef& GetGotoAddress() const { return GoToAddressRef; }
 	void GoToAddress(FAddressRef address, bool bLabel = false);
 	bool GoToPreviousAddress();
+	bool GoToNextAddress();
 	void BookmarkAddress(int bookmarkNo, FAddressRef address)
 	{
 		if(bookmarkNo>=0 && bookmarkNo < kNoBookmarks)
@@ -188,6 +189,7 @@ struct FCodeAnalysisViewState
 	FAddressRef		HighlightAddress;		// address to highlight
 	int				HighlightScanline = -1;	// scanline to highlight
 	bool			GoToLabel = false;
+	uint16_t		JumpAddress = 0;
 	int16_t			ViewingBankId = -1;
 
 	// for global Filters
@@ -212,7 +214,8 @@ struct FCodeAnalysisViewState
 private:
 	FCodeAnalysisItem			CursorItem;
 	FAddressRef					GoToAddressRef;
-	std::vector<FAddressRef>	AddressStack;
+	std::vector<FAddressRef>	PreviousAddressStack;
+	std::vector<FAddressRef>	NextAddressStack;
 	static const int			kNoBookmarks = 5;
 	FAddressRef					Bookmarks[kNoBookmarks];
 };
@@ -255,6 +258,7 @@ struct FCodeAnalysisBank
 	bool				bFixed = false;	// bank is never remapped
 	bool				bIsDirty = false;
 	bool				bEverBeenMapped = false;
+	bool				bHidden = false;
 	std::vector<FCodeAnalysisItem>		ItemList;
 
 	FCommentLine::FAllocator	CommentLineAllocator;
@@ -293,7 +297,7 @@ struct FCodeAnalysisBank
 	bool		AddressValid(uint16_t addr) const { return addr >= GetMappedAddress() && addr < GetMappedAddress() + (NoPages * FCodeAnalysisPage::kPageSize);	}
 	bool		IsUsed() const { return Pages[0].bUsed; }
 	bool		IsMapped() const { return Mapping!= EBankAccess::None; }
-	EBankAccess	GetBankMapping(int16_t bankId) const { return Mapping;}
+	EBankAccess	GetBankMapping() const { return Mapping;}
 	uint16_t	GetMappedAddress() const { return PrimaryMappedPage * FCodeAnalysisPage::kPageSize; }
 	uint16_t	GetSizeBytes() const { return NoPages * FCodeAnalysisPage::kPageSize; }
 };
@@ -331,10 +335,12 @@ public:
 	void	SetGlobalConfig(FGlobalConfig *pConfig) { pGlobalConfig = pConfig; }
 
 	// Memory Banks & Pages
+	int16_t		GetNextBankId() const { return (int16_t)Banks.size(); }
 	int16_t		CreateBank(const char* name, int noKb, uint8_t* pMemory, bool bReadOnly, uint16_t initialAddress, bool bFixed = false);
+	bool		FreeBanksFrom(int16_t bankId);
 	bool		SetBankPrimaryPage(int16_t bankId, int startPageNo);
 	bool		MapBank(int16_t bankId, int startPageNo, EBankAccess access = EBankAccess::ReadWrite);
-	//bool		UnMapBank(int16_t bankId, int startPageNo, EBankAccess access = EBankAccess::ReadWrite);
+
 	bool		IsBankIdMapped(int16_t bankId) const;
 	bool		IsAddressValid(FAddressRef addr) const;
 
@@ -345,7 +351,6 @@ public:
 	bool		ToggleExecBreakpointAtAddress(FAddressRef addr);
 	bool		ToggleDataBreakpointAtAddress(FAddressRef addr, uint16_t dataSize);
 
-	
 	FCodeAnalysisBank* GetBank(int16_t bankId) { return (bankId >= 0 && bankId < Banks.size()) ? &Banks[bankId] : nullptr; }
 	const FCodeAnalysisBank* GetBank(int16_t bankId) const { return (bankId >= 0 && bankId < Banks.size()) ? &Banks[bankId] : nullptr;	}
 	int16_t		GetBankFromAddress(uint16_t address) const { return MappedReadBanks[address >> kPageShift]; }
@@ -712,6 +717,10 @@ private:
 
 	bool						bCodeAnalysisDataDirty = false;
 	bool						bMemoryRemapped = true;
+
+	FCodeAnalysisState(const FCodeAnalysisState&) = delete;                 // Prevent copy-construction
+	FCodeAnalysisState& operator=(const FCodeAnalysisState&) = delete;      // Prevent assignment
+
 
 };
 

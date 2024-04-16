@@ -13,6 +13,7 @@ struct FC64Config : public FGlobalConfig
 	std::string			TapesFolder = "./Tapes/";
 	std::string			DisksFolder = "./Disks/";
 	std::string			PrgFolder = "./Prg/";
+	std::string			CrtFolder = "./Crt/";
 
 	bool		bShowHCounter = false;
 	bool		bShowVICOverlay = false;
@@ -23,12 +24,12 @@ protected:
 	void WriteToJson(nlohmann::json& jsonConfigFile) const override;
 };
 
-struct FC64GameConfig : public FGameConfig
+struct FC64ProjectConfig : public FProjectConfig
 {
 	void	LoadFromJson(const nlohmann::json& jsonConfig)override;
 	void	SaveToJson(nlohmann::json& jsonConfig) const override;
 };
 
-bool LoadC64GameConfigs(FC64Emulator* pC64Emu);
+bool LoadC64ProjectConfigs(FC64Emulator* pC64Emu);
 
-FC64GameConfig* CreateNewC64GameConfigFromGameInfo(const FGameSnapshot& gameConfig);
+FC64ProjectConfig* CreateNewC64ProjectFromEmuFile(const FEmulatorFile& emuFile);

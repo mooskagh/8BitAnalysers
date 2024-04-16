@@ -55,12 +55,12 @@
 #include "ExternalROMSupport.h"
 
 struct FGameViewerData;
-struct FGameConfig;
+struct FProjectConfig;
 struct FViewerConfig;
 class FViewerBase;
 class FScreenPixMemDescGenerator;
 struct FCPCConfig;
-struct FCPCGameConfig;
+struct FCPCProjectConfig;
 
 enum class ECPCModel
 {
@@ -90,7 +90,7 @@ struct FCPCLaunchConfig : public FEmulatorLaunchConfig
 
 struct FGame
 {
-	FGameConfig* pConfig = nullptr;
+	FProjectConfig* pConfig = nullptr;
 	FViewerConfig* pViewerConfig = nullptr;
 	FGameViewerData* pViewerData = nullptr;
 };
@@ -106,14 +106,14 @@ public:
 	// FEmuBase Begin
 	bool				Init(const FEmulatorLaunchConfig& config) override;
 	void				Shutdown() override;
-	bool				NewGameFromSnapshot(const FGameSnapshot& snaphot) override;
-	bool				StartGame(FGameConfig* pGameConfig, bool bLoadGameData) override;
-	bool				SaveCurrentGameData() override;
 	void				Reset() override;
 	void				Tick() override;
 	bool				LoadLua() override;
 	void				DrawEmulatorUI(void) override;
 	// ~FEmuBase End
+
+	bool				LoadProject(FProjectConfig* pProjectConfig, bool bLoadGameData) override;
+	bool				SaveProject() override;
 
 	bool				SaveGameState(const char* fname);
 	bool				LoadGameState(const char* fname);
@@ -146,12 +146,15 @@ public:
 	bool				CanSelectUpperROM(uint8_t romSlot);
 	bool				InitBankMappings();
 	void				UpdateBankMappings();
-	ECPCModel		GetCurrentCPCModel() const { return CPCEmuState.type == CPC_TYPE_6128 ? ECPCModel::CPC_6128 : ECPCModel::CPC_464; }
+	ECPCModel			GetCurrentCPCModel() const { return CPCEmuState.type == CPC_TYPE_6128 ? ECPCModel::CPC_6128 : ECPCModel::CPC_464; }
 	void				SetRAMBank(int slot, int bankNo, EBankAccess access);
 
 	void				UpdatePalette();
 	void				OnScreenRAMAddressChanged();
 	void				FixupAddressRefs();
+
+	bool				LoadEmulatorFile(const FEmulatorFile* pEmuFile) override;
+	bool				NewProjectFromEmulatorFile(const FEmulatorFile& emuFile) override;
 
 	const FCPCConfig* GetCPCGlobalConfig() const { return (const FCPCConfig*)pGlobalConfig; }
 	FCPCConfig* GetCPCGlobalConfig() { return (FCPCConfig*)pGlobalConfig; }
@@ -202,10 +205,12 @@ public:
 
 	FCPCScreen	Screen;
 
-	const FGamesList& GetGamesList() const { return GamesList; }
+	//const FGamesList& GetGamesList() const { return GamesList; }
 
 private:
-	FCPCGameLoader	GameLoader;
+
+	//FGamesList		GamesList;
+	//FCPCGameLoader	GameLoader;
 
 	FScreenPixMemDescGenerator* pScreenMemDescGenerator = 0;
 
@@ -215,6 +220,7 @@ private:
 	bool				bExportAsm = false;
 
 	bool				bInitialised = false;
+
 	
 	// temporarily disabled
 	bool				bExternalROMSupport = false;

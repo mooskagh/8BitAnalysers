@@ -21,15 +21,20 @@ public:
 	virtual void FixupAddressRefs();
 
 protected:
-	void	DrawAtInternal(float x, float y);
+	virtual void	DrawBackground(float x, float y) {}
+	void	DrawGrid(float x, float y);
 
 	FCodeAnalysisState*	CodeAnalysis = nullptr;
 
 	float	GridSquareSize = 10.0f;
 	int		GridSizeX = -1;
 	int		GridSizeY = -1;
+	int		GridStride = -1;
+	int		OffsetX = 0;
+	int		OffsetY = 0;
 
 
+	bool	bDrawGrid = true;
 	bool	bShowValues = false;
 	bool	bShowReadWrites = true;
 	bool	bOutlineAllSquares = false;

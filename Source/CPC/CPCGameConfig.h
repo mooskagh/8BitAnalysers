@@ -4,11 +4,11 @@
 #include "CPCEmu.h"    // for ECPCModel enum
 
 struct FGame;
-struct FGameSnapshot;
+struct FEmulatorFile;
 class FCPCEmu;
 
 // CPC specific
-struct FCPCGameConfig : FGameConfig
+struct FCPCProjectConfig : FProjectConfig
 {
 	void	LoadFromJson(const nlohmann::json& jsonConfig) override;
 	void	SaveToJson(nlohmann::json& jsonConfig) const override;
@@ -18,6 +18,8 @@ struct FCPCGameConfig : FGameConfig
 	bool	bCPC6128Game = true;
 };
 
-FCPCGameConfig* CreateNewCPCGameConfigFromSnapshot(const FGameSnapshot& snapshot);
-FCPCGameConfig* CreateNewAmstradBasicConfig(bool bIs6128);
+
+FCPCProjectConfig* CreateNewCPCProjectConfigFromEmulatorFile(const FEmulatorFile& snapshot);
+FCPCProjectConfig* CreateNewAmstradBasicConfig(bool bIs6128);
+
 bool LoadCPCGameConfigs(FCPCEmu* pUI);
